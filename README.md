@@ -1,4 +1,4 @@
-# myProjects
+# Projects
 
 This repository contains:
 
