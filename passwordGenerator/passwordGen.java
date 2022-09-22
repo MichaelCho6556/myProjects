@@ -32,7 +32,7 @@ public class passwordGen {
 		
 		for(int i = 0; i < total; i++) {
 			//creates random password
-			password[i] = combinedChars.charAt(random.nextInt(combinedChars.length()));
+			password[i] = combinedChars.charAt(random.nextInt(combinedChars.length())); 
 		}
 		return password;
 	}
