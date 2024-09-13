@@ -7,6 +7,8 @@ window.addEventListener('load', () => {
 	const username = localStorage.getItem('username') || '';
 
 	nameInput.value = username;
+	todoList.addEventListener('dragover', dragOver); 
+	todoList.addEventListener('drop', drop);
 
 	nameInput.addEventListener('change', (e) => {
 		localStorage.setItem('username', e.target.value);
@@ -48,6 +50,13 @@ function DisplayTodos () {
 	todos.forEach(todo => {
 		const todoItem = document.createElement('div');
 		todoItem.classList.add('todo-item');
+		todoItem.draggable = true;
+    	todoItem.id = `todo-${index}`;
+    	todoItem.dataset.index = index;
+    	todoItem.addEventListener('dragstart', dragStart);
+		
+		todoList.appendChild(todoItem);
+
 
 		const label = document.createElement('label');
 		const input = document.createElement('input');
@@ -81,8 +90,6 @@ function DisplayTodos () {
 		todoItem.appendChild(label);
 		todoItem.appendChild(content);
 		todoItem.appendChild(actions);
-
-		todoList.appendChild(todoItem);
 
 		if (todo.done) {
 			todoItem.classList.add('done');
@@ -123,3 +130,28 @@ function DisplayTodos () {
 
 	})
 }
+
+function dragStart(e) {
+	this.className += ' hold';
+	e.dataTransfer.setData('text', this.id);
+  }
+
+function dragOver(e) {
+	e.preventDefault(); 
+}
+
+function drop(e) {
+	e.preventDefault();
+	
+	const id = e.dataTransfer.getData('text');
+	const draggableElement = document.getElementById(id);
+	
+	this.appendChild(draggableElement);
+	
+	const draggableIndex = draggableElement.dataset.index;
+	const dropIndex = [...this.children].length - 1;  
+  
+	todos.splice(dropIndex, 0, todos.splice(draggableIndex, 1)[0]);
+  
+	DisplayTodos();
+  }
