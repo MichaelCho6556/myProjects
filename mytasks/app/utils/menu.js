@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { list, check, todo, home } from "./Icons";
 
 const menu = [
@@ -27,4 +28,35 @@ const menu = [
   },
 ];
 
+=======
+import { list, check, todo, home } from "./Icons";
+
+const menu = [
+  {
+    id: 1,
+    title: "All Tasks",
+    icon: home,
+    link: "/",
+  },
+  {
+    id: 2,
+    title: "Important!",
+    icon: list,
+    link: "/important",
+  },
+  {
+    id: 3,
+    title: "Completed!",
+    icon: check,
+    link: "/completed",
+  },
+  {
+    id: 4,
+    title: "Do It Now",
+    icon: todo,
+    link: "/incomplete",
+  },
+];
+
+>>>>>>> 5a009d2f4104189374a3c56a46f2e48f06112e1b
 export default menu;
