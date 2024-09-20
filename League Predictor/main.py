@@ -1,4 +1,3 @@
-
 import pandas as pd
 from sklearn.model_selection import train_test_split, GridSearchCV, KFold, cross_val_score, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
@@ -9,7 +8,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Load the dataset
+
 file_path = "C:\VSCode\My Projects\myProjects\League Predictor\high_diamond_ranked_10min.csv"  # Replace with your file path if needed
 df = pd.read_csv(file_path)
 
