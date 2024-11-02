@@ -52,15 +52,12 @@ Solution:
 class Solution:
     def removeDuplicates(self, nums: List[int]) -> int:
 
-    n = len(nums)
-        hashmap
-        m = defaultdict(int)
-        #for every integer in nums, it will increment the count for the respective integer
-        for i in nums:
-           m[i] += 1
-        #this is to return result. reduce the length of nums by half and if the value is greater than the len, then it has to be the majority element
-        n = n//2
-        for key, value in m.items():
-            if value > n:
-                return key
-        return 0
+    i = 0
+        for n in nums:
+            #the first two will be initialized
+            #since it is already sorted. n > nums[i-2] only works if the next number in nums[i] is greater than the previous
+            #if there are too many instances of the same integer then we will simply pass the if statement and do nothing until we reach a higher integer
+            if i < 2 or n > nums[i-2]:
+                nums[i] = n
+                i += 1
+        return i
