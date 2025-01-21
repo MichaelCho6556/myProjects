@@ -1,15 +1,13 @@
 import mongoose, { Schema } from "mongoose";
 
 const documentSchema = new Schema({
-  filename: String,
-  s3Key: String,
-  uploadDate: String,
+  filename: { type: String, required: true },
+  s3Key: { type: String, required: true, unique: true },
+  uploadDate: { type: Date, default: Date.now },
   extractedText: { type: String, default: "" },
 });
 
-documentSchema.index({
-  filename: "text",
-  extractedText: "text",
-});
+// Remove any existing problematic indexes first
+documentSchema.index({ filename: "text", extractedText: "text" });
 
 export const Document = mongoose.model("Document", documentSchema);
