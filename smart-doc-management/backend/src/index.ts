@@ -30,7 +30,12 @@ mongoose
   .connect(MONGO_URI)
   .then(async () => {
     console.log("MongoDB connected");
-    await Document.createIndexes();
+    try {
+      await Document.syncIndexes();
+      console.log("Indexes synced");
+    } catch (indexError) {
+      console.error("Index sync error:", indexError);
+    }
   })
   .catch((err) => console.error("MongoDB connection error:", err));
 

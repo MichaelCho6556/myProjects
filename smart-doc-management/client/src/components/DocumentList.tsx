@@ -2,11 +2,13 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import DocumentView from "./DocumentView";
 
+// Update the Document interface to include extractedText
 interface Document {
   id: string;
   filename: string;
   s3Key: string;
   uploadDate: string;
+  extractedText: string; // Add this line
 }
 
 const DocumentList: React.FC = () => {
@@ -20,15 +22,16 @@ const DocumentList: React.FC = () => {
       try {
         const response = await axios.post("http://localhost:4000/graphql", {
           query: `
-                query GetDocuments {
-                    documents {
-                        id
-                        filename
-                        s3Key
-                        uploadDate
-                    }
-                }
-           `,
+            query GetDocuments {
+              documents {
+                id
+                filename
+                s3Key
+                uploadDate
+                extractedText  // Add this to the query
+              }
+            }
+          `,
         });
         setDocuments(response.data.data.documents);
       } catch (error) {

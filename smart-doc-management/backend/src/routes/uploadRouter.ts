@@ -5,14 +5,10 @@ import { v4 as uuidv4 } from "uuid";
 import { Document } from "../models/document";
 import pdf from "pdf-parse";
 import Tesseract from "tesseract.js";
-import textract from "textract";
+import mammoth from "mammoth";
 
 const uploadRouter = express.Router();
-const upload = multer({
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-});
+const upload = multer({ storage: multer.memoryStorage() });
 
 const s3 = new S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -31,47 +27,47 @@ uploadRouter.post(
       }
 
       const { originalname, buffer, mimetype } = req.file;
-      const fileExtension = originalname.split(".").pop();
+      const fileExtension = originalname.split(".").pop()?.toLowerCase() || "";
       const s3Key = `${uuidv4()}.${fileExtension}`;
 
       let extractedText = "";
 
-      if (fileExtension?.toLowerCase() === "pdf") {
-        const pdfData = await pdf(buffer);
-        extractedText = pdfData.text;
-      } else if (
-        fileExtension?.toLowerCase() === "png" ||
-        fileExtension?.toLowerCase() === "jpg" ||
-        fileExtension?.toLowerCase() === "jpeg"
-      ) {
-        const ocrResult = await Tesseract.recognize(buffer, "eng");
-        extractedText = ocrResult.data.text;
-      } else if (
-        fileExtension?.toLowerCase() === "docx" ||
-        fileExtension?.toLowerCase() === "doc"
-      ) {
-        extractedText = (await new Promise((resolve, reject) => {
-          textract.fromBufferWithName(originalname, buffer, (error, text) => {
-            if (error) reject(error);
-            else resolve(text);
-          });
-        })) as string;
+      // Text extraction logic
+      try {
+        if (fileExtension === "pdf") {
+          const pdfData = await pdf(buffer);
+          extractedText = pdfData.text;
+        } else if (["png", "jpg", "jpeg"].includes(fileExtension)) {
+          const {
+            data: { text },
+          } = await Tesseract.recognize(buffer, "eng");
+          extractedText = text;
+        } else if (["docx", "doc"].includes(fileExtension)) {
+          const { value } = await mammoth.extractRawText({ buffer });
+          extractedText = value;
+        }
+      } catch (error) {
+        console.error("Text extraction error:", error);
+        extractedText = "Text extraction failed";
       }
 
+      // Upload to S3
       const s3Params = {
-        Bucket: process.env.AWS_S3_BUCKET_NAME || "",
+        Bucket: process.env.AWS_S3_BUCKET_NAME!,
         Key: s3Key,
         Body: buffer,
         ContentType: mimetype,
       };
       await s3.upload(s3Params).promise();
 
+      // Save document with extracted text
       const newDocument = new Document({
         filename: originalname,
         s3Key,
         uploadDate: new Date().toISOString(),
         extractedText,
       });
+
       const savedDoc = await newDocument.save();
 
       res.status(200).json({
@@ -79,7 +75,7 @@ uploadRouter.post(
         document: savedDoc,
       });
     } catch (error) {
-      console.error("Error uploading file:", error);
+      console.error("Upload error:", error);
       res.status(500).json({ error: "Failed to upload file" });
     }
   }
