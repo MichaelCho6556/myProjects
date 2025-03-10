@@ -8,5 +8,6 @@ export const DocumentType = new GraphQLObjectType({
     filename: { type: GraphQLString },
     s3Key: { type: GraphQLString },
     uploadDate: { type: GraphQLString },
+    extractedText: { type: GraphQLString },
   }),
 });

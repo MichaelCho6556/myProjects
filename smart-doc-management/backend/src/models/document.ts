@@ -7,7 +7,19 @@ const documentSchema = new Schema({
   extractedText: { type: String, default: "" },
 });
 
-// Remove any existing problematic indexes first
-documentSchema.index({ filename: "text", extractedText: "text" });
+// Create text indexes for search functionality
+documentSchema.index(
+  {
+    filename: "text",
+    extractedText: "text",
+  },
+  {
+    weights: {
+      filename: 10,
+      extractedText: 5,
+    },
+    name: "text_search_index",
+  }
+);
 
 export const Document = mongoose.model("Document", documentSchema);

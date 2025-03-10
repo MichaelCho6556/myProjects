@@ -11,7 +11,26 @@ const s3 = new S3({
 });
 
 export const getDocuments = async () => {
-  return await Document.find();
+  try {
+    const documents = await Document.find().lean();
+    console.log("Database documents:", documents);
+
+    if (!documents || documents.length === 0) {
+      console.log("No documents found");
+      return [];
+    }
+
+    return documents.map((doc) => ({
+      id: doc._id.toString(),
+      filename: doc.filename,
+      s3Key: doc.s3Key,
+      uploadDate: doc.uploadDate.toISOString(),
+      extractedText: doc.extractedText,
+    }));
+  } catch (error) {
+    console.error("Error fetching documents:", error);
+    throw new Error("Failed to retreive documents");
+  }
 };
 
 export const addDocument = async (args: any) => {
@@ -33,7 +52,7 @@ export const addDocument = async (args: any) => {
     const newDocument = new Document({
       filename,
       s3Key,
-      uploadDate: new Date().toISOString(),
+      uploadDate: new Date(),
     });
 
     return await newDocument.save();
