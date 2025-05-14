@@ -5,7 +5,12 @@ import {
   GraphQLList,
   GraphQLNonNull,
 } from "graphql";
-import { getDocuments, addDocument } from "./resolvers";
+import {
+  getDocuments,
+  getDocumentById,
+  addDocument,
+  searchDocuments,
+} from "./resolvers";
 import { DocumentType } from "../types/document";
 
 const RootQueryType = new GraphQLObjectType({
@@ -14,8 +19,24 @@ const RootQueryType = new GraphQLObjectType({
   fields: () => ({
     documents: {
       type: new GraphQLList(DocumentType),
-      description: "List of Documents",
+      description: "List of all Documents",
       resolve: getDocuments,
+    },
+    document: {
+      type: DocumentType,
+      description: "Get a single document by ID",
+      args: {
+        id: { type: GraphQLNonNull(GraphQLString) },
+      },
+      resolve: (parent, args) => getDocumentById(args),
+    },
+    searchDocuments: {
+      type: new GraphQLList(DocumentType),
+      description: "Search for documents by text content",
+      args: {
+        query: { type: GraphQLNonNull(GraphQLString) },
+      },
+      resolve: (parent, args) => searchDocuments(args),
     },
   }),
 });
@@ -30,7 +51,7 @@ const RootMutationType = new GraphQLObjectType({
       args: {
         filename: { type: GraphQLNonNull(GraphQLString) },
       },
-      resolve: addDocument,
+      resolve: (parent, args) => addDocument(args),
     },
   }),
 });

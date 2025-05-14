@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 interface Document {
@@ -15,9 +15,44 @@ interface Props {
 
 const DocumentView: React.FC<Props> = ({ document }) => {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"preview" | "text">("preview");
+  const [activeTab, setActiveTab] = useState<"preview" | "text">("text");
   const [isLoading, setIsLoading] = useState(false);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const fileExtension = document.filename.split(".").pop()?.toLowerCase();
+
+  // Determine what kind of preview we can show
+  const isPreviewable = ["pdf", "jpg", "jpeg", "png", "gif"].includes(
+    fileExtension || ""
+  );
+
+  useEffect(() => {
+    // If we're on the preview tab and don't have a URL yet, fetch it
+    if (activeTab === "preview" && !fileUrl && !error) {
+      fetchFileUrl();
+    }
+  }, [activeTab]);
+
+  const fetchFileUrl = async () => {
+    if (!isPreviewable) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await axios.get(
+        `http://localhost:4000/file/${document.s3Key}`
+      );
+      setFileUrl(response.data.url);
+    } catch (err: any) {
+      console.error("Error fetching file URL:", err);
+      setError(err.message || "Failed to load preview");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const copyText = () => {
     if (!document.extractedText) return;
@@ -27,27 +62,17 @@ const DocumentView: React.FC<Props> = ({ document }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const fileExtension = document.filename.split(".").pop()?.toLowerCase();
-
-  const getFileUrl = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await axios.get(
-        "http://localhost:4000/file/${document.s3Key}"
-      );
-      return response.data.url;
-    } catch (err) {
-      console.error("Error fetching file URL:", err);
-      setError("Failed to load preview. Please try again.");
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handlePreviewClick = async () => {
     setActiveTab("preview");
+    try {
+      const url = await getFileUrl();
+      if (url) {
+        // Set up a state variable to store the URL
+        setPreviewUrl(url);
+      }
+    } catch (err) {
+      console.error("Error getting file URL:", err);
+    }
   };
 
   return (
@@ -66,7 +91,7 @@ const DocumentView: React.FC<Props> = ({ document }) => {
               ? "bg-blue-500 text-white"
               : "bg-gray-200 hover:bg-gray-300"
           }`}
-          onClick={handlePreviewClick}
+          onClick={() => setActiveTab("preview")}
         >
           Preview
         </button>
@@ -91,14 +116,32 @@ const DocumentView: React.FC<Props> = ({ document }) => {
               </div>
             ) : error ? (
               <div className="text-red-500 text-center p-4">{error}</div>
+            ) : previewUrl ? (
+              <div className="text-center">
+                <p className="mb-4">File is ready for viewing.</p>
+                <a
+                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-3"
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open File
+                </a>
+                <a
+                  className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                  href={`http://localhost:4000/file/${document.s3Key}/download`}
+                  download
+                >
+                  Download File
+                </a>
+              </div>
             ) : (
               <div className="text-center">
                 <p className="mb-4">Preview not available directly.</p>
                 <a
                   className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                  href={`http://localhost:4000/file/${document.s3Key}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={`http://localhost:4000/file/${document.s3Key}/download`}
+                  download
                 >
                   Download File
                 </a>
