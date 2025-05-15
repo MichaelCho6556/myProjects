@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.Python
+celerybeat-schedule
+*.bak
+
+# backend/.dockerignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+*.db
+*.sqlite3
+
+data/anime.csv
+data/manga.csv
+data/combined_media.csv
+
+# Environment variables
+.env
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Frontend node_modules (will add later)
+frontend/node_modules/
+frontend/build/
+frontend/.pnp.*
