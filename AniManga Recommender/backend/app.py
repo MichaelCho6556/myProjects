@@ -1,5 +1,6 @@
 # backend/app.py
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 import os
 import pandas as pd
 from dotenv import load_dotenv
@@ -11,6 +12,7 @@ import ast
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
 
 PROCESSED_DATA_FILENAME = "processed_media.csv"
 
@@ -86,7 +88,7 @@ def get_items():
         return jsonify({"error": "Dataset not available."}), 503
 
     page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
+    per_page = request.args.get('per_page', 30, type=int)
     start = (page - 1) * per_page
     end = start + per_page
     query = request.args.get('q', None, type=str)
@@ -96,10 +98,12 @@ def get_items():
         data_subset = df_processed[df_processed['title'].str.contains(query, case=False, na=False)]
     
     total_items = len(data_subset)
-    items_paginated = data_subset.iloc[start:end]
+    items_paginated_df = data_subset.iloc[start:end].copy()
+    items_for_json = items_paginated_df.replace({np.nan: None})
+    items_list_of_dicts = items_for_json.to_dict(orient='records')
 
     return jsonify({
-        "items": items_paginated.to_dict(orient='records'),
+        "items": items_list_of_dicts,
         "page": page,
         "per_page": per_page,
         "total_items": total_items,
@@ -114,9 +118,11 @@ def get_item_details(item_uid):
         return jsonify({"error": "Item not found."}), 404
     
     idx = uid_to_idx[item_uid]
-    item_details_series = df_processed.loc[idx]
+    item_details_series = df_processed.loc[idx].copy()
 
-    return jsonify(item_details_series.to_dict())
+    item_details_series_cleaned = item_details_series.replace({np.nan: None})
+
+    return jsonify(item_details_series_cleaned.to_dict())
 
 @app.route('/api/recommendations/<item_uid>')
 def get_recommendations(item_uid):
@@ -134,13 +140,14 @@ def get_recommendations(item_uid):
         num_recommendations = request.args.get('n', 10, type=int)
         top_n_indices = [i[0] for i in sim_scores[1:num_recommendations+1]]
 
-        recommended_uids = df_processed['uid'].iloc[top_n_indices]
-        recommended_items_df = df_processed.loc[top_n_indices]
+        recommended_items_df = df_processed.loc[top_n_indices].copy()
+        recommended_items_for_json = recommended_items_df.replace({np.nan: None})
+        recommended_list_of_dicts = recommended_items_for_json[['uid', 'title', 'media_type', 'score', 'main_picture', 'genres', 'synopsis']].to_dict(orient='records')
 
         return jsonify({
             "source_item_uid": item_uid,
-            "source_item_title": df_processed.loc[item_idx, 'title'],
-            "recommendations": recommended_items_df[['uid', 'title', 'media_type', 'score', 'main_picture', 'genres', 'synopsis']].to_dict(orient='records')
+            "source_item_title": df_processed.loc[item_idx, 'title'].replace({np.nan: None}),
+            "recommendations": recommended_list_of_dicts
         })
     except Exception as e:
         print(f"Error generating recommendations for {item_uid}: {e}")

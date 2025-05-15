@@ -1,0 +1,54 @@
+.App {
+  text-align: center;
+  font-family: sans-serif;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  margin-bottom: 20px;
+}
+
+.item-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  padding: 20px;
+}
+
+.item-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  width: 250px;
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: left;
+  background-color: #fff;
+}
+
+.item-card img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.item-card h3 {
+  font-size: 1.2 em;
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+.item-card p {
+  font-size: 0.9em;
+  margin-bottom: 5px;
+  color: #555;
+}
+.item-card .genres,
+.item-card .themes {
+  font-size: 0.8em;
+  color: #777;
+  margin-bottom: 10px;
+}
