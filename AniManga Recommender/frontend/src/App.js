@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// frontend/src/App.js
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "./App.css";
 import ItemCard from "./components/ItemCard";
@@ -10,19 +11,25 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(30); // <<< SET DEFAULT TO 30
+  const [totalItems, setTotalItems] = useState(0); // <<< ADD STATE FOR TOTAL ITEMS COUNT
+
+  const topOfPageRef = useRef(null);
+
   useEffect(() => {
     const fetchItems = async () => {
+      if (topOfPageRef.current) {
+        topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
+      }
+
+      setLoading(true);
+      setError(null);
       try {
-        setLoading(true);
-        setError(null);
         const response = await axios.get(
-          `${API_BASE_URL}/items?page=1&per_page=30`
+          `${API_BASE_URL}/items?page=${currentPage}&per_page=${itemsPerPage}`
         );
-        console.log(
-          "Raw API Response data property type:",
-          typeof response.data
-        );
-        console.log("Raw API Response data:", response.data);
 
         let responseData = response.data;
         if (typeof responseData === "string") {
@@ -31,24 +38,35 @@ function App() {
           } catch (parseError) {
             console.error("Failed to parse response data as JSON:", parseError);
             setItems([]);
-            setError("Receioved data from server, but it was not valid JSON.");
+            setTotalPages(1);
+            setTotalItems(0); // Reset on error
+            setError("Received data from server, but it was not valid JSON.");
             setLoading(false);
             return;
           }
         }
 
-        console.log("Parsed Response Data:", responseData);
-
-        if (response.data && Array.isArray(response.data.items)) {
-          setItems(response.data.items);
+        if (responseData && Array.isArray(responseData.items)) {
+          setItems(responseData.items);
+          setTotalPages(responseData.total_pages || 1);
+          setTotalItems(responseData.total_items || 0); // <<< SET TOTAL ITEMS FROM API
         } else {
-          console.error("Unexpected API response structure:", response.data);
+          console.error(
+            "Unexpected API response structure after parsing:",
+            responseData
+          );
           setItems([]);
-          setError("Received an unexpected data structure from the server.");
+          setTotalPages(1);
+          setTotalItems(0); // Reset on error
+          setError(
+            "Received an unexpected data structure from the server after parsing."
+          );
         }
       } catch (err) {
         console.error("Failed to fetch items:", err);
         setItems([]);
+        setTotalPages(1);
+        setTotalItems(0); // Reset on error
         setError(
           err.message || "Failed to fetch items. Is the backend running?"
         );
@@ -57,26 +75,106 @@ function App() {
       }
     };
     fetchItems();
-  }, []);
+  }, [currentPage, itemsPerPage]);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage((prevPage) => prevPage + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage((prevPage) => prevPage - 1);
+    }
+  };
+
+  const handleItemsPerPageChange = (event) => {
+    setItemsPerPage(Number(event.target.value));
+    setCurrentPage(1);
+  };
+
+  const scrollToTop = () => {
+    if (topOfPageRef.current) {
+      topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  const PaginationControls = () => (
+    <div className="pagination-controls">
+      <button onClick={handlePrevPage} disabled={currentPage <= 1 || loading}>
+        Previous
+      </button>
+      <span>
+        Page {currentPage} of {totalPages}
+        {/* Displaying item range */}
+        {items.length > 0 &&
+          !loading &&
+          ` (Showing ${(currentPage - 1) * itemsPerPage + 1}-${Math.min(
+            currentPage * itemsPerPage,
+            totalItems
+          )} of ${totalItems})`}
+      </span>
+      <button
+        onClick={handleNextPage}
+        disabled={currentPage >= totalPages || loading}
+      >
+        Next
+      </button>
+    </div>
+  );
 
   return (
     <div className="App">
+      <div ref={topOfPageRef}></div>
+
       <header className="App-header">
         <h1>AniManga Recommender</h1>
       </header>
+
       <main>
+        <div className="controls-bar">
+          <PaginationControls />
+          <div className="items-per-page-selector">
+            <label htmlFor="itemsPerPage">Items per page: </label>
+            <select
+              id="itemsPerPage"
+              value={itemsPerPage}
+              onChange={handleItemsPerPageChange}
+              disabled={loading}
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={25}>25</option>
+              <option value={30}>30</option> {/* <<< ENSURE 30 IS AN OPTION */}
+              <option value={50}>50</option>
+            </select>
+          </div>
+        </div>
+
         {loading && <p>Loading Items...</p>}
         {error && <p style={{ color: "red" }}>Error: {error}</p>}
         {!loading && !error && (
-          <div className="item-list">
-            {Array.isArray(items) && items.length > 0 ? (
-              items.map((item) => <ItemCard key={item.uid} item={item} />)
-            ) : (
-              <p>No items found or data is not in the expected format.</p>
-            )}
-          </div>
+          <>
+            <div className="item-list">
+              {Array.isArray(items) && items.length > 0 ? (
+                items.map((item) => <ItemCard key={item.uid} item={item} />)
+              ) : (
+                <p>No items found or data is not in the expected format.</p>
+              )}
+            </div>
+            {/* Wrapper for bottom pagination for easier centering if needed */}
+            <div className="bottom-pagination-wrapper">
+              <PaginationControls />
+            </div>
+          </>
         )}
       </main>
+      {!loading && Array.isArray(items) && items.length > 0 && (
+        <button onClick={scrollToTop} className="scroll-to-top-btn">
+          Scroll to Top
+        </button>
+      )}
     </div>
   );
 }
