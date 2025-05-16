@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
+import ItemCard from "../components/ItemCard";
 import "./ItemDetail.css";
 
 const API_BASE_URL = "http://localhost:5000/api";
@@ -10,52 +11,80 @@ const DEFAULT_PLACEHOLDER_IMAGE =
 function ItemDetailPage() {
   const { uid } = useParams(); // Get the 'uid' from the URL parameter
   const [item, setItem] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loadingItem, setLoadingItem] = useState(true);
+  const [itemError, setItemError] = useState(null);
 
-  // Recommendations state (we'll add logic for this later)
-  // const [recommendations, setRecommendations] = useState([]);
-  // const [recsLoading, setRecsLoading] = useState(false);
+  const [recommendations, setRecommendations] = useState([]);
+  const [loadingRecs, setLoadingRecs] = useState(false);
+  const [recsError, setRecsError] = useState(null);
 
   useEffect(() => {
-    const fetchItemDetails = async () => {
+    const fetchAllData = async () => {
       if (!uid) return; // Don't fetch if uid is not available
 
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await axios.get(`${API_BASE_URL}/items/${uid}`); // Corrected endpoint
+      setLoadingItem(true);
+      setItemError(null);
+      setItem(null);
 
-        let responseData = response.data;
-        if (typeof responseData === "string") {
+      setLoadingRecs(true);
+      setRecsError(null);
+      setRecommendations([]);
+
+      window.scrollTo(0, 0);
+      try {
+        console.log(`Fetching details for UID: ${uid}`);
+        const itemResponse = await axios.get(`${API_BASE_URL}/items/${uid}`);
+
+        let itemData = itemResponse.data;
+        if (typeof itemData === "string") {
           try {
-            responseData = JSON.parse(responseData);
-          } catch (parseError) {
-            console.error("Failed to parse item detail as JSON:", parseError);
-            setItem(null);
-            setError("Received invalid data for item detail.");
-            return;
+            itemData = JSON.parse(itemData);
+          } catch (e) {
+            throw new Error("Item detail data is not valid JSON");
           }
         }
-        setItem(responseData);
+        setItem(itemData);
+        setLoadingItem(false);
+
+        console.log(`Fetching recommendation for UID: ${uid}`);
+        const recsResponse = await axios.get(
+          `${API_BASE_URL}/recommendations/${uid}?n=10`
+        );
+        let recsData = recsResponse.data;
+        if (typeof recsData === "string") {
+          try {
+            recsData = JSON.parse(recsData);
+          } catch (e) {
+            throw new Error("Recommendations data is not valid JSON");
+          }
+        }
+
+        if (recsData && Array.isArray(recsData.recommendations)) {
+          setRecommendations(recsData.recommendations);
+        } else {
+          console.error("unexpected recommendations structure:", recsData);
+          setRecommendations([]);
+        }
       } catch (err) {
         console.error(`Failed to fetch item ${uid}:`, err);
-        setError(err.message || `Failed to fetch item ${uid}.`);
-        setItem(null);
+        if (!item) {
+          setItemError(err.message || `Failed to fetch item ${uid}.`);
+          setLoadingItem(false);
+        }
+        setRecsError(
+          err.message || `Failed to fetch recommendations for ${uid}.`
+        );
       } finally {
-        setLoading(false);
+        setLoadingItem(false);
+        setLoadingRecs(false);
       }
     };
 
-    fetchItemDetails();
-    // TODO: Fetch recommendations here as well in a separate call or combined logic
+    fetchAllData();
+  }, [uid]);
 
-    // Scroll to top when component mounts or uid changes
-    window.scrollTo(0, 0);
-  }, [uid]); // Re-fetch if the uid parameter changes
-
-  if (loading) return <p>Loading item details...</p>;
-  if (error) return <p style={{ color: "red" }}>Error: {error}</p>;
+  if (loadingItem) return <p>Loading item details...</p>;
+  if (itemError) return <p style={{ color: "red" }}>Error: {itemError}</p>;
   if (!item) return <p>Item not found.</p>;
 
   // Helper to display list data
@@ -159,14 +188,28 @@ function ItemDetailPage() {
         </div>
       </div>
 
-      {/* Placeholder for Recommendations Section */}
       <div className="recommendations-section">
         <h3>Recommended for you:</h3>
-        {/* Recommendation logic will go here later */}
-        <p>Recommendations coming soon...</p>
+        {loadingRecs && <p>Loading recommendations...</p>}
+        {recsError && (
+          <p style={{ color: "red" }}>
+            Error loading recommendations: {recsError}
+          </p>
+        )}
+        {!loadingRecs && !recsError && recommendations.length > 0 && (
+          <div className="item-list recommendations-list">
+            {" "}
+            {/* Re-use item-list styling or create specific */}
+            {recommendations.map((recItem) => (
+              <ItemCard key={recItem.uid} item={recItem} />
+            ))}
+          </div>
+        )}
+        {!loadingRecs && !recsError && recommendations.length === 0 && (
+          <p>No recommendations found for this item.</p>
+        )}
       </div>
     </div>
   );
 }
-
 export default ItemDetailPage;
