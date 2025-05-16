@@ -115,3 +115,8 @@
 .scroll-to-top-btn:hover {
   background-color: #0056b3;
 }
+
+.item-card-link {
+  text-decoration: none;
+  color: inherit;
+}
