@@ -131,8 +131,16 @@ def get_recommendations(item_uid):
 
     if item_uid not in uid_to_idx.index:
         return jsonify({"error": "Target item for recommendations not found."}), 404
+    cleaned_source_title = None
     try:
         item_idx = uid_to_idx[item_uid]
+        source_title_value = df_processed.loc[item_idx, 'title']
+        if pd.isna(source_title_value):
+            cleaned_source_title = None
+        elif isinstance(source_title_value, str):
+            cleaned_source_title = source_title_value 
+        else:
+            cleaned_source_title = str(source_title_value) if source_title_value is not None else None
         source_item_vector = tfidf_matrix_global[item_idx]
         sim_scores_for_item = cosine_similarity(source_item_vector, tfidf_matrix_global)
         sim_scores = list(enumerate(sim_scores_for_item[0]))
@@ -144,11 +152,24 @@ def get_recommendations(item_uid):
         recommended_items_for_json = recommended_items_df.replace({np.nan: None})
         recommended_list_of_dicts = recommended_items_for_json[['uid', 'title', 'media_type', 'score', 'main_picture', 'genres', 'synopsis']].to_dict(orient='records')
 
+        source_title = df_processed.loc[item_idx, 'title']
+        cleaned_source_title = None if pd.isna(source_title) else cleaned_source_title
+
         return jsonify({
             "source_item_uid": item_uid,
-            "source_item_title": df_processed.loc[item_idx, 'title'].replace({np.nan: None}),
+            "source_item_title": cleaned_source_title,
             "recommendations": recommended_list_of_dicts
         })
+    except KeyError as ke:
+        print(f"KeyError accessing title or other column for item_idx {item_idx}: {ke}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "source_item_uid": item_uid,
+            "source_item_title": "Title not available", 
+            "recommendations": [], 
+            "error_detail": f"Could not retrieve title for source item. {str(ke)}"
+        }), 500
     except Exception as e:
         print(f"Error generating recommendations for {item_uid}: {e}")
         import traceback
