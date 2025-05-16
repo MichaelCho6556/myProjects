@@ -1,0 +1,67 @@
+.item-detail-page {
+  padding: 20px;
+  max-width: 900px;
+  margin: 20px auto;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.item-detail-page h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.item-detail-content {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.item-detail-image {
+  flex: 1;
+  min-width: 250px;
+}
+
+.item-detail-image img {
+  width: 100%;
+  max-width: 350px;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+  margin: 0 auto 20px auto;
+}
+
+.item-detail-info {
+  flex: 2;
+  min-width: 300px;
+}
+
+.item-detail-info p,
+.item-detail-info div {
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+
+.synopsis-section p,
+.background-section p {
+  margin-top: 5px;
+  white-space: pre-wrap;
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 20px;
+  color: #007bff;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.recommendations-section {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
