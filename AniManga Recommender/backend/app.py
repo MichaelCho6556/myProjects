@@ -87,17 +87,52 @@ def get_items():
     if df_processed is None:
         return jsonify({"error": "Dataset not available."}), 503
 
+    # Get query parameters
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 30, type=int)
+
+    # Search query
+    search_query = request.args.get('q', None, type=str)
+
+    # New Filter paramter
+    media_type_filter = request.args.get('media_type',None, type=str)
+    genre_filter = request.args.get('genre', None, type=str)
+    status_filter = request.args.get('status', None, type=str)
+    min_score_filter = request.args.get('min_score', None, type=float)
+    year_filter = request.args.get('year', None, type=int)
+
+    data_subset = df_processed.copy()
+
+    #apply filters sequentially
+    if search_query:
+        #ensure title is string befgore .str.ontains, fillna for sfety
+        data_subset = data_subset[data_subset['title'].fillna('').str.contains(search_query, case=False, na=False)]
+    
+    if media_type_filter and media_type_filter.lower() != 'all':
+        data_subset = data_subset[data_subset['media_type'].fillna('').str.lower() == media_type_filter.lower()]
+    
+    if genre_filter and genre_filter.lower() != 'all':
+        def check_genre(genres_list):
+            if isinstance(genres_list, list):
+                return any(g.lower() == genre_filter.lower() for g in genres_list)
+            return False
+        data_subset = data_subset[data_subset['genres'].apply(check_genre)]
+    
+    if status_filter and status_filter.lower() != 'all':
+        data_subset = data_subset[data_subset['status'].fillna('').str.lower() == status_filter.lower()]
+    
+    if min_score_filter is not None:
+        #ensure score is numeric
+        data_subset = data_subset[data_subset['score'].fillna(-1) >= min_score_filter]
+    
+    if year_filter is not None:
+        #assuming stat year num column exists and is numeric
+        data_subset = data_subset[data_subset['start_year_num'].fillna(0) == year_filter]
+    
+
+    total_items = len(data_subset)
     start = (page - 1) * per_page
     end = start + per_page
-    query = request.args.get('q', None, type=str)
-    
-    data_subset = df_processed
-    if query:
-        data_subset = df_processed[df_processed['title'].str.contains(query, case=False, na=False)]
-    
-    total_items = len(data_subset)
     items_paginated_df = data_subset.iloc[start:end].copy()
     items_for_json = items_paginated_df.replace({np.nan: None})
     items_list_of_dicts = items_for_json.to_dict(orient='records')
@@ -107,8 +142,42 @@ def get_items():
         "page": page,
         "per_page": per_page,
         "total_items": total_items,
-        "total_pages": (total_items + per_page - 1) // per_page
+        "total_pages": (total_items + per_page - 1) // per_page if per_page > 0 else 0
     })
+
+@app.route('/api/distinct-values')
+def get_distinct_values():
+    if df_processed is None:
+        return jsonify({"error": "Dataset not available"}), 503
+    try:
+        #for genre filter
+        all_genres = set()
+        
+        for genre_list in df_processed['genres'].dropna():
+            if isinstance(genre_list, list):
+                for genre in genre_list:
+                    if isinstance(genre, str) and genre.strip(): #making sure genre is not empty
+                        all_genres.add(genre.strip())
+            elif isinstance(genre_list, str) and genre_list.strip():#handling if it is a single string genre
+                all_genres.add(genre_list.strip())
+
+        # For statuses (assuming it's a column of strings)
+        all_statuses = set(s.strip() for s in df_processed['status'].dropna().unique() if isinstance(s, str) and s.strip())
+        
+        # For media types (if you ever wanted this dynamic, though it's usually fixed)
+        all_media_types = set(mt.strip() for mt in df_processed['media_type'].dropna().unique() if isinstance(mt, str) and mt.strip())
+
+        return jsonify({
+            "genres": sorted(list(all_genres)),
+            "statuses": sorted(list(all_statuses)),
+            "media_types": sorted(list(all_media_types)) # e.g., ['Anime', 'Manga']
+        })
+    except Exception as e:
+        print(f"Error fetching distinct values: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Could not retrieve distinct filter values."}), 500
+
 
 @app.route('/api/items/<item_uid>')
 def get_item_details(item_uid):
