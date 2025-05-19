@@ -50,21 +50,51 @@ def load_data_and_tfidf():
         return
     try:
         print(f"Attempting to load processed data from: {PROCESSED_DATA_PATH}")
-        df_processed = pd.read_csv(PROCESSED_DATA_PATH, low_memory=False)
+
+        temp_df = pd.read_csv(PROCESSED_DATA_PATH, low_memory=False)
+
+        #NSFW filtering
+        if 'sfw' in temp_df.columns:
+            df_processed = temp_df[temp_df['sfw'] == True].copy()
+            print(f"Shape after SFW filter: {df_processed.shape}")
+            if len(df_processed) == 0 and len(temp_df) > 0:
+                print("WARNING: SFW filter resulted in an empty Datafram. Check 'sfw' column values.")
+        else:
+            print("WARNING: 'sfw' column not found. NSFW content might ntob e filtered.")
+            df_processed = temp_df.copy()
+
+        #ensure 'uid' column exists after filtering
+        if 'uid' not in df_processed.columns or len(df_processed) == 0:
+            print("ERROR: 'uid' column missing or Dataframe empty after SFW filter.")
+            if len(df_processed) > 0 and 'uid' in df_processed.columns:
+                pass #uid exists, df not empty
+            else:
+                #create an empty uid_to_idx if df_processed is empty
+                if len(df_processed) == 0:
+                    print("Dataframe is empty after SFW filter, TF-IDF and UID maaping will be empty.")
+                    uid_to_idx = pd.Series(dtype='int64')
+                else:
+                    raise KeyError("'uid' column is missing after SFW filter, but Dataframe is not empty.")
+                
+
 
         df_processed['combined_text_features'] = df_processed['combined_text_features'].fillna('')
 
         df_processed = parse_list_cols_on_load(df_processed)
         print(f"Procssed data loaded successfully. Shape: {df_processed.shape}")
 
-        print("Initializing and fitting TF-IDF vectorizer...")
-        tfidf_vectorizer_global = TfidfVectorizer(stop_words='english', max_features=5000)
-        tfidf_matrix_global = tfidf_vectorizer_global.fit_transform(df_processed['combined_text_features'])
-        print(f"TF-IDF matrix computed. Shape: {tfidf_matrix_global.shape}")
+        if len(df_processed) > 0:
+            print("Initializing and fitting TF-IDF vectorizer...")
+            tfidf_vectorizer_global = TfidfVectorizer(stop_words='english', max_features=5000)
+            tfidf_matrix_global = tfidf_vectorizer_global.fit_transform(df_processed['combined_text_features'])
+            print(f"TF-IDF matrix computed. Shape: {tfidf_matrix_global.shape}")
 
-        df_processed.reset_index(drop=True, inplace=True)
-        uid_to_idx = pd.Series(df_processed.index, index=df_processed['uid'])
-
+            df_processed.reset_index(drop=True, inplace=True)
+            uid_to_idx = pd.Series(df_processed.index, index=df_processed['uid'])
+        else:
+            print("Skipping TF-IDF and UID mapping due to empty DataFrame after SFW filter.")
+            tfidf_vectorizer_global = None
+            tfidf_matrix_global = None
         print("Data loading and TF-IDF computation complete. Cosine Similarity will be computed on-demand")
     except FileNotFoundError:
         print(f"ERROR: Processed data file not found at {PROCESSED_DATA_PATH}. Please run the preprocessing script.")
