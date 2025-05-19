@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 import ItemCard from "../components/ItemCard";
 import "../App.css";
@@ -6,21 +7,25 @@ import "../App.css";
 const API_BASE_URL = "http://localhost:5000/api";
 
 function HomePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get("page")) || 1);
   const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(30);
+  const [itemsPerPage, setItemsPerPage] = useState(parseInt(searchParams.get("per_page")) || 30);
   const [totalItems, setTotalItems] = useState(0);
 
   //filter states
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedMediaType, setSelectedMediaType] = useState("All");
-  const [selectedGenre, setSelectedGenre] = useState("All");
-  const [selectedStatus, setSelectedStatus] = useState("All");
-  const [minScore, setMinScore] = useState("");
-  const [selectedYear, setSelectedYear] = useState("");
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
+  const [selectedMediaType, setSelectedMediaType] = useState(
+    searchParams.get("media_type") || "All"
+  );
+  const [selectedGenre, setSelectedGenre] = useState(searchParams.get("genre") || "All");
+  const [selectedStatus, setSelectedStatus] = useState(searchParams.get("status") || "All");
+  const [minScore, setMinScore] = useState(searchParams.get("min_score") || "");
+  const [selectedYear, setSelectedYear] = useState(searchParams.get("year") || "");
 
   //state for dynamic filter options
   const [genreOptions, setGenreOptions] = useState([]);
@@ -28,7 +33,7 @@ function HomePage() {
   const [mediaTypeOptions, setMediaTypeOptions] = useState([]);
   const [filtersLoading, setFiltersLoading] = useState(true);
 
-  const topOfPageRef = useRef(null); // For scrolling
+  const topOfPageRef = useRef(null); // For scrolling NEED ANIMATION EFFECTS ON
 
   //effect to fetch distinct filter options once on component mount
   useEffect(() => {
@@ -64,6 +69,18 @@ function HomePage() {
 
   //effect to fetch items based on filters and pagination
   useEffect(() => {
+    //update URL search params when filters cahnge, good for sharable URLs
+    const currentParams = new URLSearchParams();
+    if (currentPage > 1) currentParams.set("page", currentPage.toString());
+    if (itemsPerPage !== 30) currentParams.set("per_page", itemsPerPage.toString());
+    if (searchTerm) currentParams.set("q", searchTerm);
+    if (selectedMediaType !== "All") currentParams.set("media_type", selectedMediaType);
+    if (selectedGenre !== "All") currentParams.set("genre", selectedGenre);
+    if (selectedStatus !== "All") currentParams.set("status", selectedStatus);
+    if (minScore) currentParams.set("min_score", minScore);
+    if (selectedYear) currentParams.set("year", selectedYear);
+    setSearchParams(currentParams, { replace: true }); // avoid multiple history entries
+
     //dont fetch items if filter options are still loading to avoid race conditons
     if (filtersLoading && genreOptions.length <= 1) return;
     const fetchItems = async () => {
@@ -91,8 +108,7 @@ function HomePage() {
       params.append("page", currentPage);
       params.append("per_page", itemsPerPage);
       if (searchTerm) params.append("q", searchTerm);
-      if (selectedMediaType !== "All")
-        params.append("media_type", selectedMediaType);
+      if (selectedMediaType !== "All") params.append("media_type", selectedMediaType);
       if (selectedGenre !== "All") params.append("genre", selectedGenre);
       if (selectedStatus !== "All") params.append("status", selectedStatus);
       if (minScore && !isNaN(parseFloat(minScore)))
@@ -101,9 +117,7 @@ function HomePage() {
         params.append("year", parseInt(selectedYear));
 
       try {
-        const response = await axios.get(
-          `${API_BASE_URL}/items?${params.toString()}`
-        );
+        const response = await axios.get(`${API_BASE_URL}/items?${params.toString()}`);
 
         let responseData = response.data;
         if (typeof responseData === "string") {
@@ -125,25 +139,18 @@ function HomePage() {
           setTotalPages(responseData.total_pages || 1);
           setTotalItems(responseData.total_items || 0);
         } else {
-          console.error(
-            "Unexpected API response structure after parsing:",
-            responseData
-          );
+          console.error("Unexpected API response structure after parsing:", responseData);
           setItems([]);
           setTotalPages(1);
           setTotalItems(0);
-          setError(
-            "Received an unexpected data structure from the server after parsing."
-          );
+          setError("Received an unexpected data structure from the server after parsing.");
         }
       } catch (err) {
         console.error("Failed to fetch items:", err);
         setItems([]);
         setTotalPages(1);
         setTotalItems(0);
-        setError(
-          err.message || "Failed to fetch items. Is the backend running?"
-        );
+        setError(err.message || "Failed to fetch items. Is the backend running?");
       } finally {
         setLoading(false);
       }
@@ -160,6 +167,7 @@ function HomePage() {
     selectedYear,
     filtersLoading,
     genreOptions,
+    setSearchParams,
   ]);
 
   const handleSearchChange = (event) => setSearchTerm(event.target.value);
@@ -168,7 +176,7 @@ function HomePage() {
     setCurrentPage(1);
   };
 
-  const handleFilterChange = (setter, value) => {
+  const handleFilterChange = (setter, value, paramName) => {
     setter(value);
     setCurrentPage(1);
   };
@@ -190,6 +198,7 @@ function HomePage() {
     setCurrentPage(1);
   };
 
+  // NEED ANIMATION EFFECTS ON TO SEE EFFECT
   const scrollToTop = () => {
     if (topOfPageRef.current) {
       topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
@@ -210,10 +219,7 @@ function HomePage() {
             totalItems
           )} of ${totalItems})`}
       </span>
-      <button
-        onClick={handleNextPage}
-        disabled={currentPage >= totalPages || loading}
-      >
+      <button onClick={handleNextPage} disabled={currentPage >= totalPages || loading}>
         Next
       </button>
     </div>
@@ -238,9 +244,7 @@ function HomePage() {
           <select
             id="mediaTypeFilter"
             value={selectedMediaType}
-            onChange={(e) =>
-              handleFilterChange(setSelectedMediaType, e.target.value)
-            }
+            onChange={(e) => handleFilterChange(setSelectedMediaType, e.target.value, "media_type")}
             disabled={filtersLoading || loading}
           >
             {mediaTypeOptions.map((type) => (
@@ -256,9 +260,7 @@ function HomePage() {
           <select
             id="genreFilter"
             value={selectedGenre}
-            onChange={(e) =>
-              handleFilterChange(setSelectedGenre, e.target.value)
-            }
+            onChange={(e) => handleFilterChange(setSelectedGenre, e.target.value, "genre")}
             disabled={filtersLoading || loading}
           >
             {genreOptions.map((genre) => (
@@ -274,9 +276,7 @@ function HomePage() {
           <select
             id="statusFilter"
             value={selectedStatus}
-            onChange={(e) =>
-              handleFilterChange(setSelectedStatus, e.target.value)
-            }
+            onChange={(e) => handleFilterChange(setSelectedStatus, e.target.value, "status")}
             disabled={filtersLoading || loading}
           >
             {statusOptions.map((statusOption) => (
@@ -296,7 +296,7 @@ function HomePage() {
             max="10"
             step="0.1"
             value={minScore}
-            onChange={(e) => handleFilterChange(setMinScore, e.target.value)}
+            onChange={(e) => handleFilterChange(setMinScore, e.target.value, "minScore")}
             placeholder="e.g., 7.5"
           />
         </div>
@@ -309,9 +309,7 @@ function HomePage() {
             min="1900"
             max={new Date().getFullYear() + 5}
             value={selectedYear}
-            onChange={(e) =>
-              handleFilterChange(setSelectedYear, e.target.value)
-            }
+            onChange={(e) => handleFilterChange(setSelectedYear, e.target.value, "year")}
             placeholder="e.g., 2024"
           />
         </div>

@@ -112,3 +112,31 @@
 .recommendations-list .item-card img {
   height: 280px;
 }
+
+.tag-list-container {
+  margin-bottom: 10px;
+  line-height: 1.8;
+}
+
+.tag-list-container strong {
+  margin-right: 8px;
+  color: var(--text-dark);
+}
+
+.tag-link {
+  display: inline-block;
+  background-color: #e9ecef;
+  color: #495057;
+  padding: 4px 10px;
+  border-radius: 15px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  text-decoration: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tag-link:hover {
+  background-color: var(--primary-color);
+  color: white;
+}

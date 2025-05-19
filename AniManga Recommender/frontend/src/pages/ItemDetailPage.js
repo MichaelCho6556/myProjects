@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import ItemCard from "../components/ItemCard";
 import "./ItemDetail.css";
 
 const API_BASE_URL = "http://localhost:5000/api";
-const DEFAULT_PLACEHOLDER_IMAGE =
-  "https://via.placeholder.com/300x450.png?text=No+Image"; // Larger placeholder
+const DEFAULT_PLACEHOLDER_IMAGE = "https://via.placeholder.com/300x450.png?text=No+Image"; // Larger placeholder
 
 function ItemDetailPage() {
   const { uid } = useParams(); // Get the 'uid' from the URL parameter
+  const navigate = useNavigate();
   const [item, setItem] = useState(null);
   const [loadingItem, setLoadingItem] = useState(true);
   const [itemError, setItemError] = useState(null);
@@ -47,9 +47,7 @@ function ItemDetailPage() {
         setLoadingItem(false);
 
         console.log(`Fetching recommendation for UID: ${uid}`);
-        const recsResponse = await axios.get(
-          `${API_BASE_URL}/recommendations/${uid}?n=10`
-        );
+        const recsResponse = await axios.get(`${API_BASE_URL}/recommendations/${uid}?n=10`);
         let recsData = recsResponse.data;
         if (typeof recsData === "string") {
           try {
@@ -71,9 +69,7 @@ function ItemDetailPage() {
           setItemError(err.message || `Failed to fetch item ${uid}.`);
           setLoadingItem(false);
         }
-        setRecsError(
-          err.message || `Failed to fetch recommendations for ${uid}.`
-        );
+        setRecsError(err.message || `Failed to fetch recommendations for ${uid}.`);
       } finally {
         setLoadingItem(false);
         setLoadingRecs(false);
@@ -83,26 +79,39 @@ function ItemDetailPage() {
     fetchAllData();
   }, [uid]);
 
+  //helper to render clickable tags
+  const renderClickableTags = (tagArray, filterType, label) => {
+    if (!tagArray || !Array.isArray(tagArray) || tagArray.length === 0) {
+      return null;
+    }
+    return (
+      <div className="tag-list-container">
+        <strong>{label}: </strong>
+        {tagArray.map((tag, index) => {
+          if (typeof tag !== "string" || !tag.trim()) {
+            // Add a check for valid tag
+            return null; // Skip empty or non-string tags
+          }
+          return (
+            <Link
+              key={`${filterType}-${tag.trim()}-${index}`} // Use tag.trim() in key for consistency
+              to={{
+                pathname: "/", // Go to the HomePage
+                search: `?${filterType}=${encodeURIComponent(tag.trim())}`, // Construct search params
+              }}
+              className="tag-link"
+            >
+              {tag.trim()} {/* Display trimmed tag */}
+            </Link>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (loadingItem) return <p>Loading item details...</p>;
   if (itemError) return <p style={{ color: "red" }}>Error: {itemError}</p>;
   if (!item) return <p>Item not found.</p>;
-
-  // Helper to display list data
-  const renderList = (listData, label) => {
-    if (!listData || (Array.isArray(listData) && listData.length === 0)) {
-      return null; // Don't render if empty or not an array
-    }
-    const displayString = Array.isArray(listData)
-      ? listData.join(", ")
-      : typeof listData === "string"
-      ? listData
-      : "";
-    return displayString ? (
-      <p>
-        <strong>{label}:</strong> {displayString}
-      </p>
-    ) : null;
-  };
 
   return (
     <div className="item-detail-page">
@@ -123,12 +132,10 @@ function ItemDetailPage() {
         </div>
         <div className="item-detail-info">
           <p>
-            <strong>Type:</strong>{" "}
-            {item.media_type ? item.media_type.toUpperCase() : "N/A"}
+            <strong>Type:</strong> {item.media_type ? item.media_type.toUpperCase() : "N/A"}
           </p>
           <p>
-            <strong>Score:</strong>{" "}
-            {item.score ? parseFloat(item.score).toFixed(2) : "N/A"}
+            <strong>Score:</strong> {item.score ? parseFloat(item.score).toFixed(2) : "N/A"}
           </p>
           {item.status && (
             <p>
@@ -150,11 +157,11 @@ function ItemDetailPage() {
               <strong>Volumes:</strong> {item.volumes}
             </p>
           )}
-          {renderList(item.genres, "Genres")}
-          {renderList(item.themes, "Themes")}
-          {renderList(item.demographics, "Demographics")}
-          {item.media_type === "anime" && renderList(item.studios, "Studios")}
-          {item.media_type === "manga" && renderList(item.authors, "Authors")}
+          {renderClickableTags(item.genres, "genre", "Genres")}
+          {renderClickableTags(item.themes, "themes", "Themes")}
+          {renderClickableTags(item.demographics, "deomographics", "Demographics")}
+          {item.media_type === "anime" && renderClickableTags(item.studios, "studio", "Studios")}
+          {item.media_type === "manga" && renderClickableTags(item.authors, "author", "Authors")}
           {item.synopsis && (
             <div className="synopsis-section">
               <strong>Synopsis:</strong>
@@ -176,11 +183,7 @@ function ItemDetailPage() {
           )}
           {item.trailer_url && item.media_type === "anime" && (
             <p>
-              <a
-                href={item.trailer_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href={item.trailer_url} target="_blank" rel="noopener noreferrer">
                 Watch Trailer
               </a>
             </p>
@@ -191,11 +194,7 @@ function ItemDetailPage() {
       <div className="recommendations-section">
         <h3>Recommended for you:</h3>
         {loadingRecs && <p>Loading recommendations...</p>}
-        {recsError && (
-          <p style={{ color: "red" }}>
-            Error loading recommendations: {recsError}
-          </p>
-        )}
+        {recsError && <p style={{ color: "red" }}>Error loading recommendations: {recsError}</p>}
         {!loadingRecs && !recsError && recommendations.length > 0 && (
           <div className="item-list recommendations-list">
             {" "}
