@@ -1,10 +1,12 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 import ItemCard from "../components/ItemCard";
 import "../App.css";
 
 const API_BASE_URL = "http://localhost:5000/api";
+
+const DEBOUNCE_DELAY = 500;
 
 function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -18,10 +20,9 @@ function HomePage() {
   const [totalItems, setTotalItems] = useState(0);
 
   //filter states
-  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
-  const [selectedMediaType, setSelectedMediaType] = useState(
-    searchParams.get("media_type") || "All"
-  );
+  const [inputValue, setInputValue] = useState(searchParams.get("q") || ""); //what user types
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || ""); //debounced search term for API
+  const [selectedMediaType, setSelectedMediaType] = useState(searchParams.get("media_type") || "All");
   const [selectedGenre, setSelectedGenre] = useState(searchParams.get("genre") || "All");
   const [selectedStatus, setSelectedStatus] = useState(searchParams.get("status") || "All");
   const [minScore, setMinScore] = useState(searchParams.get("min_score") || "");
@@ -34,6 +35,7 @@ function HomePage() {
   const [filtersLoading, setFiltersLoading] = useState(true);
 
   const topOfPageRef = useRef(null); // For scrolling NEED ANIMATION EFFECTS ON
+  const debounceTimeoutRef = useRef(null);
 
   //effect to fetch distinct filter options once on component mount
   useEffect(() => {
@@ -67,6 +69,27 @@ function HomePage() {
     fetchFilterOptions();
   }, []);
 
+  //effect for debouncing search input
+  useEffect(() => {
+    //clear any existing timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    //set a new timeout
+    debounceTimeoutRef.current = setTimeout(() => {
+      setSearchTerm(inputValue); // updaing the actual search term after delay
+      setCurrentPage(1);
+    }, DEBOUNCE_DELAY);
+
+    //cleanup funciton to clear tiemout if component unmounts or inputValue changes again
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [inputValue]);
+
   //effect to fetch items based on filters and pagination
   useEffect(() => {
     //update URL search params when filters cahnge, good for sharable URLs
@@ -79,7 +102,10 @@ function HomePage() {
     if (selectedStatus !== "All") currentParams.set("status", selectedStatus);
     if (minScore) currentParams.set("min_score", minScore);
     if (selectedYear) currentParams.set("year", selectedYear);
-    setSearchParams(currentParams, { replace: true }); // avoid multiple history entries
+    // only update URL if params actually changed to avoid unnecessary re-renders/history entries
+    if (searchParams.toString() !== currentParams.toString()) {
+      setSearchParams(currentParams, { replace: true });
+    }
 
     //dont fetch items if filter options are still loading to avoid race conditons
     if (filtersLoading && genreOptions.length <= 1) return;
@@ -111,10 +137,8 @@ function HomePage() {
       if (selectedMediaType !== "All") params.append("media_type", selectedMediaType);
       if (selectedGenre !== "All") params.append("genre", selectedGenre);
       if (selectedStatus !== "All") params.append("status", selectedStatus);
-      if (minScore && !isNaN(parseFloat(minScore)))
-        params.append("min_score", parseFloat(minScore));
-      if (selectedYear && !isNaN(parseInt(selectedYear)))
-        params.append("year", parseInt(selectedYear));
+      if (minScore && !isNaN(parseFloat(minScore))) params.append("min_score", parseFloat(minScore));
+      if (selectedYear && !isNaN(parseInt(selectedYear))) params.append("year", parseInt(selectedYear));
 
       try {
         const response = await axios.get(`${API_BASE_URL}/items?${params.toString()}`);
@@ -170,9 +194,17 @@ function HomePage() {
     setSearchParams,
   ]);
 
+  const handleInputChange = (event) => {
+    setInputValue(event.target.value);
+  };
+
   const handleSearchChange = (event) => setSearchTerm(event.target.value);
   const handleSearchSubmit = (event) => {
     event.preventDefault();
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    setSearchTerm(inputValue);
     setCurrentPage(1);
   };
 
@@ -230,12 +262,7 @@ function HomePage() {
       <div ref={topOfPageRef}></div>
       <div className="filter-bar controls-bar">
         <form onSubmit={handleSearchSubmit} className="search-form">
-          <input
-            type="text"
-            placeholder="Search titles..."
-            value={searchTerm}
-            onChange={handleSearchChange}
-          />
+          <input type="text" placeholder="Search titles..." value={inputValue} onChange={handleInputChange} />
           <button type="submit">Search</button>
         </form>
 
