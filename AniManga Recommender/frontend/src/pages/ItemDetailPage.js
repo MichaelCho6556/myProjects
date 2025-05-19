@@ -195,17 +195,23 @@ function ItemDetailPage() {
         <h3>Recommended for you:</h3>
         {loadingRecs && <p>Loading recommendations...</p>}
         {recsError && <p style={{ color: "red" }}>Error loading recommendations: {recsError}</p>}
+
         {!loadingRecs && !recsError && recommendations.length > 0 && (
           <div className="item-list recommendations-list">
-            {" "}
-            {/* Re-use item-list styling or create specific */}
             {recommendations.map((recItem) => (
               <ItemCard key={recItem.uid} item={recItem} />
             ))}
           </div>
         )}
+
+        {/* Styled "No Recommendations" message */}
         {!loadingRecs && !recsError && recommendations.length === 0 && (
-          <p>No recommendations found for this item.</p>
+          <div className="empty-state-container">
+            {/* Optional: Icon */}
+            {<div className="empty-state-icon">🤷</div>}
+            <p className="empty-state-message">No specific recommendations found for this item.</p>
+            <p className="empty-state-suggestion">Try exploring similar genres!</p>
+          </div>
         )}
       </div>
     </div>

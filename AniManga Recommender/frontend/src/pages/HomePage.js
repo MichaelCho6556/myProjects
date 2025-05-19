@@ -8,12 +8,29 @@ const API_BASE_URL = "http://localhost:5000/api";
 
 const DEBOUNCE_DELAY = 500;
 
+//helper function to get initial itemsPerPage from localstorage or default
+
+const getInitialItemsPerPage = () => {
+  const storedValue = localStorage.getItem("aniMangaItemsPerPage"); // unique key
+  if (storedValue) {
+    const parsedValue = parseInt(storedValue, 10);
+    if ([10, 20, 25, 30, 50].includes(parsedValue)) {
+      return parsedValue;
+    }
+  }
+  return 30;
+};
+
 function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const initialPage = parseInt(searchParams.get("page")) || 1;
+  const initialItemsPerPage = parseInt(searchParams.get("per_page")) || getInitialItemsPerPage();
+
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get("page")) || 1);
   const [totalPages, setTotalPages] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(parseInt(searchParams.get("per_page")) || 30);
@@ -90,7 +107,7 @@ function HomePage() {
     };
   }, [inputValue]);
 
-  //effect to fetch items based on filters and pagination
+  //effect to fetch items based on filters and pagination and update localStorage for itemsPerPage
   useEffect(() => {
     //update URL search params when filters cahnge, good for sharable URLs
     const currentParams = new URLSearchParams();
@@ -106,6 +123,9 @@ function HomePage() {
     if (searchParams.toString() !== currentParams.toString()) {
       setSearchParams(currentParams, { replace: true });
     }
+
+    //save itemsPerPage to localStorage when it changes
+    localStorage.setItem("aniMangaItemsPerPage", itemsPerPage.toString());
 
     //dont fetch items if filter options are still loading to avoid race conditons
     if (filtersLoading && genreOptions.length <= 1) return;
@@ -226,7 +246,8 @@ function HomePage() {
   };
 
   const handleItemsPerPageChange = (event) => {
-    setItemsPerPage(Number(event.target.value));
+    const newItemsPerPage = Number(event.target.value);
+    setItemsPerPage(newItemsPerPage);
     setCurrentPage(1);
   };
 
@@ -367,15 +388,28 @@ function HomePage() {
       {!loading && !error && (
         <>
           <div className="item-list">
-            {Array.isArray(items) && items.length > 0 ? (
-              items.map((item) => <ItemCard key={item.uid} item={item} />)
-            ) : (
-              <p>No items found for the current filters.</p> // Updated message
-            )}
+            {Array.isArray(items) && items.length > 0
+              ? items.map((item) => <ItemCard key={item.uid} item={item} />)
+              : // No direct message here, item-list will just be empty
+                null}
           </div>
-          <div className="bottom-pagination-wrapper">
-            <PaginationControls />
-          </div>
+
+          {/* Conditionally render empty state message OUTSIDE and AFTER item-list */}
+          {Array.isArray(items) && items.length === 0 && !loading && (
+            <div className="empty-state-container">
+              {/* Example with a simple text icon, replace with SVG or Font Awesome if preferred */}
+              <div className="empty-state-icon">😕</div>
+              <p className="empty-state-message">No items found for the current filters.</p>
+              <p className="empty-state-suggestion">Try adjusting your search or filter criteria.</p>
+            </div>
+          )}
+
+          {/* Only show bottom pagination if there are items AND more than one page */}
+          {Array.isArray(items) && items.length > 0 && totalPages > 1 && (
+            <div className="bottom-pagination-wrapper">
+              <PaginationControls />
+            </div>
+          )}
         </>
       )}
       {!loading && Array.isArray(items) && items.length > 0 && (
