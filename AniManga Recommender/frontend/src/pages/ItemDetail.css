@@ -7,46 +7,78 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
+.item-detail-page .back-link {
+  display: inline-block;
+  margin-bottom: 25px;
+  color: #007bff;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.item-detail-page .back-link:hover {
+  text-decoration: underline;
+}
+
 .item-detail-page h2 {
-  text-align: center;
-  margin-bottom: 20px;
+  text-align: left;
+  margin-bottom: 25px;
+  font-size: 2rem;
+  color: #343a40;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 15px;
 }
 
 .item-detail-content {
   display: flex;
-  gap: 20px;
+  gap: 30px;
   flex-wrap: wrap;
 }
 
 .item-detail-image {
-  flex: 1;
-  min-width: 250px;
+  flex: 0 0 300px;
 }
 
 .item-detail-image img {
   width: 100%;
-  max-width: 350px;
   height: auto;
   border-radius: 8px;
-  display: block;
-  margin: 0 auto 20px auto;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .item-detail-info {
-  flex: 2;
+  flex: 1;
   min-width: 300px;
 }
 
-.item-detail-info p,
-.item-detail-info div {
-  margin-bottom: 10px;
-  line-height: 1.6;
+.item-detail-info p {
+  margin-bottom: 12px;
+  line-height: 1.7;
+  color: #495057;
+}
+
+.item-detail-info p strong {
+  color: #212529;
+  margin-right: 5px;
+}
+
+.synopsis-section,
+.background-section {
+  margin-top: 20px;
+}
+
+.synopsis-section strong,
+.background-section strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 1.1rem;
+  color: #343a40;
 }
 
 .synopsis-section p,
 .background-section p {
-  margin-top: 5px;
   white-space: pre-wrap;
+  color: #495057;
+  line-height: 1.7;
 }
 
 .back-link {
@@ -61,13 +93,22 @@
 }
 
 .recommendations-section {
-  margin-top: 30px;
-  padding-top: 20px;
-  border-top: 1px solid #eee;
+  margin-top: 40px;
+  padding-top: 30px;
+  border-top: 1px solid #dee236;
 }
 
-.recommendations-section {
-  margin-top: 30px;
-  padding-top: 20px;
-  border-top: 1px solid #eee;
+.recommendations-section h3 {
+  font-size: 1.5rem;
+  margin-bottom: 20px;
+  color: #343a40;
+  text-align: center;
+}
+
+.recommendation-list .item-card {
+  width: 200px;
+}
+
+.recommendations-list .item-card img {
+  height: 280px;
 }

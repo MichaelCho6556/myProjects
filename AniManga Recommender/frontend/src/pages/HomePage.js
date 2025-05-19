@@ -14,13 +14,71 @@ function HomePage() {
   const [itemsPerPage, setItemsPerPage] = useState(30);
   const [totalItems, setTotalItems] = useState(0);
 
+  //filter states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedMediaType, setSelectedMediaType] = useState("All");
+  const [selectedGenre, setSelectedGenre] = useState("All");
+  const [selectedStatus, setSelectedStatus] = useState("All");
+  const [minScore, setMinScore] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+
+  //state for dynamic filter options
+  const [genreOptions, setGenreOptions] = useState([]);
+  const [statusOptions, setStatusOptions] = useState([]);
+  const [mediaTypeOptions, setMediaTypeOptions] = useState([]);
+  const [filtersLoading, setFiltersLoading] = useState(true);
+
   const topOfPageRef = useRef(null); // For scrolling
 
+  //effect to fetch distinct filter options once on component mount
   useEffect(() => {
+    const fetchFilterOptions = async () => {
+      setFiltersLoading(true);
+      try {
+        const response = await axios.get(`${API_BASE_URL}/distinct-values`);
+        let distinctData = response.data;
+        if (typeof distinctData === "string") {
+          try {
+            distinctData = JSON.parse(distinctData);
+          } catch (e) {
+            throw new Error("Filter options data not valid JSON");
+          }
+        }
+
+        if (distinctData) {
+          setGenreOptions(["All", ...(distinctData.genres || [])]);
+          setStatusOptions(["All", ...(distinctData.statuses || [])]);
+          setMediaTypeOptions(["All", ...(distinctData.media_types || [])]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch filter options:", err);
+        setGenreOptions(["All"]);
+        setStatusOptions(["All"]);
+        setMediaTypeOptions(["All"]);
+      } finally {
+        setFiltersLoading(false);
+      }
+    };
+    fetchFilterOptions();
+  }, []);
+
+  //effect to fetch items based on filters and pagination
+  useEffect(() => {
+    //dont fetch items if filter options are still loading to avoid race conditons
+    if (filtersLoading && genreOptions.length <= 1) return;
     const fetchItems = async () => {
       if (topOfPageRef.current) {
         // Only scroll if not the initial load or if page/itemsPerPage changes
-        if (currentPage !== 1 || itemsPerPage !== 30) {
+        if (
+          currentPage !== 1 ||
+          itemsPerPage !== 30 ||
+          searchTerm ||
+          selectedMediaType !== "All" ||
+          selectedGenre !== "All" ||
+          selectedStatus !== "All" ||
+          minScore ||
+          selectedYear
+        ) {
           // Adjust initial itemsPerPage if different
           topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
         }
@@ -28,9 +86,23 @@ function HomePage() {
 
       setLoading(true);
       setError(null);
+
+      const params = new URLSearchParams();
+      params.append("page", currentPage);
+      params.append("per_page", itemsPerPage);
+      if (searchTerm) params.append("q", searchTerm);
+      if (selectedMediaType !== "All")
+        params.append("media_type", selectedMediaType);
+      if (selectedGenre !== "All") params.append("genre", selectedGenre);
+      if (selectedStatus !== "All") params.append("status", selectedStatus);
+      if (minScore && !isNaN(parseFloat(minScore)))
+        params.append("min_score", parseFloat(minScore));
+      if (selectedYear && !isNaN(parseInt(selectedYear)))
+        params.append("year", parseInt(selectedYear));
+
       try {
         const response = await axios.get(
-          `${API_BASE_URL}/items?page=${currentPage}&per_page=${itemsPerPage}`
+          `${API_BASE_URL}/items?${params.toString()}`
         );
 
         let responseData = response.data;
@@ -77,7 +149,29 @@ function HomePage() {
       }
     };
     fetchItems();
-  }, [currentPage, itemsPerPage]);
+  }, [
+    currentPage,
+    itemsPerPage,
+    searchTerm,
+    selectedMediaType,
+    selectedGenre,
+    selectedStatus,
+    minScore,
+    selectedYear,
+    filtersLoading,
+    genreOptions,
+  ]);
+
+  const handleSearchChange = (event) => setSearchTerm(event.target.value);
+  const handleSearchSubmit = (event) => {
+    event.preventDefault();
+    setCurrentPage(1);
+  };
+
+  const handleFilterChange = (setter, value) => {
+    setter(value);
+    setCurrentPage(1);
+  };
 
   const handleNextPage = () => {
     if (currentPage < totalPages) {
@@ -127,9 +221,103 @@ function HomePage() {
 
   return (
     <>
-      {" "}
-      {/* Using Fragment as the top-level element for this page */}
       <div ref={topOfPageRef}></div>
+      <div className="filter-bar controls-bar">
+        <form onSubmit={handleSearchSubmit} className="search-form">
+          <input
+            type="text"
+            placeholder="Search titles..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+          />
+          <button type="submit">Search</button>
+        </form>
+
+        <div className="filter-group">
+          <label htmlFor="mediaTypeFilter">Type:</label>
+          <select
+            id="mediaTypeFilter"
+            value={selectedMediaType}
+            onChange={(e) =>
+              handleFilterChange(setSelectedMediaType, e.target.value)
+            }
+            disabled={filtersLoading || loading}
+          >
+            {mediaTypeOptions.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <label htmlFor="genreFilter">Genre:</label>
+          <select
+            id="genreFilter"
+            value={selectedGenre}
+            onChange={(e) =>
+              handleFilterChange(setSelectedGenre, e.target.value)
+            }
+            disabled={filtersLoading || loading}
+          >
+            {genreOptions.map((genre) => (
+              <option key={genre} value={genre}>
+                {genre}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <label htmlFor="statusFilter">Status:</label>
+          <select
+            id="statusFilter"
+            value={selectedStatus}
+            onChange={(e) =>
+              handleFilterChange(setSelectedStatus, e.target.value)
+            }
+            disabled={filtersLoading || loading}
+          >
+            {statusOptions.map((statusOption) => (
+              <option key={statusOption} value={statusOption}>
+                {statusOption}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <label htmlFor="minScoreFilter">Min Score (0-10):</label>
+          <input
+            type="number"
+            id="minScoreFilter"
+            min="0"
+            max="10"
+            step="0.1"
+            value={minScore}
+            onChange={(e) => handleFilterChange(setMinScore, e.target.value)}
+            placeholder="e.g., 7.5"
+          />
+        </div>
+
+        <div className="filter-group">
+          <label htmlFor="yearFilter">Year:</label>
+          <input
+            type="number"
+            id="yearFilter"
+            min="1900"
+            max={new Date().getFullYear() + 5}
+            value={selectedYear}
+            onChange={(e) =>
+              handleFilterChange(setSelectedYear, e.target.value)
+            }
+            placeholder="e.g., 2024"
+          />
+        </div>
+      </div>
+
+      {/* --- Top Pagination and Items Per Page (Existing Controls Bar) --- */}
       <div className="controls-bar">
         <PaginationControls />
         <div className="items-per-page-selector">
@@ -148,6 +336,7 @@ function HomePage() {
           </select>
         </div>
       </div>
+
       {loading && <p>Loading Items...</p>}
       {error && <p style={{ color: "red" }}>Error: {error}</p>}
       {!loading && !error && (
@@ -156,7 +345,7 @@ function HomePage() {
             {Array.isArray(items) && items.length > 0 ? (
               items.map((item) => <ItemCard key={item.uid} item={item} />)
             ) : (
-              <p>No items found or data is not in the expected format.</p>
+              <p>No items found for the current filters.</p> // Updated message
             )}
           </div>
           <div className="bottom-pagination-wrapper">

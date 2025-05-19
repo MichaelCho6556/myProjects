@@ -27,33 +27,32 @@ function ItemCard({ item }) {
   return (
     <Link to={`/item/${item.uid}`} className="item-card-link">
       <div className="item-card">
-        <img
-          src={imageUrl}
-          alt={title}
-          onError={(e) => {
-            e.target.onerror = null;
-            e.target.src = DEFAULT_PLACEHOLDER_IMAGE;
-          }}
-        />
-        <h3>{title}</h3>
-        <p>
-          <strong>Type:</strong> {mediaType.toUpperCase()}
-        </p>
-        <p>
-          <strong>Score:</strong> {score}
-        </p>
-        {item.genres &&
-          (Array.isArray(item.genres) ? item.genres.length > 0 : true) && (
-            <p className="genres">
-              <strong>Genres:</strong> {genresDisplay}
+        <img src={imageUrl} alt={title} />
+        <div className="item-card-content-wrapper">
+          <h3>{title}</h3>
+          <div className="details">
+            <p>
+              <strong>Type:</strong> {mediaType.toUpperCase()}
             </p>
-          )}
-        {item.themes &&
-          (Array.isArray(item.themes) ? item.themes.length > 0 : true) && (
-            <p className="themes">
-              <strong>Themes:</strong> {themesDisplay}
+            <p>
+              <strong>Score:</strong> {score}
             </p>
-          )}
+          </div>
+          <div className="genres-themes-wrapper">
+            {item.genres &&
+              (Array.isArray(item.genres) ? item.genres.length > 0 : true) && (
+                <p className="genres">
+                  <strong>Genres:</strong> {genresDisplay}
+                </p>
+              )}
+            {item.themes &&
+              (Array.isArray(item.themes) ? item.themes.length > 0 : true) && (
+                <p className="themes">
+                  <strong>Themes:</strong> {themesDisplay}
+                </p>
+              )}
+          </div>
+        </div>
       </div>
     </Link>
   );
