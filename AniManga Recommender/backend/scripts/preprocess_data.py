@@ -22,6 +22,36 @@ def safe_literal_eval(val):
             return val
     return val
 
+def extract_author_names(authors_data_cell_value):
+    """
+    Extracts author names from the authors data structure.
+    Input can be a string representation of a list of dicts, or already a list of dicts
+    """
+    processed_authors_list = []
+    if isinstance(authors_data_cell_value, str):
+        try:
+            parsed_data = ast.literal_eval(authors_data_cell_value)
+        except (ValueError, SyntaxError):
+            return []
+    elif isinstance(authors_data_cell_value, list):
+        parsed_data = authors_data_cell_value
+    else:
+        return []
+    
+    names = []
+    if isinstance(parsed_data, list):
+        for author_dict in parsed_data:
+            if isinstance(author_dict, dict):
+                first = author_dict.get('first_name', '').strip()
+                last = author_dict.get('last_name', '').strip()
+                if last and not first and (last.count(' ') > 0 or not any(c.islower() for c in last)):
+                    name_parts = [last]
+                else:
+                    name_parts = [part for part in [first, last] if part]
+                if name_parts:
+                    names.append(" ".join(name_parts))
+    return list(set(names))
+
 def preprocess_text(text):
     if isinstance(text, str):
         return text.lower().strip()
@@ -30,7 +60,7 @@ def preprocess_text(text):
 def main():
     print(f"Loading combined data from: {INPUT_PATH}")
     try:
-        df = pd.read_csv(INPUT_PATH)
+        df = pd.read_csv(INPUT_PATH, dtype={'authors': str})
     except FileNotFoundError:
         print(f"ERROR: Input file not found at {INPUT_PATH}. Run explore_data.py first.")
         return
@@ -40,6 +70,16 @@ def main():
 
 
     print(f"Initial shape: {df.shape}")
+
+    # --- DEBUG: Inspect 'authors' column before processing ---
+    if 'authors' in df.columns:
+        print("\n--- Sample of 'authors' column BEFORE processing (first 5 non-NaN for manga): ---")
+        manga_authors_sample = df[df['media_type'] == 'manga']['authors'].dropna().head()
+        if not manga_authors_sample.empty:
+            for i, val in manga_authors_sample.items():
+                print(f"Index {i}: {val} (Type: {type(val)})")
+        else:
+            print("No non-NaN manga author entries found in sample.")
 
     print("\n Starting data type conversions and initial cleaning.")
     data_cols = ['start_date', 'end_date', 'real_start_date', 'real_end_date', 'created_at', 'updated_at']
@@ -53,12 +93,26 @@ def main():
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    list_like_cols = ['genres', 'themes', 'demographics', 'studios', 'producers', 'licensors', 'authors', 'serializations', 'title_synonyms']
+    list_like_cols = ['genres', 'themes', 'demographics', 'studios', 'producers', 'licensors', 'serializations', 'title_synonyms']
     for col in list_like_cols:
         if col in df.columns:
             print(f"Processing list-like column: {col}")
             df[col] = df[col].apply(safe_literal_eval)
-            df[col] = df[col].apply(lambda x: x if isinstance(x, list) else [])
+            df[col] = df[col].apply(lambda x: x if isinstance(x, list) else ([] if pd.isna(x) else ([str(x)] if not isinstance(x, list) else [])))
+    
+    if 'authors' in df.columns:
+        print("Processing complex 'authors' column...")
+        df['authors'] = df['authors'].apply(extract_author_names)
+
+    # --- DEBUG: Inspect 'authors' column AFTER processing ---
+    if 'authors' in df.columns:
+        print("\n--- Sample of 'authors' column AFTER processing (first 5 non-NaN for manga): ---")
+        manga_authors_sample_after = df[df['media_type'] == 'manga']['authors'].dropna().head()
+        if not manga_authors_sample_after.empty:
+            for i, val in manga_authors_sample_after.items():
+                 print(f"Index {i}: {val} (Type: {type(val)})") # Should be list of strings
+        else:
+            print("No non-NaN manga author entries found in sample after processing.")
 
     print("\nHandling missing values.")
     if 'score' in df.columns:

@@ -131,6 +131,11 @@ def get_items():
     min_score_filter = request.args.get('min_score', None, type=float)
     year_filter = request.args.get('year', None, type=int)
 
+    theme_filter = request.args.get('theme', None, type=str)
+    demographic_filter = request.args.get('demographic', None, type=str)
+    studio_filter = request.args.get('studio', None, type=str)
+    author_filter = request.args.get('author', None, type=str)
+
     data_subset = df_processed.copy()
 
     #apply filters sequentially
@@ -159,6 +164,33 @@ def get_items():
         #assuming stat year num column exists and is numeric
         data_subset = data_subset[data_subset['start_year_num'].fillna(0) == year_filter]
     
+    if theme_filter and theme_filter.lower() != 'all':
+        def check_theme(theme_list):
+            if isinstance(theme_list, list):
+                return any(t.lower() == theme_filter.lower() for t in theme_list)
+            return False
+        data_subset = data_subset[data_subset['themes'].apply(check_theme)]
+
+    if demographic_filter and demographic_filter.lower() != 'all':
+        def check_demographic(demographic_list):
+            if isinstance(demographic_list, list):
+                return any(d.lower() == demographic_filter.lower() for d in demographic_list)
+            return False
+        data_subset = data_subset[data_subset['demographics'].apply(check_demographic)]
+
+    if studio_filter and studio_filter.lower() != 'all':
+        def check_studio(studio_list):
+            if isinstance(studio_list, list):
+                return any(s.lower() == studio_filter.lower() for s in studio_list)
+            return False
+        data_subset = data_subset[data_subset['studios'].apply(check_studio)]
+
+    if author_filter and author_filter.lower() != 'all':
+        def check_author(author_list):
+            if isinstance(author_list, list):
+                return any(a.lower() == author_filter.lower() for a in author_list)
+            return False
+        data_subset = data_subset[data_subset['authors'].apply(check_author)]
 
     total_items = len(data_subset)
     start = (page - 1) * per_page
@@ -182,25 +214,41 @@ def get_distinct_values():
     try:
         #for genre filter
         all_genres = set()
+        for item_genres in df_processed['genres'].dropna():
+            if isinstance(item_genres, list): all_genres.update(g.strip() for g in item_genres if isinstance(g, str) and g.strip())
+            elif isinstance(item_genres, str) and item_genres.strip(): all_genres.add(item_genres.strip())
         
-        for genre_list in df_processed['genres'].dropna():
-            if isinstance(genre_list, list):
-                for genre in genre_list:
-                    if isinstance(genre, str) and genre.strip(): #making sure genre is not empty
-                        all_genres.add(genre.strip())
-            elif isinstance(genre_list, str) and genre_list.strip():#handling if it is a single string genre
-                all_genres.add(genre_list.strip())
+        all_themes = set()
+        for item_themes in df_processed['themes'].dropna():
+            if isinstance(item_themes, list): all_themes.update(t.strip() for t in item_themes if isinstance(t, str) and t.strip())
+            elif isinstance(item_themes, str) and item_themes.strip(): all_themes.add(item_themes.strip())
 
-        # For statuses (assuming it's a column of strings)
+        all_demographics = set()
+        for item_demographics in df_processed['demographics'].dropna():
+            if isinstance(item_demographics, list): all_demographics.update(d.strip() for d in item_demographics if isinstance(d, str) and d.strip())
+            elif isinstance(item_demographics, str) and item_demographics.strip(): all_demographics.add(item_demographics.strip())
+
+        all_studios = set()
+        for item_studios in df_processed['studios'].dropna(): # Assuming studios is also list of strings
+            if isinstance(item_studios, list): all_studios.update(s.strip() for s in item_studios if isinstance(s, str) and s.strip())
+            elif isinstance(item_studios, str) and item_studios.strip(): all_studios.add(item_studios.strip())
+
+        all_authors = set()
+        for item_authors in df_processed['authors'].dropna(): # Authors should now be list of strings
+            if isinstance(item_authors, list): all_authors.update(a.strip() for a in item_authors if isinstance(a, str) and a.strip())
+            elif isinstance(item_authors, str) and item_authors.strip(): all_authors.add(item_authors.strip())
+            
         all_statuses = set(s.strip() for s in df_processed['status'].dropna().unique() if isinstance(s, str) and s.strip())
-        
-        # For media types (if you ever wanted this dynamic, though it's usually fixed)
         all_media_types = set(mt.strip() for mt in df_processed['media_type'].dropna().unique() if isinstance(mt, str) and mt.strip())
 
         return jsonify({
             "genres": sorted(list(all_genres)),
             "statuses": sorted(list(all_statuses)),
-            "media_types": sorted(list(all_media_types)) # e.g., ['Anime', 'Manga']
+            "media_types": sorted(list(all_media_types)),
+            "themes": sorted(list(all_themes)),
+            "demographics": sorted(list(all_demographics)),
+            "studios": sorted(list(all_studios)),
+            "authors": sorted(list(all_authors))
         })
     except Exception as e:
         print(f"Error fetching distinct values: {e}")
