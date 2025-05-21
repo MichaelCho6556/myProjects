@@ -1,8 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-const DEFAULT_PLACEHOLDER_IMAGE =
-  "https://via.placeholder.com/200x300.png?text=No+Image"; // placeholder image that needs changing
+const DEFAULT_PLACEHOLDER_IMAGE = "https://via.placeholder.com/200x300.png?text=No+Image"; // placeholder image that needs changing
 
 function ItemCard({ item }) {
   if (!item) {
@@ -39,18 +38,16 @@ function ItemCard({ item }) {
             </p>
           </div>
           <div className="genres-themes-wrapper">
-            {item.genres &&
-              (Array.isArray(item.genres) ? item.genres.length > 0 : true) && (
-                <p className="genres">
-                  <strong>Genres:</strong> {genresDisplay}
-                </p>
-              )}
-            {item.themes &&
-              (Array.isArray(item.themes) ? item.themes.length > 0 : true) && (
-                <p className="themes">
-                  <strong>Themes:</strong> {themesDisplay}
-                </p>
-              )}
+            {item.genres && (Array.isArray(item.genres) ? item.genres.length > 0 : true) && (
+              <p className="genres">
+                <strong>Genres:</strong> {genresDisplay}
+              </p>
+            )}
+            {item.themes && (Array.isArray(item.themes) ? item.themes.length > 0 : true) && (
+              <p className="themes">
+                <strong>Themes:</strong> {themesDisplay}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -58,4 +55,4 @@ function ItemCard({ item }) {
   );
 }
 
-export default ItemCard;
+export default React.memo(ItemCard);

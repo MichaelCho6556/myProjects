@@ -21,6 +21,8 @@ const getInitialItemsPerPage = () => {
   return 30;
 };
 
+const DEFAULT_ITEMS_PER_PAGE = getInitialItemsPerPage();
+
 function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -29,37 +31,38 @@ function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get("page")) || 1);
+  const [itemsPerPage, setItemsPerPage] = useState(
+    parseInt(searchParams.get("per_page")) || DEFAULT_ITEMS_PER_PAGE
+  );
   const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(getInitialItemsPerPage()); // Use your helper
   const [totalItems, setTotalItems] = useState(0);
 
   // Filter states - initialize with defaults, URL will override
-  const [inputValue, setInputValue] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedMediaType, setSelectedMediaType] = useState("All");
-  const [selectedGenre, setSelectedGenre] = useState("All");
-  const [selectedStatus, setSelectedStatus] = useState("All");
-  const [minScore, setMinScore] = useState("");
-  const [selectedYear, setSelectedYear] = useState("");
-  const [selectedTheme, setSelectedTheme] = useState("All");
-  const [selectedDemographic, setSelectedDemographic] = useState("All");
-  const [selectedStudio, setSelectedStudio] = useState("All");
-  const [selectedAuthor, setSelectedAuthor] = useState("All");
-
+  const [inputValue, setInputValue] = useState(searchParams.get("q") || "");
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
+  const [selectedMediaType, setSelectedMediaType] = useState(searchParams.get("media_type") || "All");
+  const [selectedGenre, setSelectedGenre] = useState(searchParams.get("genre") || "All");
+  const [selectedStatus, setSelectedStatus] = useState(searchParams.get("status") || "All");
+  const [minScore, setMinScore] = useState(searchParams.get("min_score") || "");
+  const [selectedYear, setSelectedYear] = useState(searchParams.get("year") || "");
+  const [selectedTheme, setSelectedTheme] = useState(searchParams.get("theme") || "All");
+  const [selectedDemographic, setSelectedDemographic] = useState(searchParams.get("demographic") || "All");
+  const [selectedStudio, setSelectedStudio] = useState(searchParams.get("studio") || "All");
+  const [selectedAuthor, setSelectedAuthor] = useState(searchParams.get("author") || "All");
   //state for dynamic filter options
-  const [themeOptions, setThemeOptions] = useState([]);
-  const [demographicOptions, setDemographicOptions] = useState([]);
-  const [studioOptions, setStudioOptions] = useState([]);
-  const [authorOptions, setAuthorOptions] = useState([]);
-  const [genreOptions, setGenreOptions] = useState([]);
-  const [statusOptions, setStatusOptions] = useState([]);
-  const [mediaTypeOptions, setMediaTypeOptions] = useState([]);
+  const [genreOptions, setGenreOptions] = useState(["All"]);
+  const [statusOptions, setStatusOptions] = useState(["All"]);
+  const [mediaTypeOptions, setMediaTypeOptions] = useState(["All"]);
+  const [themeOptions, setThemeOptions] = useState(["All"]);
+  const [demographicOptions, setDemographicOptions] = useState(["All"]);
+  const [studioOptions, setStudioOptions] = useState(["All"]);
+  const [authorOptions, setAuthorOptions] = useState(["All"]);
   const [filtersLoading, setFiltersLoading] = useState(true);
 
   const topOfPageRef = useRef(null); // For scrolling NEED ANIMATION EFFECTS ON
   const debounceTimeoutRef = useRef(null);
-  const isInitialLoadDone = useRef(false); // To manage initial load behavior
+  const isMounted = useRef(false);
 
   // Effect 1: Fetch distinct filter options (runs once on mount)
   useEffect(() => {
@@ -102,58 +105,66 @@ function HomePage() {
     fetchFilterOptions();
   }, []); // Empty dependency array: runs only once on mount
 
-  // Effect 2: Sync local filter states FROM URL searchParams
-  // Runs on mount and whenever searchParams (from URL) changes.
+  // Effect 2: Sync local state FROM URL searchParams (when URL changes externally)
   useEffect(() => {
-    console.log("Effect 2 (URL -> State Sync) - searchParams:", searchParams.toString());
-    setCurrentPage(parseInt(searchParams.get("page")) || 1);
-    setItemsPerPage(parseInt(searchParams.get("per_page")) || getInitialItemsPerPage());
-    const queryFromUrl = searchParams.get("q") || "";
-    setInputValue(queryFromUrl);
-    setSearchTerm(queryFromUrl);
-    setSelectedMediaType(searchParams.get("media_type") || "All");
-    setSelectedGenre(searchParams.get("genre") || "All");
-    setSelectedStatus(searchParams.get("status") || "All");
-    setMinScore(searchParams.get("min_score") || "");
-    setSelectedYear(searchParams.get("year") || "");
-    setSelectedTheme(searchParams.get("theme") || "All");
-    setSelectedDemographic(searchParams.get("demographic") || "All");
-    setSelectedStudio(searchParams.get("studio") || "All");
-    setSelectedAuthor(searchParams.get("author") || "All");
+    console.log("Effect 2 (URL -> State Sync) triggered. URL Params:", searchParams.toString());
+    const newPage = parseInt(searchParams.get("page")) || 1;
+    const newPerPage = parseInt(searchParams.get("per_page")) || DEFAULT_ITEMS_PER_PAGE;
+    const newQuery = searchParams.get("q") || "";
+    const newMediaType = searchParams.get("media_type") || "All";
+    const newGenre = searchParams.get("genre") || "All";
+    const newStatus = searchParams.get("status") || "All";
+    const newMinScore = searchParams.get("min_score") || "";
+    const newYear = searchParams.get("year") || "";
+    const newTheme = searchParams.get("theme") || "All";
+    const newDemographic = searchParams.get("demographic") || "All";
+    const newStudio = searchParams.get("studio") || "All";
+    const newAuthor = searchParams.get("author") || "All";
 
-    isInitialLoadDone.current = true; // Mark that initial state sync from URL is done
-  }, [searchParams]);
+    setCurrentPage(newPage);
+    setItemsPerPage(newPerPage);
+    setInputValue(newQuery);
+    setSearchTerm(newQuery); // Sync searchTerm as well
+    setSelectedMediaType(newMediaType);
+    setSelectedGenre(newGenre);
+    setSelectedStatus(newStatus);
+    setMinScore(newMinScore);
+    setSelectedYear(newYear);
+    setSelectedTheme(newTheme);
+    setSelectedDemographic(newDemographic);
+    setSelectedStudio(newStudio);
+    setSelectedAuthor(newAuthor);
 
-  // Effect 3: Debounce inputValue to update searchTerm
+    // This effect sets the state. The data fetching effect will then use these states.
+  }, [searchParams]); // Only depends on searchParams
+
+  /// Effect 3: Debounce inputValue to update searchTerm
   useEffect(() => {
     if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
     debounceTimeoutRef.current = setTimeout(() => {
       if (inputValue !== searchTerm) {
         setSearchTerm(inputValue);
-        setCurrentPage(1);
+        // setCurrentPage(1); // Let main effect handle page reset if searchTerm changes
       }
     }, DEBOUNCE_DELAY);
     return () => {
       if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
     };
-  }, [inputValue, searchTerm]); // Removed currentPage from here to avoid potential loops with its own setter
+  }, [inputValue, searchTerm]);
 
   // Effect 4: Sync URL searchParams FROM component filter states AND Fetch Items
   // This is the main effect that reacts to user interactions or programmatic state changes.
   useEffect(() => {
     // Don't run if the very first URL->State sync isn't done OR if filter options are still loading
-    if (!isInitialUrlSyncDone.current || filtersLoading) {
-      // If filters are loading, but initial URL sync is done, we might still want to show loading
-      // and not an empty page if the URL had parameters.
-      // This condition ensures we wait for both initial URL parsing and filter options.
-      if (filtersLoading) setLoading(true); // Keep loading true if filters are still coming
+    if (filtersLoading && !isMounted.current) {
+      console.log("Main Effect: Filters loading on initial mount, delaying.");
       return;
     }
 
     // 1. Update URL from current state
     const newUrlParams = new URLSearchParams();
     if (currentPage > 1) newUrlParams.set("page", currentPage.toString());
-    if (itemsPerPage !== getInitialItemsPerPage()) newUrlParams.set("per_page", itemsPerPage.toString());
+    if (itemsPerPage !== DEFAULT_ITEMS_PER_PAGE) newUrlParams.set("per_page", itemsPerPage.toString());
     if (searchTerm) newUrlParams.set("q", searchTerm);
     if (selectedMediaType !== "All") newUrlParams.set("media_type", selectedMediaType);
     if (selectedGenre !== "All") newUrlParams.set("genre", selectedGenre);
@@ -166,35 +177,53 @@ function HomePage() {
     if (selectedAuthor !== "All") newUrlParams.set("author", selectedAuthor);
 
     if (searchParams.toString() !== newUrlParams.toString()) {
-      console.log("Effect 4 (State -> URL & Fetch): Updating URL to", newUrlParams.toString());
+      console.log("Main Effect (URL Update): Updating URL to", newUrlParams.toString());
       setSearchParams(newUrlParams, { replace: true });
-      // When setSearchParams is called, Effect 2 will run.
-      // We want to avoid fetching items in *this* run of Effect 4 if the URL was just updated,
-      // as Effect 2 will set states, which will then re-trigger *this* Effect 4.
-      // The fetch should happen when this effect runs *after* Effect 2 has stabilized the state.
-      return; // Exit this effect run; Effect 2 will set state, then this effect runs again.
+      // When setSearchParams is called, Effect 2 will run and re-sync states.
+      // This current effect will also re-run because `searchParams` is a dependency.
+      // On that re-run, this `if` block should be false, and it will proceed to fetch.
+      return; // Important: Exit this run to let URL sync and state re-sync happen.
     }
 
     // 2. Fetch Items (only if URL is stable with current state)
     const fetchItems = async () => {
-      if (topOfPageRef.current) {
-        /* ... scroll logic ... */
+      if (
+        topOfPageRef.current &&
+        (currentPage !== 1 ||
+          itemsPerPage !== DEFAULT_ITEMS_PER_PAGE ||
+          searchTerm ||
+          selectedMediaType !== "All" ||
+          selectedGenre !== "All" ||
+          selectedStatus !== "All" ||
+          minScore ||
+          selectedYear ||
+          selectedTheme !== "All" ||
+          selectedDemographic !== "All" ||
+          selectedStudio !== "All" ||
+          selectedAuthor !== "All")
+      ) {
+        topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
       }
       setLoading(true);
       setError(null);
 
-      const apiCallParams = newUrlParams; // Use the same params built for URL update
-      console.log("Effect 4 (Fetch Items): Fetching with params:", apiCallParams.toString());
+      const apiCallParamsString = newUrlParams.toString(); // Use the params we just built/verified
+      console.log("Main Effect (Fetch Items): Fetching with params:", apiCallParamsString);
 
       try {
-        const response = await axios.get(`${API_BASE_URL}/items?${apiCallParams.toString()}`);
+        const response = await axios.get(`${API_BASE_URL}/items?${apiCallParamsString}`);
         let responseData = response.data;
         if (typeof responseData === "string") {
           try {
             responseData = JSON.parse(responseData);
           } catch (e) {
             console.error("Items data not valid JSON", e);
-            throw new Error("Items data not valid JSON");
+            setItems([]);
+            setTotalPages(1);
+            setTotalItems(0);
+            setError("Invalid data format from server.");
+            setLoading(false);
+            return;
           }
         }
         if (responseData && Array.isArray(responseData.items)) {
@@ -219,7 +248,17 @@ function HomePage() {
       }
     };
 
-    fetchItems();
+    if (isMounted.current || searchParams.toString() !== "") {
+      // Fetch if not initial mount OR if URL has params
+      fetchItems();
+    } else if (!filtersLoading) {
+      // If initial mount, no URL params, but filters are loaded, then fetch
+      fetchItems();
+    }
+
+    if (!isMounted.current) {
+      isMounted.current = true;
+    }
   }, [
     currentPage,
     itemsPerPage,
@@ -233,9 +272,9 @@ function HomePage() {
     selectedDemographic,
     selectedStudio,
     selectedAuthor,
-    filtersLoading, // To re-evaluate when filters are loaded
+    filtersLoading,
     searchParams,
-    setSearchParams, // searchParams to react to URL changes, setSearchParams for updating
+    setSearchParams,
   ]);
 
   const handleInputChange = (event) => {
@@ -248,13 +287,28 @@ function HomePage() {
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
     }
-    setSearchTerm(inputValue);
-    setCurrentPage(1);
+    if (searchTerm !== inputValue) setSearchTerm(inputValue);
+    if (currentPage !== 1) setCurrentPage(1);
   };
 
   const handleFilterChange = (setter, value, paramName) => {
     setter(value);
-    setCurrentPage(1);
+    if (currentPage !== 1) setCurrentPage(1);
+  };
+
+  const handleResetFilters = () => {
+    setInputValue("");
+    setSearchTerm("");
+    setSelectedMediaType("All");
+    setSelectedGenre("All");
+    setSelectedStatus("All");
+    setMinScore("");
+    setSelectedYear("");
+    setSelectedTheme("All");
+    setSelectedDemographic("All");
+    setSelectedStudio("All");
+    setSelectedAuthor("All");
+    if (currentPage !== 1) setCurrentPage(1);
   };
 
   const handleNextPage = () => {
@@ -282,7 +336,7 @@ function HomePage() {
     }
   };
 
-  const PaginationControls = () => (
+  const PaginationControls = React.memo(() => (
     <div className="pagination-controls">
       <button onClick={handlePrevPage} disabled={currentPage <= 1 || loading}>
         Previous
@@ -300,7 +354,7 @@ function HomePage() {
         Next
       </button>
     </div>
-  );
+  ));
 
   return (
     <>
@@ -446,6 +500,10 @@ function HomePage() {
             placeholder="e.g., 2024"
           />
         </div>
+
+        <button onClick={handleResetFilters} className="reset-filters-btn" disabled={loading}>
+          Reset Filters
+        </button>
       </div>
 
       {/* --- Top Pagination and Items Per Page (Existing Controls Bar) --- */}
