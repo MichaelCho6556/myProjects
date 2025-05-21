@@ -158,8 +158,8 @@ function ItemDetailPage() {
             </p>
           )}
           {renderClickableTags(item.genres, "genre", "Genres")}
-          {renderClickableTags(item.themes, "themes", "Themes")}
-          {renderClickableTags(item.demographics, "deomographics", "Demographics")}
+          {renderClickableTags(item.themes, "theme", "Themes")}
+          {renderClickableTags(item.demographics, "demographic", "Demographics")}
           {item.media_type === "anime" && renderClickableTags(item.studios, "studio", "Studios")}
           {item.media_type === "manga" && renderClickableTags(item.authors, "author", "Authors")}
           {item.synopsis && (
