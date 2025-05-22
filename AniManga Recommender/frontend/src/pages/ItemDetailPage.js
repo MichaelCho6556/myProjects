@@ -7,6 +7,35 @@ import "./ItemDetail.css";
 const API_BASE_URL = "http://localhost:5000/api";
 const DEFAULT_PLACEHOLDER_IMAGE = "https://via.placeholder.com/300x450.png?text=No+Image"; // Larger placeholder
 
+const getYouTubeID = (url) => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return match && match[2].length === 11 ? match[2] : null;
+};
+
+const renderSimpleList = (listData, label) => {
+  if (!listData || !Array.isArray(listData) || listData.length === 0) {
+    if (typeof listData === "string" && listData.trim() !== "") {
+      return (
+        <p>
+          <strong>{label}:</strong> {listData}
+        </p>
+      );
+    }
+    return null;
+  }
+  const filteredList = listData.filter((item) => typeof item === "string" && item.trim() !== "");
+  if (filteredList.length === 0) return null;
+  return (
+    <p>
+      <strong>
+        {label}: {filteredList.join(", ")}
+      </strong>
+    </p>
+  );
+};
+
 function ItemDetailPage() {
   const { uid } = useParams(); // Get the 'uid' from the URL parameter
   const navigate = useNavigate();
@@ -81,37 +110,35 @@ function ItemDetailPage() {
 
   //helper to render clickable tags
   const renderClickableTags = (tagArray, filterType, label) => {
-    if (!tagArray || !Array.isArray(tagArray) || tagArray.length === 0) {
-      return null;
-    }
+    if (!tagArray || !Array.isArray(tagArray) || tagArray.length === 0) return null;
+    const validTags = tagArray.filter((tag) => typeof tag === "string" && tag.trim() !== "");
+    if (validTags.length === 0) return null;
     return (
       <div className="tag-list-container">
         <strong>{label}: </strong>
-        {tagArray.map((tag, index) => {
-          if (typeof tag !== "string" || !tag.trim()) {
-            // Add a check for valid tag
-            return null; // Skip empty or non-string tags
-          }
-          return (
-            <Link
-              key={`${filterType}-${tag.trim()}-${index}`} // Use tag.trim() in key for consistency
-              to={{
-                pathname: "/", // Go to the HomePage
-                search: `?${filterType}=${encodeURIComponent(tag.trim())}`, // Construct search params
-              }}
-              className="tag-link"
-            >
-              {tag.trim()} {/* Display trimmed tag */}
-            </Link>
-          );
-        })}
+        {validTags.map((tag, index) => (
+          <Link
+            key={`${filterType}-${tag.trim()}-${index}`}
+            to={{ pathname: "/", search: `?${filterType}=${encodeURIComponent(tag.trim())}` }}
+            className="tag-link"
+          >
+            {tag.trim()}
+          </Link>
+        ))}
       </div>
     );
   };
 
-  if (loadingItem) return <p>Loading item details...</p>;
-  if (itemError) return <p style={{ color: "red" }}>Error: {itemError}</p>;
-  if (!item) return <p>Item not found.</p>;
+  if (loadingItem && !item) return <p className="loading-message">Loading item details...</p>; // Show loading only if item is not yet set
+  if (itemError)
+    return (
+      <p style={{ color: "red" }} className="error-message">
+        Error loading item: {itemError}
+      </p>
+    );
+  if (!item) return <p className="info-message">Item not found or still loading.</p>; // Fallback if item is null after loading attempt
+
+  const youtubeID = item.trailer_url ? getYouTubeID(item.trailer_url) : null;
 
   return (
     <div className="item-detail-page">
@@ -123,7 +150,7 @@ function ItemDetailPage() {
         <div className="item-detail-image">
           <img
             src={item.main_picture || DEFAULT_PLACEHOLDER_IMAGE}
-            alt={item.title}
+            alt={item.title || "Item image"}
             onError={(e) => {
               e.target.onerror = null;
               e.target.src = DEFAULT_PLACEHOLDER_IMAGE;
@@ -136,15 +163,27 @@ function ItemDetailPage() {
           </p>
           <p>
             <strong>Score:</strong> {item.score ? parseFloat(item.score).toFixed(2) : "N/A"}
+            {item.scored_by ? ` (by ${item.scored_by.toLocaleString()} users)` : ""}
           </p>
           {item.status && (
             <p>
               <strong>Status:</strong> {item.status}
             </p>
           )}
+          {item.rating && item.rating !== "Unknown" && (
+            <p>
+              <strong>Rating:</strong> {item.rating.toUpperCase()}
+            </p>
+          )}{" "}
+          {/* e.g., PG-13, R */}
           {item.media_type === "anime" && item.episodes > 0 && (
             <p>
               <strong>Episodes:</strong> {item.episodes}
+            </p>
+          )}
+          {item.media_type === "anime" && item.episode_duration && (
+            <p>
+              <strong>Duration:</strong> {item.episode_duration}
             </p>
           )}
           {item.media_type === "manga" && item.chapters > 0 && (
@@ -157,11 +196,25 @@ function ItemDetailPage() {
               <strong>Volumes:</strong> {item.volumes}
             </p>
           )}
+          {item.start_date && (
+            <p>
+              <strong>Start Date:</strong> {new Date(item.start_date).toLocaleDateString()}
+            </p>
+          )}
+          {item.end_date && (
+            <p>
+              <strong>End Date:</strong> {new Date(item.end_date).toLocaleDateString()}
+            </p>
+          )}
           {renderClickableTags(item.genres, "genre", "Genres")}
           {renderClickableTags(item.themes, "theme", "Themes")}
           {renderClickableTags(item.demographics, "demographic", "Demographics")}
           {item.media_type === "anime" && renderClickableTags(item.studios, "studio", "Studios")}
+          {renderSimpleList(item.producers, "Producers")}
+          {renderSimpleList(item.licensors, "Licensors")}
           {item.media_type === "manga" && renderClickableTags(item.authors, "author", "Authors")}
+          {renderSimpleList(item.serializations, "Serializations")}
+          {renderSimpleList(item.title_synonyms, "Other Titles")}
           {item.synopsis && (
             <div className="synopsis-section">
               <strong>Synopsis:</strong>
@@ -176,26 +229,37 @@ function ItemDetailPage() {
           )}
           {item.url && (
             <p>
-              <a href={item.url} target="_blank" rel="noopener noreferrer">
+              <a href={item.url} target="_blank" rel="noopener noreferrer" className="external-link">
                 View on MyAnimeList
-              </a>
-            </p>
-          )}
-          {item.trailer_url && item.media_type === "anime" && (
-            <p>
-              <a href={item.trailer_url} target="_blank" rel="noopener noreferrer">
-                Watch Trailer
               </a>
             </p>
           )}
         </div>
       </div>
 
+      {youtubeID && item.media_type === "anime" && (
+        <div className="trailer-section">
+          <h3>Trailer</h3>
+          <div className="video-responsive">
+            <iframe
+              src={`https://www.youtube.com/embed/${youtubeID}`}
+              title={`${item.title} Trailer`}
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            ></iframe>
+          </div>
+        </div>
+      )}
+
       <div className="recommendations-section">
         <h3>Recommended for you:</h3>
-        {loadingRecs && <p>Loading recommendations...</p>}
-        {recsError && <p style={{ color: "red" }}>Error loading recommendations: {recsError}</p>}
-
+        {loadingRecs && <p className="loading-message">Loading recommendations...</p>}
+        {recsError && (
+          <p style={{ color: "red" }} className="error-message">
+            Error loading recommendations: {recsError}
+          </p>
+        )}
         {!loadingRecs && !recsError && recommendations.length > 0 && (
           <div className="item-list recommendations-list">
             {recommendations.map((recItem) => (
@@ -203,14 +267,10 @@ function ItemDetailPage() {
             ))}
           </div>
         )}
-
-        {/* Styled "No Recommendations" message */}
         {!loadingRecs && !recsError && recommendations.length === 0 && (
           <div className="empty-state-container">
-            {/* Optional: Icon */}
-            {<div className="empty-state-icon">🤷</div>}
+            <div className="empty-state-icon">🤷</div>
             <p className="empty-state-message">No specific recommendations found for this item.</p>
-            <p className="empty-state-suggestion">Try exploring similar genres!</p>
           </div>
         )}
       </div>
