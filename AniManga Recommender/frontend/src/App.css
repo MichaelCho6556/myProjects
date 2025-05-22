@@ -1,27 +1,35 @@
+/* frontend/src/App.css */
 html,
 body {
   scroll-behavior: smooth;
 }
 
 :root {
-  --primary-color: #1abc9c;
-  --primary-color-darker: #15a184;
-  --text-dark: #333333;
-  --text-light: #5f5f5f;
-  --text-muted: #888888;
-  --bg-body: #fdfdfd;
-  --bg-card: #ffffff;
-  --border-color: #e0e0e0;
-  --shadow-color: rgba(0, 0, 0, 0.05);
-  --navbar-bg: #2c3e50;
-  --navbar-text: #ffffff;
-  --navbar-hover: #1abc9c;
+  /* Dark Theme Palette (from previous response) */
+  --bg-deep-dark: #121823;
+  --bg-dark: #1a2230;
+  --bg-navbar: #171f2b;
+  --bg-overlay: #252f42;
+  --text-primary: #eaeaea;
+  --text-secondary: #b0b8c4;
+  --text-muted: #7d8a9c;
+  --accent-primary: #14b8a6;
+  --accent-primary-hover: #0f766e;
+  --accent-primary-disabled: #0d94885e;
+  --accent-secondary: #3b82f6;
+  --accent-secondary-hover: #2563eb;
+  --border-color: #333f54;
+  --border-highlight: var(--accent-primary);
+  --shadow-color: rgba(0, 0, 0, 0.25);
+  --shadow-highlight-card: 0 0 15px rgba(20, 184, 166, 0.15);
+  --shadow-focus-ring: 0 0 0 3px rgba(20, 184, 166, 0.4);
+  --font-family: "Nunito", sans-serif;
 }
 
 body {
-  background-color: var(--bg-body);
-  color: var(--text-dark);
-  font-family: "Nunito", sans-serif;
+  background-color: var(--bg-deep-dark);
+  color: var(--text-primary);
+  font-family: var(--font-family);
   margin: 0;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -38,29 +46,28 @@ body {
   padding: 0 20px;
 }
 
+/* Item List & Cards (from previous response - unchanged) */
 .item-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 25px;
-  padding: 25px 0;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 30px;
+  padding: 30px 0;
 }
-
 .item-card {
-  background-color: var(--bg-card);
+  background-color: var(--bg-dark);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  box-shadow: 0 3px 6px var(--shadow-color);
-  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  border-radius: 12px;
+  box-shadow: 0 4px 8px var(--shadow-color);
+  transition: transform 0.25s ease-in-out, box-shadow 0.25s ease-in-out, border-color 0.25s ease-in-out;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
-
 .item-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-6px);
+  box-shadow: 0 8px 16px var(--shadow-color), var(--shadow-highlight-card);
+  border-color: var(--border-highlight);
 }
-
 .item-card-link {
   display: flex;
   flex-direction: column;
@@ -68,338 +75,392 @@ body {
   color: inherit;
   height: 100%;
 }
-
 .item-card img {
   width: 100%;
-  height: 320px;
+  height: 330px;
   object-fit: cover;
-  border-radius: 6px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
-
 .item-card-content-wrapper {
-  padding: 15px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
   flex-grow: 1;
 }
-
 .item-card h3 {
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   font-weight: 700;
   margin-top: 0;
-  margin-bottom: 10px;
-  color: var(--text-dark);
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  height: 1.3em;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+  line-height: 1.35;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 2.7em;
 }
-
 .item-card .details {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
-
-.item-card h3:hover {
-  white-space: normal;
-  overflow: visible;
-  height: auto;
-  min-height: 1.3em;
-}
-
 .item-card p {
-  font-size: 0.875rem;
-  margin-bottom: 6px;
-  color: var(--text-light);
-  line-height: 1.4;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
-
 .item-card p strong {
   font-weight: 600;
-  color: var(--text-dark);
+  color: var(--text-primary);
 }
-
 .item-card .genres-themes-wrapper {
   margin-top: auto;
+  padding-top: 10px;
 }
-
 .item-card .genres,
 .item-card .themes {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* Controls Bar (Pagination, Items per page) (from previous response - unchanged) */
 .controls-bar {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 20px;
-  padding: 10px 20px;
-  background-color: #f0f0f0;
-  border-bottom: 1px solid #ddd;
-  margin-bottom: 20px;
+  padding: 15px 25px;
+  background-color: var(--bg-overlay);
+  border-radius: 8px;
+  margin-bottom: 25px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
-.controls-bar button,
-.pagination-controls button,
-.items-per-page-selector select {
-  border: 1px solid #ced4da;
-  border-radius: 0.25rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
-  background-color: #fff;
-  transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
-}
-
-.controls-bar button:not(:disabled):hover,
-.pagination-controls button:not(:disabled):hover {
-  background-color: #e9ecef;
-  border-color: #adb5bd;
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.pagination-controls button {
-  padding: 8px 12px;
-  cursor: pointer;
-}
-
-.pagination-controls button:disabled {
-  background-color: #e9ecef;
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-
-.pagination-controls span {
-  margin: 0 10px;
-}
-
+/* Shared Button and Select Styling (from previous response - unchanged) */
 button,
-.items-per-page-selector select {
+select,
+input[type="text"],
+input[type="number"],
+input[type="submit"] {
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
   font-size: 0.9rem;
-  font-family: "Nunito", sans-serif;
-  background-color: var(--bg-card);
-  color: var(--text-dark);
-  cursor: pointer;
+  font-family: var(--font-family);
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
   transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  height: auto;
+  box-sizing: border-box;
 }
-
-button:not(:disabled):hover,
-.items-per-page-selector select:hover {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 0.2rem rgba(26, 188, 156, 0.25);
+button:focus,
+select:focus,
+input[type="text"]:focus,
+input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-focus-ring);
 }
-
+button {
+  cursor: pointer;
+}
+button:not(:disabled):hover {
+  border-color: var(--accent-primary-hover);
+  background-color: #252f42;
+}
 button:disabled {
-  background-color: #e9ecef;
+  background-color: var(--bg-overlay);
+  color: var(--text-muted);
+  border-color: var(--border-color);
   cursor: not-allowed;
   opacity: 0.7;
 }
-
-.btn-primary {
-  background-color: var(--primary-color);
-  color: white;
-  border-color: var(--primary-color);
+button.btn-primary,
+.search-form button[type="submit"],
+.reset-filters-btn {
+  background-color: var(--accent-primary);
+  color: var(--bg-deep-dark);
+  font-weight: 600;
+  border-color: var(--accent-primary);
 }
-
-.btn-primary:hover {
-  background-color: var(--primary-color-darker);
-  border-color: var(--primary-color-darker);
+button.btn-primary:not(:disabled):hover,
+.search-form button[type="submit"]:not(:disabled):hover,
+.reset-filters-btn:not(:disabled):hover {
+  background-color: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+  color: var(--bg-deep-dark);
 }
-
+button.btn-primary:disabled,
+.search-form button[type="submit"]:disabled,
+.reset-filters-btn:disabled {
+  background-color: var(--accent-primary-disabled);
+  border-color: transparent;
+  color: rgba(18, 24, 35, 0.7);
+}
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pagination-controls button {
+  background-color: var(--bg-dark);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+.pagination-controls button:not(:disabled):hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  background-color: var(--bg-overlay);
+}
+.pagination-controls button:disabled {
+  background-color: var(--bg-overlay);
+  color: var(--text-muted);
+  border-color: var(--border-color);
+  opacity: 0.6;
+}
+.pagination-controls span {
+  margin: 0 8px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
 .items-per-page-selector {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
-
 .items-per-page-selector label {
-  margin-right: 8px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
-
 .scroll-to-top-btn {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  padding: 10px 15px;
-  background-color: #007bff;
-  color: white;
+  bottom: 25px;
+  right: 25px;
+  padding: 12px 18px;
+  background-color: var(--accent-secondary);
+  color: var(--text-primary);
   border: none;
-  border-radius: 5px;
+  border-radius: 50px;
   cursor: pointer;
   z-index: 1000;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.2s ease, transform 0.2s ease;
 }
-
 .scroll-to-top-btn:hover {
-  background-color: #0056b3;
+  background-color: var(--accent-secondary-hover);
+  transform: translateY(-3px);
 }
 
-.item-card-link {
-  text-decoration: none;
-  color: inherit;
-}
-
+/* === Filter Bar - REVISED FOR OVERLAP === */
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 15px;
-  padding: 15px;
-  background-color: #e9ecef;
-  border-radius: 9px;
-  margin-bottom: 25px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  align-items: flex-end; /* Vertically align bottoms of controls - IMPORTANT */
+  gap: 15px 18px; /* row-gap column-gap */
+  padding: 18px 20px;
+  background-color: var(--bg-overlay);
+  border-radius: 10px;
+  margin-bottom: 30px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
-.search-form {
-  display: flex;
-  gap: 10px;
-  align-items: center;
+/* Search form styling AS A FLEX ITEM in filter-bar */
+.filter-bar > .search-form {
+  display: flex; /* For internal layout of input + button */
+  align-items: flex-end; /* Align button with input's bottom */
+  gap: 10px; /* Space between input and button */
+
+  flex-grow: 2; /* Allow search form to grow more than other filters */
+  flex-shrink: 1; /* Allow it to shrink if needed */
+  flex-basis: 280px; /* Initial preferred size, adjust as needed */
+  min-width: 250px; /* Minimum width to prevent excessive squishing */
+}
+/* Internal styling for search form's children */
+.filter-bar > .search-form input[type="text"] {
+  flex-grow: 1; /* Input field takes available space within the search-form */
+  min-width: 150px; /* Minimum width for the text input itself */
+}
+.filter-bar > .search-form button[type="submit"] {
+  flex-shrink: 0; /* Prevent search button from shrinking away */
 }
 
-.search-form input[type="text"] {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  font-family: "Nunito", sans-serif;
-}
+/* General filter groups (Type, Genre, Status, Theme etc.) */
+.filter-bar > .filter-group {
+  display: flex; /* For internal layout of label + select */
+  flex-direction: column; /* Stack label on top of select/input */
+  gap: 5px; /* Space between label and select/input */
 
-.search-form button {
-  background-color: var(--primary-color);
-  color: white;
-  border-color: var(--primary-color);
+  flex-grow: 1; /* Allow to take up some space */
+  flex-shrink: 1; /* Allow to shrink */
+  flex-basis: 170px; /* Default basis for a filter group */
+  min-width: 150px; /* Minimum width for a filter group */
+  /* max-width: 260px; /* Optional: cap max width if they grow too much and cause issues */
 }
-
-.search-form button:hover {
-  background-color: var(--primary-color-darker);
-  border-color: var(--primary-color-darker);
-}
-
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.filter-group label {
+/* Label inside filter-group */
+.filter-bar > .filter-group label {
   font-size: 0.8rem;
-  color: var(--text-light);
-  margin-bottom: 5px;
-  font-weight: 600;
+  color: var(--text-muted);
+  font-weight: 500;
+  line-height: 1.2;
+  /* margin-bottom is handled by parent gap */
 }
 
-.filter-group select,
-.filter-group input[type="number"] {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  min-width: 150px;
-  font-family: "Nunito", sans-serif;
+/* Specifics for sort-by-selector (if it has .filter-group class) */
+/* This rule targets elements with BOTH .filter-group AND .sort-by-selector */
+.filter-bar > .filter-group.sort-by-selector {
+  flex-basis: 200px; /* Give sort-by a bit more initial space than other filters */
+  min-width: 180px;
+  /* max-width: 300px; /* Optional cap */
 }
 
-.filter-group input[type="number"] {
-  width: 100px;
+/* Reset button styling AS A FLEX ITEM */
+.filter-bar > .reset-filters-btn {
+  flex-grow: 0; /* Doesn't grow */
+  flex-shrink: 0; /* Doesn't shrink */
+  margin-left: auto; /* Pushes to the right if space on the current line */
+  /* align-self: flex-end; /* Ensures it aligns with the bottom of other controls if it wraps and parent align-items is not flex-end */
 }
+/* === END OF Filter Bar REVISIONS === */
 
+/* Empty State (from previous response - unchanged) */
 .empty-state-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 40px 20px;
-  min-height: 300px;
+  padding: 50px 20px;
+  min-height: 350px;
   width: 100%;
+  background-color: var(--bg-dark);
+  border-radius: 12px;
+  margin: 20px 0;
 }
-
 .empty-state-icon {
-  font-size: 3rem;
+  font-size: 3.5rem;
   color: var(--text-muted);
-  margin-bottom: 15px;
+  margin-bottom: 20px;
 }
-
 .empty-state-message {
-  font-size: 1.2rem;
-  color: var(--text-light);
+  font-size: 1.3rem;
+  color: var(--text-primary);
   font-weight: 600;
+  margin-bottom: 8px;
 }
-
 .empty-state-suggestion {
-  font-size: 0.9rem;
-  color: var(--text-muted);
-  margin-top: 10px;
+  font-size: 1rem;
+  color: var(--text-secondary);
 }
 
-.sort-by-selector {
-  display: flex;
-  align-items: center;
+/* General Loading/Error Messages (from previous response - unchanged) */
+.loading-message,
+.error-message,
+.info-message {
+  color: var(--text-secondary);
+  padding: 20px;
+  text-align: center;
+  font-size: 1.1rem;
+}
+.error-message {
+  color: #f87171;
 }
 
-.sort-by-selector label {
-  margin-right: 8px;
-  font-size: 0.8rem;
-  color: var(--text-light);
-  font-weight: 600;
+/* Custom Scrollbar for Webkit Browsers (from previous response - unchanged) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-overlay);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 10px;
+  border: 2px solid var(--bg-overlay);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
-.sort-by-selector select {
-  min-width: 180px;
+/* Responsive Adjustments (from previous response - minor tweaks possible for filter bar) */
+@media (max-width: 992px) {
+  .filter-bar > .search-form,
+  .filter-bar > .filter-group {
+    /* Includes .sort-by-selector */
+    flex-basis: calc(50% - 10px); /* Aim for two items per row, accounting for gap */
+    min-width: 150px;
+  }
+  .filter-bar > .search-form {
+    flex-basis: 100%; /* On medium screens, search might take full width first for better UX */
+    order: -1; /* Optionally move search to the very top if it stacks */
+  }
+  .filter-bar > .reset-filters-btn {
+    margin-left: 0; /* Reset margin-left auto */
+    width: 100%;
+    margin-top: 10px; /* Add space if it wraps to a new line */
+  }
 }
 
 @media (max-width: 768px) {
-  .item-card {
-    width: 180px;
+  .item-list {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
   }
   .item-card img {
-    height: 250px;
+    height: 280px;
   }
-
   .controls-bar {
     flex-direction: column;
     gap: 15px;
+    align-items: stretch;
+  }
+  .pagination-controls {
+    justify-content: center;
+  }
+  .items-per-page-selector {
+    justify-content: center;
   }
 
-  .item-detail-content {
-    flex-direction: column;
+  .filter-bar > .search-form,
+  .filter-bar > .filter-group {
+    /* Includes .sort-by-selector */
+    flex-basis: 100%; /* Each filter item takes full width */
+    max-width: none; /* Remove max-width constraint if any was set */
   }
-
-  .item-detail-image {
-    flex: 0 0 auto;
-    margin-bottom: 20px;
+  .filter-bar > .reset-filters-btn {
+    width: auto; /* Allow it to size to content */
+    margin-top: 0; /* Reset margin-top if it's part of the full-width stack */
   }
 }
 
 @media (max-width: 480px) {
-  .item-card {
-    width: calc(50% - 10px);
+  .item-list {
+    grid-template-columns: 1fr;
+    gap: 20px;
   }
-
   .item-card img {
-    height: 200px;
+    height: auto;
+    max-height: 400px;
   }
-
-  .App-header h1,
-  .navbar-logo {
-    font-size: 1.5rem;
+  .app-container {
+    padding: 0 15px;
   }
-
-  .item-detail-page h2 {
-    font-size: 1.5rem;
+  .filter-bar,
+  .controls-bar {
+    padding: 15px;
+  }
+  button,
+  select,
+  input[type="text"],
+  input[type="number"] {
+    padding: 0.75rem;
+    font-size: 1rem;
   }
 }
