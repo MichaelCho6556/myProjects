@@ -5,7 +5,7 @@ import ItemCard from "../components/ItemCard";
 import "./ItemDetail.css";
 
 const API_BASE_URL = "http://localhost:5000/api";
-const DEFAULT_PLACEHOLDER_IMAGE = "https://via.placeholder.com/300x450.png?text=No+Image"; // Larger placeholder
+const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
 
 const getYouTubeID = (url) => {
   if (!url) return null;

@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-const DEFAULT_PLACEHOLDER_IMAGE = "https://via.placeholder.com/200x300.png?text=No+Image"; // placeholder image that needs changing
+const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
 
 function ItemCard({ item }) {
   if (!item) {
