@@ -1,14 +1,16 @@
+/* frontend/src/components/Navbar.css */
 .navbar {
-  background: var(--navbar-bg);
-  height: 65px;
+  background: var(--bg-navbar);
+  height: 70px; /* Slightly taller */
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 1.1rem;
+  font-size: 1.15rem; /* Slightly larger base font */
   position: sticky;
   top: 0;
-  z-index: 999;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  z-index: 1000; /* Ensure it's above other content */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); /* More pronounced shadow for depth */
+  border-bottom: 1px solid var(--border-color); /* Subtle separator */
 }
 
 .navbar-container {
@@ -16,18 +18,23 @@
   justify-content: space-between;
   align-items: center;
   height: 100%;
-  max-width: 1300px;
+  max-width: 1300px; /* Matches app-container */
   width: 100%;
-  padding: 0 20px;
+  padding: 0 25px; /* Consistent padding */
 }
 
 .navbar-logo {
-  color: var(--navbar-text);
+  color: var(--text-primary);
   cursor: pointer;
   text-decoration: none;
-  font-size: 1.6rem;
+  font-size: 1.75rem; /* Larger logo text */
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px; /* Subtle letter spacing */
+  transition: color 0.2s ease-in-out;
+}
+
+.navbar-logo:hover {
+  color: var(--accent-primary);
 }
 
 .nav-menu {
@@ -35,22 +42,32 @@
   align-items: center;
   list-style: none;
   text-align: center;
+  margin: 0; /* Reset margin */
+  padding: 0; /* Reset padding */
 }
 
 .nav-item {
-  height: 70px;
+  height: 70px; /* Matches navbar height */
+  display: flex; /* To align link vertically */
+  align-items: center;
 }
 
 .nav-links {
-  color: #fff;
+  color: var(--text-secondary); /* Use secondary text color for links */
   display: flex;
   align-items: center;
   text-decoration: none;
-  padding: 0.5rem 1rem;
+  padding: 0 1.25rem; /* More padding */
   height: 100%;
-  transition: all 0.2s ease-out;
+  font-weight: 500; /* Slightly bolder */
+  transition: color 0.2s ease-out, border-bottom-color 0.2s ease-out;
+  border-bottom: 3px solid transparent; /* For hover effect */
+  box-sizing: border-box; /* Include padding and border in element's total width and height */
 }
 
-.nav-links:hover {
-  color: #18bc9c;
+.nav-links:hover,
+.nav-links.active {
+  /* Add an active class if you implement active link highlighting */
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
 }

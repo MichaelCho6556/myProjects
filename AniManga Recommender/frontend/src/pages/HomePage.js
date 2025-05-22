@@ -377,7 +377,7 @@ function HomePage() {
           <button type="submit">Search</button>
         </form>
 
-        <div clasName="filter-group sort-by-selector">
+        <div className="filter-group sort-by-selector">
           <label htmlFor="sortBy">Sort by:</label>
           <select id="sortBy" value={sortBy} onChange={handleSortChange} disabled={loading || filtersLoading}>
             <option value="score_desc">Score (High to Low)</option>
