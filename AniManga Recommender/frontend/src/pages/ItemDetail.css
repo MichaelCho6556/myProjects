@@ -121,6 +121,8 @@
 .tag-list-container strong {
   margin-right: 8px;
   color: var(--text-dark);
+  min-width: 100px;
+  display: inline-block;
 }
 
 .tag-link {
@@ -168,4 +170,69 @@
   font-size: 0.9rem;
   color: var(--text-muted);
   margin-top: 10px;
+}
+
+.item-detail-info p {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.item-detail-info p strong {
+  color: var(--text-dark);
+  min-width: 100px;
+  display: inline-block;
+}
+
+.trailer-section {
+  margin-top: 30px;
+  margin-bottom: 20px;
+}
+
+.trailer-section h3 {
+  margin-bottom: 15px;
+  font-size: 1.4rem;
+  color: var(--text-dark);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+}
+
+.video-responsive {
+  overflow: hidden;
+  padding-bottom: 56.25%;
+  position: relative;
+  height: 0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.video-responsive iframe {
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 100%;
+  position: absolute;
+  border: none;
+}
+
+.loading-message,
+.error-message,
+.info-message {
+  text-align: center;
+  padding: 40px 20px;
+  font-size: 1.2rem;
+  color: var(--text-light);
+}
+
+.error-message {
+  color: #dc3545;
+}
+
+.external-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.external-link:hover {
+  text-decoration: underline;
 }
