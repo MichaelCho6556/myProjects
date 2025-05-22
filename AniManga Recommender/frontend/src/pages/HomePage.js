@@ -50,6 +50,8 @@ function HomePage() {
   const [selectedDemographic, setSelectedDemographic] = useState(searchParams.get("demographic") || "All");
   const [selectedStudio, setSelectedStudio] = useState(searchParams.get("studio") || "All");
   const [selectedAuthor, setSelectedAuthor] = useState(searchParams.get("author") || "All");
+  const [sortBy, setSortBy] = useState(searchParams.get("sort_by") || "score_desc");
+
   //state for dynamic filter options
   const [genreOptions, setGenreOptions] = useState(["All"]);
   const [statusOptions, setStatusOptions] = useState(["All"]);
@@ -134,6 +136,7 @@ function HomePage() {
     setSelectedDemographic(newDemographic);
     setSelectedStudio(newStudio);
     setSelectedAuthor(newAuthor);
+    setSortBy(searchParams.get("sort_by") || "score_desc");
 
     // This effect sets the state. The data fetching effect will then use these states.
   }, [searchParams]); // Only depends on searchParams
@@ -175,6 +178,9 @@ function HomePage() {
     if (selectedDemographic !== "All") newUrlParams.set("demographic", selectedDemographic);
     if (selectedStudio !== "All") newUrlParams.set("studio", selectedStudio);
     if (selectedAuthor !== "All") newUrlParams.set("author", selectedAuthor);
+    if (sortBy && sortBy !== "score_desc") {
+      newUrlParams.set("sort_by", sortBy);
+    }
 
     if (searchParams.toString() !== newUrlParams.toString()) {
       console.log("Main Effect (URL Update): Updating URL to", newUrlParams.toString());
@@ -272,6 +278,7 @@ function HomePage() {
     selectedDemographic,
     selectedStudio,
     selectedAuthor,
+    sortBy,
     filtersLoading,
     searchParams,
     setSearchParams,
@@ -279,6 +286,11 @@ function HomePage() {
 
   const handleInputChange = (event) => {
     setInputValue(event.target.value);
+  };
+
+  const handleSortChange = (event) => {
+    setSortBy(event.target.value);
+    setCurrentPage(1);
   };
 
   const handleSearchChange = (event) => setSearchTerm(event.target.value);
@@ -364,6 +376,19 @@ function HomePage() {
           <input type="text" placeholder="Search titles..." value={inputValue} onChange={handleInputChange} />
           <button type="submit">Search</button>
         </form>
+
+        <div clasName="filter-group sort-by-selector">
+          <label htmlFor="sortBy">Sort by:</label>
+          <select id="sortBy" value={sortBy} onChange={handleSortChange} disabled={loading || filtersLoading}>
+            <option value="score_desc">Score (High to Low)</option>
+            <option value="score_asc">Score (Low to High)</option>
+            <option value="popularity_desc">Popularity</option>
+            <option value="title_asc">Title (A-Z)</option>
+            <option value="title_desc">Title (Z-A)</option>
+            <option value="start_date_desc">Release Date (Newest)</option>
+            <option value="start_date_asc">Release Date (Oldest)</option>
+          </select>
+        </div>
 
         <div className="filter-group">
           <label htmlFor="mediaTypeFilter">Type:</label>

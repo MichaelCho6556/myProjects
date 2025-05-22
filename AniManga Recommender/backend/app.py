@@ -136,6 +136,9 @@ def get_items():
     studio_filter = request.args.get('studio', None, type=str)
     author_filter = request.args.get('author', None, type=str)
 
+    #Default sort: by score descending, then by popularity (members) descending as tie-breaker
+    sort_by = request.args.get('sort_by', 'score_desc', type=str)
+
     data_subset = df_processed.copy()
 
     #apply filters sequentially
@@ -192,6 +195,20 @@ def get_items():
             return False
         data_subset = data_subset[data_subset['authors'].apply(check_author)]
 
+    #Apply sorting before pagination
+    if sort_by == 'score_desc':
+        data_subset = data_subset.sort_values(by=['score', 'members'], ascending=[False, False])
+    elif sort_by == 'score_asc':
+        data_subset = data_subset.sort_values(by=['score', 'members'], ascending=[True, False])
+    elif sort_by == 'popularity_desc':
+        data_subset = data_subset.sort_values(by='members', ascending=False)
+    elif sort_by == 'title_asc':
+        data_subset = data_subset.sort_values(by='title', ascending=True, key=lambda col: col.astype(str).str.lower())
+    elif sort_by == 'title_desc':
+        data_subset = data_subset.sort_values(by='title', ascending=False, key=lambda col: col.astype(str).str.lower())
+    elif sort_by == 'start_date_desc':
+        data_subset = data_subset.sort_values(by='start_date', ascending=False, na_position='last')
+
     total_items = len(data_subset)
     start = (page - 1) * per_page
     end = start + per_page
@@ -204,7 +221,8 @@ def get_items():
         "page": page,
         "per_page": per_page,
         "total_items": total_items,
-        "total_pages": (total_items + per_page - 1) // per_page if per_page > 0 else 0
+        "total_pages": (total_items + per_page - 1) // per_page if per_page > 0 else 0,
+        "sort_by": sort_by
     })
 
 @app.route('/api/distinct-values')
