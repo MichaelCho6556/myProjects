@@ -27,18 +27,20 @@ uid_to_idx = None
 
 def parse_list_cols_on_load(df_to_parse):
     list_like_cols_in_processed = ['genres', 'themes', 'demographics', 'studios', 'producers', 'licensors', 'authors', 'serializations', 'title_synonyms']
-
     for col in list_like_cols_in_processed:
         if col in df_to_parse.columns:
-            first_valid_val = df_to_parse[col].dropna().iloc[0] if not df_to_parse[col].dropna().empty else None
-            if isinstance(first_valid_val, str) and first_valid_val.startswith('[') and first_valid_val.endswith(']'): 
-                try:
-                    df_to_parse[col] = df_to_parse[col].apply(lambda x: ast.literal_eval(x) if isinstance(x,str) and x.startswith('[') and x.endswith(']') else (x if isinstance(x, list) else []))
-                except Exception as e:
-                    print(f"Warning: Could not parse column {col} with ast.literal_eval. Error: {e}")
-                    df_to_parse[col] = df_to_parse[col].apply(lambda x: [] if isinstance(x, str) else x)
-            elif not isinstance(first_valid_val, list):
+            # Ensure column is treated as list, even if loaded as string representations
+            try:
+                # Attempt to evaluate string representations of lists
+                df_to_parse[col] = df_to_parse[col].apply(
+                    lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith('[') and x.endswith(']')
+                    else (x if isinstance(x, list) else [])
+                )
+            except (ValueError, SyntaxError) as e:
+                print(f"Warning: Could not parse column {col} with ast.literal_eval. Error: {e}. Treating as empty list or existing list.")
                 df_to_parse[col] = df_to_parse[col].apply(lambda x: [] if not isinstance(x, list) else x)
+            # Ensure all non-list values become empty lists after potential eval
+            df_to_parse[col] = df_to_parse[col].apply(lambda x: x if isinstance(x, list) else [])
     return df_to_parse
 
 
@@ -108,7 +110,7 @@ load_data_and_tfidf()
 
 @app.route('/')
 def hello():
-    if df_processed is None or tfidf_matrix_global is None:
+    if df_processed is None or (len(df_processed) > 0 and tfidf_matrix_global is None):
         return "Backend is initializing or encountered an error. Please check logs."
     return "Hello from AniManga Recommender Backend! Data and TF-IDF ready."
 
@@ -116,27 +118,29 @@ def hello():
 def get_items():
     if df_processed is None:
         return jsonify({"error": "Dataset not available."}), 503
+    
+    if len(df_processed) == 0:
+        return jsonify ({
+            "items": [], "page": 1, "per_page": 30,
+            "total_items": 0, "total_pages": 0, "sort_by": "score_desc"
+        })
 
-    # Get query parameters
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 30, type=int)
-
-    # Search query
     search_query = request.args.get('q', None, type=str)
-
-    # New Filter paramter
     media_type_filter = request.args.get('media_type',None, type=str)
-    genre_filter = request.args.get('genre', None, type=str)
+    
+
+    genre_filter_str = request.args.get('genre', None, type=str)
+    theme_filter_str = request.args.get('theme', None, type=str)
+    demographic_filter_str = request.args.get('demographic', None, type=str)
+    studio_filter_str = request.args.get('studio', None, type=str)
+    author_filter_str = request.args.get('author', None, type=str)
+
+    
     status_filter = request.args.get('status', None, type=str)
     min_score_filter = request.args.get('min_score', None, type=float)
     year_filter = request.args.get('year', None, type=int)
-
-    theme_filter = request.args.get('theme', None, type=str)
-    demographic_filter = request.args.get('demographic', None, type=str)
-    studio_filter = request.args.get('studio', None, type=str)
-    author_filter = request.args.get('author', None, type=str)
-
-    #Default sort: by score descending, then by popularity (members) descending as tie-breaker
     sort_by = request.args.get('sort_by', 'score_desc', type=str)
 
     data_subset = df_processed.copy()
@@ -149,66 +153,57 @@ def get_items():
     if media_type_filter and media_type_filter.lower() != 'all':
         data_subset = data_subset[data_subset['media_type'].fillna('').str.lower() == media_type_filter.lower()]
     
-    if genre_filter and genre_filter.lower() != 'all':
-        def check_genre(genres_list):
-            if isinstance(genres_list, list):
-                return any(g.lower() == genre_filter.lower() for g in genres_list)
-            return False
-        data_subset = data_subset[data_subset['genres'].apply(check_genre)]
+    def apply_multi_filter(df, column_name, filter_str_values):
+        if filter_str_values and filter_str_values.lower() != 'all':
+            # Split comma-separated string into a list of lowercase filter values
+            selected_filters = [f.strip().lower() for f in filter_str_values.split(',') if f.strip()]
+            if not selected_filters: # If after stripping, list is empty (e.g. filter_str was just ',')
+                return df
+            
+            def check_item_has_all_selected(item_column_list):
+                if not isinstance(item_column_list, list): 
+                    return False
+                # Convert item's list elements to lowercase strings for comparison
+                item_elements_lower = [str(elem).lower() for elem in item_column_list]
+                # Check if ALL selected filters are present in the item's list
+                return all(sel_filter in item_elements_lower for sel_filter in selected_filters)
+            
+            return df[df[column_name].apply(check_item_has_all_selected)]
+        return df
+
+    data_subset = apply_multi_filter(data_subset, 'genres', genre_filter_str)
+    data_subset = apply_multi_filter(data_subset, 'themes', theme_filter_str)
+    data_subset = apply_multi_filter(data_subset, 'demographics', demographic_filter_str)
+    data_subset = apply_multi_filter(data_subset, 'studios', studio_filter_str)
+    data_subset = apply_multi_filter(data_subset, 'authors', author_filter_str) 
     
     if status_filter and status_filter.lower() != 'all':
         data_subset = data_subset[data_subset['status'].fillna('').str.lower() == status_filter.lower()]
     
     if min_score_filter is not None:
-        #ensure score is numeric
-        data_subset = data_subset[data_subset['score'].fillna(-1) >= min_score_filter]
+        data_subset = data_subset[pd.to_numeric(data_subset['score'], errors='coerce').fillna(-1) >= min_score_filter] # Added pd.to_numeric
     
     if year_filter is not None:
-        #assuming stat year num column exists and is numeric
-        data_subset = data_subset[data_subset['start_year_num'].fillna(0) == year_filter]
+        data_subset = data_subset[pd.to_numeric(data_subset['start_year_num'], errors='coerce').fillna(0) == year_filter] # Added pd.to_numeric
     
-    if theme_filter and theme_filter.lower() != 'all':
-        def check_theme(theme_list):
-            if isinstance(theme_list, list):
-                return any(t.lower() == theme_filter.lower() for t in theme_list)
-            return False
-        data_subset = data_subset[data_subset['themes'].apply(check_theme)]
 
-    if demographic_filter and demographic_filter.lower() != 'all':
-        def check_demographic(demographic_list):
-            if isinstance(demographic_list, list):
-                return any(d.lower() == demographic_filter.lower() for d in demographic_list)
-            return False
-        data_subset = data_subset[data_subset['demographics'].apply(check_demographic)]
-
-    if studio_filter and studio_filter.lower() != 'all':
-        def check_studio(studio_list):
-            if isinstance(studio_list, list):
-                return any(s.lower() == studio_filter.lower() for s in studio_list)
-            return False
-        data_subset = data_subset[data_subset['studios'].apply(check_studio)]
-
-    if author_filter and author_filter.lower() != 'all':
-        def check_author(author_list):
-            if isinstance(author_list, list):
-                return any(a.lower() == author_filter.lower() for a in author_list)
-            return False
-        data_subset = data_subset[data_subset['authors'].apply(check_author)]
-
+    
     #Apply sorting before pagination
     if sort_by == 'score_desc':
-        data_subset = data_subset.sort_values(by=['score', 'members'], ascending=[False, False])
+        data_subset = data_subset.sort_values(by=['score', 'members'], ascending=[False, False], na_position='last')
     elif sort_by == 'score_asc':
-        data_subset = data_subset.sort_values(by=['score', 'members'], ascending=[True, False])
+        data_subset = data_subset.sort_values(by=['score', 'members'], ascending=[True, False], na_position='first') # Changed na_position
     elif sort_by == 'popularity_desc':
-        data_subset = data_subset.sort_values(by='members', ascending=False)
+        data_subset = data_subset.sort_values(by='members', ascending=False, na_position='last')
     elif sort_by == 'title_asc':
-        data_subset = data_subset.sort_values(by='title', ascending=True, key=lambda col: col.astype(str).str.lower())
+        data_subset = data_subset.sort_values(by='title', ascending=True, key=lambda col: col.astype(str).str.lower(), na_position='last')
     elif sort_by == 'title_desc':
-        data_subset = data_subset.sort_values(by='title', ascending=False, key=lambda col: col.astype(str).str.lower())
+        data_subset = data_subset.sort_values(by='title', ascending=False, key=lambda col: col.astype(str).str.lower(), na_position='last')
     elif sort_by == 'start_date_desc':
         data_subset = data_subset.sort_values(by='start_date', ascending=False, na_position='last')
-
+    elif sort_by == 'start_date_asc': # Added for completeness
+        data_subset = data_subset.sort_values(by='start_date', ascending=True, na_position='first') 
+    
     total_items = len(data_subset)
     start = (page - 1) * per_page
     end = start + per_page
@@ -227,53 +222,42 @@ def get_items():
 
 @app.route('/api/distinct-values')
 def get_distinct_values():
-    if df_processed is None:
-        return jsonify({"error": "Dataset not available"}), 503
+    if df_processed is None or len(df_processed) == 0: # Check for empty df_processed
+        return jsonify({
+            "genres": [], "statuses": [], "media_types": [], "themes": [],
+            "demographics": [], "studios": [], "authors": []
+        }), 503 if df_processed is None else 200 # 503 if not loaded, 200 if loaded but empty
     try:
-        #for genre filter
-        all_genres = set()
-        for item_genres in df_processed['genres'].dropna():
-            if isinstance(item_genres, list): all_genres.update(g.strip() for g in item_genres if isinstance(g, str) and g.strip())
-            elif isinstance(item_genres, str) and item_genres.strip(): all_genres.add(item_genres.strip())
+        def get_unique_from_lists(column_name):
+            all_values = set()
+            # Ensure the column exists and is not empty before processing
+            if column_name in df_processed.columns and not df_processed[column_name].dropna().empty:
+                for item_list_val in df_processed[column_name].dropna():
+                    if isinstance(item_list_val, list):
+                        all_values.update(val.strip() for val in item_list_val if isinstance(val, str) and val.strip())
+                    elif isinstance(item_list_val, str) and item_list_val.strip(): # Should not happen if parse_list_cols_on_load works
+                        all_values.add(item_list_val.strip())
+            return sorted(list(all_values))
+
+        all_genres = get_unique_from_lists('genres')
+        all_themes = get_unique_from_lists('themes')
+        all_demographics = get_unique_from_lists('demographics')
+        all_studios = get_unique_from_lists('studios')
+        all_authors = get_unique_from_lists('authors')
         
-        all_themes = set()
-        for item_themes in df_processed['themes'].dropna():
-            if isinstance(item_themes, list): all_themes.update(t.strip() for t in item_themes if isinstance(t, str) and t.strip())
-            elif isinstance(item_themes, str) and item_themes.strip(): all_themes.add(item_themes.strip())
-
-        all_demographics = set()
-        for item_demographics in df_processed['demographics'].dropna():
-            if isinstance(item_demographics, list): all_demographics.update(d.strip() for d in item_demographics if isinstance(d, str) and d.strip())
-            elif isinstance(item_demographics, str) and item_demographics.strip(): all_demographics.add(item_demographics.strip())
-
-        all_studios = set()
-        for item_studios in df_processed['studios'].dropna(): # Assuming studios is also list of strings
-            if isinstance(item_studios, list): all_studios.update(s.strip() for s in item_studios if isinstance(s, str) and s.strip())
-            elif isinstance(item_studios, str) and item_studios.strip(): all_studios.add(item_studios.strip())
-
-        all_authors = set()
-        for item_authors in df_processed['authors'].dropna(): # Authors should now be list of strings
-            if isinstance(item_authors, list): all_authors.update(a.strip() for a in item_authors if isinstance(a, str) and a.strip())
-            elif isinstance(item_authors, str) and item_authors.strip(): all_authors.add(item_authors.strip())
-            
-        all_statuses = set(s.strip() for s in df_processed['status'].dropna().unique() if isinstance(s, str) and s.strip())
-        all_media_types = set(mt.strip() for mt in df_processed['media_type'].dropna().unique() if isinstance(mt, str) and mt.strip())
+        all_statuses = sorted(list(set(s.strip() for s in df_processed['status'].dropna().unique() if isinstance(s, str) and s.strip())))
+        all_media_types = sorted(list(set(mt.strip() for mt in df_processed['media_type'].dropna().unique() if isinstance(mt, str) and mt.strip())))
 
         return jsonify({
-            "genres": sorted(list(all_genres)),
-            "statuses": sorted(list(all_statuses)),
-            "media_types": sorted(list(all_media_types)),
-            "themes": sorted(list(all_themes)),
-            "demographics": sorted(list(all_demographics)),
-            "studios": sorted(list(all_studios)),
-            "authors": sorted(list(all_authors))
+            "genres": all_genres, "statuses": all_statuses, "media_types": all_media_types,
+            "themes": all_themes, "demographics": all_demographics,
+            "studios": all_studios, "authors": all_authors
         })
     except Exception as e:
         print(f"Error fetching distinct values: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Could not retrieve distinct filter values."}), 500
-
 
 @app.route('/api/items/<item_uid>')
 def get_item_details(item_uid):
