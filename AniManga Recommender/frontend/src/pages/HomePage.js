@@ -3,6 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 import ItemCard from "../components/ItemCard";
 import "../App.css";
+import Select from "react-select";
+import Skeleton from "react-loading-skeleton";
+import "react-loading-skeleton/dist/skeleton.css";
+import Spinner from "../components/Spinner";
 
 const API_BASE_URL = "http://localhost:5000/api";
 
@@ -23,6 +27,23 @@ const getInitialItemsPerPage = () => {
 
 const DEFAULT_ITEMS_PER_PAGE = getInitialItemsPerPage();
 
+// Helper to convert string options to react-select format
+const toSelectOptions = (optionsArray, includeAll = false) => {
+  const mapped = optionsArray
+    .filter((opt) => typeof opt === "string" && opt.toLowerCase() !== "all") // Filter out 'All' if present
+    .map((opt) => ({ value: opt, label: opt }));
+  return includeAll ? [{ value: "All", label: "All" }, ...mapped] : mapped;
+};
+
+// Helper to conver all string to empty array for multi-select or pass value
+const getMultiSelectValue = (value, options) => {
+  if (!value || value.toLowerCase() === "all") return [];
+  if (Array.isArray(value)) return value;
+
+  const selectedValues = value.split(",");
+  return options.filter((opt) => selectedValues.includes(opt.value));
+};
+
 function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -42,24 +63,25 @@ function HomePage() {
   const [inputValue, setInputValue] = useState(searchParams.get("q") || "");
   const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
   const [selectedMediaType, setSelectedMediaType] = useState(searchParams.get("media_type") || "All");
-  const [selectedGenre, setSelectedGenre] = useState(searchParams.get("genre") || "All");
+
+  const [selectedGenre, setSelectedGenre] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState(searchParams.get("status") || "All");
   const [minScore, setMinScore] = useState(searchParams.get("min_score") || "");
   const [selectedYear, setSelectedYear] = useState(searchParams.get("year") || "");
-  const [selectedTheme, setSelectedTheme] = useState(searchParams.get("theme") || "All");
-  const [selectedDemographic, setSelectedDemographic] = useState(searchParams.get("demographic") || "All");
-  const [selectedStudio, setSelectedStudio] = useState(searchParams.get("studio") || "All");
-  const [selectedAuthor, setSelectedAuthor] = useState(searchParams.get("author") || "All");
+  const [selectedTheme, setSelectedTheme] = useState([]);
+  const [selectedDemographic, setSelectedDemographic] = useState([]);
+  const [selectedStudio, setSelectedStudio] = useState([]);
+  const [selectedAuthor, setSelectedAuthor] = useState([]);
   const [sortBy, setSortBy] = useState(searchParams.get("sort_by") || "score_desc");
 
   //state for dynamic filter options
-  const [genreOptions, setGenreOptions] = useState(["All"]);
-  const [statusOptions, setStatusOptions] = useState(["All"]);
-  const [mediaTypeOptions, setMediaTypeOptions] = useState(["All"]);
-  const [themeOptions, setThemeOptions] = useState(["All"]);
-  const [demographicOptions, setDemographicOptions] = useState(["All"]);
-  const [studioOptions, setStudioOptions] = useState(["All"]);
-  const [authorOptions, setAuthorOptions] = useState(["All"]);
+  const [genreOptions, setGenreOptions] = useState([]);
+  const [statusOptions, setStatusOptions] = useState([{ value: "All", label: "All" }]);
+  const [mediaTypeOptions, setMediaTypeOptions] = useState([{ value: "All", label: "All" }]);
+  const [themeOptions, setThemeOptions] = useState([]);
+  const [demographicOptions, setDemographicOptions] = useState([]);
+  const [studioOptions, setStudioOptions] = useState([]);
+  const [authorOptions, setAuthorOptions] = useState([]);
   const [filtersLoading, setFiltersLoading] = useState(true);
 
   const topOfPageRef = useRef(null); // For scrolling NEED ANIMATION EFFECTS ON
@@ -82,24 +104,24 @@ function HomePage() {
           }
         }
         if (distinctData) {
-          setMediaTypeOptions(["All", ...(distinctData.media_types || [])]);
-          setGenreOptions(["All", ...(distinctData.genres || [])]);
-          setStatusOptions(["All", ...(distinctData.statuses || [])]);
-          setThemeOptions(["All", ...(distinctData.themes || [])]);
-          setDemographicOptions(["All", ...(distinctData.demographics || [])]);
-          setStudioOptions(["All", ...(distinctData.studios || [])]);
-          setAuthorOptions(["All", ...(distinctData.authors || [])]);
+          setMediaTypeOptions(toSelectOptions(distinctData.media_types || [], true)); // true for 'All'
+          setGenreOptions(toSelectOptions(distinctData.genres || [])); // false for 'All' (multi-select)
+          setStatusOptions(toSelectOptions(distinctData.statuses || [], true)); // true for 'All'
+          setThemeOptions(toSelectOptions(distinctData.themes || [])); // false for 'All' (multi-select)
+          setDemographicOptions(toSelectOptions(distinctData.demographics || [])); // false for 'All' (multi-select)
+          setStudioOptions(toSelectOptions(distinctData.studios || [])); // false for 'All' (multi-select)
+          setAuthorOptions(toSelectOptions(distinctData.authors || [])); // false for 'All' (multi-
         }
       } catch (err) {
         console.error("Failed to fetch filter options:", err);
         // Set default "All" options to prevent errors in dropdowns
-        setMediaTypeOptions(["All"]);
-        setGenreOptions(["All"]);
-        setStatusOptions(["All"]);
-        setThemeOptions(["All"]);
-        setDemographicOptions(["All"]);
-        setStudioOptions(["All"]);
-        setAuthorOptions(["All"]);
+        setMediaTypeOptions([{ value: "All", label: "All" }]);
+        setGenreOptions([]);
+        setStatusOptions([{ value: "All", label: "All" }]);
+        setThemeOptions([]);
+        setDemographicOptions([]);
+        setStudioOptions([]);
+        setAuthorOptions([]);
       } finally {
         setFiltersLoading(false);
       }
@@ -109,37 +131,27 @@ function HomePage() {
 
   // Effect 2: Sync local state FROM URL searchParams (when URL changes externally)
   useEffect(() => {
-    console.log("Effect 2 (URL -> State Sync) triggered. URL Params:", searchParams.toString());
-    const newPage = parseInt(searchParams.get("page")) || 1;
-    const newPerPage = parseInt(searchParams.get("per_page")) || DEFAULT_ITEMS_PER_PAGE;
-    const newQuery = searchParams.get("q") || "";
-    const newMediaType = searchParams.get("media_type") || "All";
-    const newGenre = searchParams.get("genre") || "All";
-    const newStatus = searchParams.get("status") || "All";
-    const newMinScore = searchParams.get("min_score") || "";
-    const newYear = searchParams.get("year") || "";
-    const newTheme = searchParams.get("theme") || "All";
-    const newDemographic = searchParams.get("demographic") || "All";
-    const newStudio = searchParams.get("studio") || "All";
-    const newAuthor = searchParams.get("author") || "All";
+    if (filtersLoading && !isMounted.current) return; // Wait for filter options if not yet mounted
 
-    setCurrentPage(newPage);
-    setItemsPerPage(newPerPage);
-    setInputValue(newQuery);
-    setSearchTerm(newQuery); // Sync searchTerm as well
-    setSelectedMediaType(newMediaType);
-    setSelectedGenre(newGenre);
-    setSelectedStatus(newStatus);
-    setMinScore(newMinScore);
-    setSelectedYear(newYear);
-    setSelectedTheme(newTheme);
-    setSelectedDemographic(newDemographic);
-    setSelectedStudio(newStudio);
-    setSelectedAuthor(newAuthor);
+    setCurrentPage(parseInt(searchParams.get("page")) || 1);
+    setItemsPerPage(parseInt(searchParams.get("per_page")) || DEFAULT_ITEMS_PER_PAGE);
+    const query = searchParams.get("q") || "";
+    setInputValue(query);
+    setSearchTerm(query);
+    setSelectedMediaType(searchParams.get("media_type") || "All");
+
+    // MODIFIED: Handle multi-select from URL
+    setSelectedGenre(getMultiSelectValue(searchParams.get("genre"), genreOptions));
+    setSelectedTheme(getMultiSelectValue(searchParams.get("theme"), themeOptions));
+    setSelectedDemographic(getMultiSelectValue(searchParams.get("demographic"), demographicOptions));
+    setSelectedStudio(getMultiSelectValue(searchParams.get("studio"), studioOptions));
+    setSelectedAuthor(getMultiSelectValue(searchParams.get("author"), authorOptions));
+
+    setSelectedStatus(searchParams.get("status") || "All");
+    setMinScore(searchParams.get("min_score") || "");
+    setSelectedYear(searchParams.get("year") || "");
     setSortBy(searchParams.get("sort_by") || "score_desc");
-
-    // This effect sets the state. The data fetching effect will then use these states.
-  }, [searchParams]); // Only depends on searchParams
+  }, [searchParams, filtersLoading]);
 
   /// Effect 3: Debounce inputValue to update searchTerm
   useEffect(() => {
@@ -169,18 +181,20 @@ function HomePage() {
     if (currentPage > 1) newUrlParams.set("page", currentPage.toString());
     if (itemsPerPage !== DEFAULT_ITEMS_PER_PAGE) newUrlParams.set("per_page", itemsPerPage.toString());
     if (searchTerm) newUrlParams.set("q", searchTerm);
-    if (selectedMediaType !== "All") newUrlParams.set("media_type", selectedMediaType);
-    if (selectedGenre !== "All") newUrlParams.set("genre", selectedGenre);
-    if (selectedStatus !== "All") newUrlParams.set("status", selectedStatus);
+    if (selectedMediaType && selectedMediaType !== "All") newUrlParams.set("media_type", selectedMediaType);
+
+    // MODIFIED: Handle multi-select for URL
+    if (selectedGenre.length > 0) newUrlParams.set("genre", selectedGenre.map((g) => g.value).join(","));
+    if (selectedTheme.length > 0) newUrlParams.set("theme", selectedTheme.map((t) => t.value).join(","));
+    if (selectedDemographic.length > 0)
+      newUrlParams.set("demographic", selectedDemographic.map((d) => d.value).join(","));
+    if (selectedStudio.length > 0) newUrlParams.set("studio", selectedStudio.map((s) => s.value).join(","));
+    if (selectedAuthor.length > 0) newUrlParams.set("author", selectedAuthor.map((a) => a.value).join(","));
+
+    if (selectedStatus && selectedStatus !== "All") newUrlParams.set("status", selectedStatus);
     if (minScore) newUrlParams.set("min_score", minScore);
     if (selectedYear) newUrlParams.set("year", selectedYear);
-    if (selectedTheme !== "All") newUrlParams.set("theme", selectedTheme);
-    if (selectedDemographic !== "All") newUrlParams.set("demographic", selectedDemographic);
-    if (selectedStudio !== "All") newUrlParams.set("studio", selectedStudio);
-    if (selectedAuthor !== "All") newUrlParams.set("author", selectedAuthor);
-    if (sortBy && sortBy !== "score_desc") {
-      newUrlParams.set("sort_by", sortBy);
-    }
+    if (sortBy && sortBy !== "score_desc") newUrlParams.set("sort_by", sortBy);
 
     if (searchParams.toString() !== newUrlParams.toString()) {
       console.log("Main Effect (URL Update): Updating URL to", newUrlParams.toString());
@@ -288,11 +302,6 @@ function HomePage() {
     setInputValue(event.target.value);
   };
 
-  const handleSortChange = (event) => {
-    setSortBy(event.target.value);
-    setCurrentPage(1);
-  };
-
   const handleSearchChange = (event) => setSearchTerm(event.target.value);
   const handleSearchSubmit = (event) => {
     event.preventDefault();
@@ -303,23 +312,51 @@ function HomePage() {
     if (currentPage !== 1) setCurrentPage(1);
   };
 
+  const handleMultiSelectChange = (setter, selectedOptions) => {
+    setter(selectedOptions || []);
+    if (currentPage !== 1) setCurrentPage(1);
+  };
+
+  const handleSingleSelectChange = (setter, selectedOptionOrEvent) => {
+    const value =
+      selectedOptionOrEvent?.value !== undefined
+        ? selectedOptionOrEvent.value
+        : selectedOptionOrEvent.target.value;
+    setter(value || "All");
+    if (currentPage !== 1) setCurrentPage(1);
+  };
+
   const handleFilterChange = (setter, value, paramName) => {
     setter(value);
     if (currentPage !== 1) setCurrentPage(1);
+  };
+
+  const handleSortChange = (event) => {
+    setSortBy(event.target.value);
+    setCurrentPage(1);
+  };
+  const handleMinScoreChange = (event) => {
+    setMinScore(event.target.value);
+    setCurrentPage(1);
+  };
+  const handleYearChange = (event) => {
+    setSelectedYear(event.target.value);
+    setCurrentPage(1);
   };
 
   const handleResetFilters = () => {
     setInputValue("");
     setSearchTerm("");
     setSelectedMediaType("All");
-    setSelectedGenre("All");
+    setSelectedGenre([]);
+    setSelectedTheme([]); // Reset multi-select to empty array
+    setSelectedDemographic([]);
+    setSelectedStudio([]);
+    setSelectedAuthor([]);
     setSelectedStatus("All");
     setMinScore("");
     setSelectedYear("");
-    setSelectedTheme("All");
-    setSelectedDemographic("All");
-    setSelectedStudio("All");
-    setSelectedAuthor("All");
+    setSortBy("score_desc");
     if (currentPage !== 1) setCurrentPage(1);
   };
 
@@ -336,8 +373,9 @@ function HomePage() {
   };
 
   const handleItemsPerPageChange = (event) => {
-    const newItemsPerPage = Number(event.target.value);
-    setItemsPerPage(newItemsPerPage);
+    const newIPP = Number(event.target.value);
+    localStorage.setItem("aniMangaItemsPerPage", newIPP.toString());
+    setItemsPerPage(newIPP);
     setCurrentPage(1);
   };
 
@@ -368,10 +406,54 @@ function HomePage() {
     </div>
   ));
 
+  const customSelectStyles = {
+    control: (provided, state) => ({
+      ...provided,
+      backgroundColor: "var(--bg-dark)",
+      borderColor: state.isFocused ? "var(--accent-primary)" : "var(--border-color)",
+      boxShadow: state.isFocused ? "var(--shadow-focus-ring)" : "none",
+      "&:hover": { borderColor: state.isFocused ? "var(--accent-primary)" : "var(--border-highlight)" },
+      minHeight: "calc(0.6rem * 2 + 0.9rem * 2 + 2px)", // Match padding of other inputs + border
+      height: "auto",
+    }),
+    valueContainer: (provided) => ({ ...provided, padding: "calc(0.6rem - 2px) 0.9rem" }), // Adjust padding
+    input: (provided) => ({ ...provided, color: "var(--text-primary)", margin: "0px", padding: "0px" }),
+    placeholder: (provided) => ({ ...provided, color: "var(--text-muted)" }),
+    singleValue: (provided) => ({ ...provided, color: "var(--text-primary)" }),
+    multiValue: (provided) => ({
+      ...provided,
+      backgroundColor: "var(--accent-secondary)",
+      borderRadius: "4px",
+    }),
+    multiValueLabel: (provided) => ({ ...provided, color: "var(--text-primary)", fontWeight: "500" }),
+    multiValueRemove: (provided) => ({
+      ...provided,
+      color: "var(--text-primary)",
+      "&:hover": { backgroundColor: "var(--accent-secondary-hover)", color: "white" },
+    }),
+    menu: (provided) => ({ ...provided, backgroundColor: "var(--bg-dark)", zIndex: 5 }),
+    option: (provided, state) => ({
+      ...provided,
+      backgroundColor: state.isSelected
+        ? "var(--accent-primary)"
+        : state.isFocused
+        ? "var(--bg-overlay)"
+        : "var(--bg-dark)",
+      color: state.isSelected ? "var(--bg-deep-dark)" : "var(--text-primary)",
+      "&:active": { backgroundColor: "var(--accent-primary-hover)" },
+    }),
+    indicatorSeparator: () => ({ display: "none" }),
+    dropdownIndicator: (provided) => ({
+      ...provided,
+      color: "var(--text-muted)",
+      "&:hover": { color: "var(--text-primary)" },
+    }),
+  };
+
   return (
     <>
       <div ref={topOfPageRef}></div>
-      <div className="filter-bar controls-bar">
+      <div className="filter-bar">
         <form onSubmit={handleSearchSubmit} className="search-form">
           <input type="text" placeholder="Search titles..." value={inputValue} onChange={handleInputChange} />
           <button type="submit">Search</button>
@@ -392,113 +474,113 @@ function HomePage() {
 
         <div className="filter-group">
           <label htmlFor="mediaTypeFilter">Type:</label>
-          <select
+          <Select
             id="mediaTypeFilter"
-            value={selectedMediaType}
-            onChange={(e) => handleFilterChange(setSelectedMediaType, e.target.value, "media_type")}
-            disabled={filtersLoading || loading}
-          >
-            {mediaTypeOptions.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
+            name="mediaTypeFilter"
+            options={mediaTypeOptions}
+            value={mediaTypeOptions.find((opt) => opt.value === selectedMediaType) || mediaTypeOptions[0]}
+            onChange={(selectedOption) => handleSingleSelectChange(setSelectedMediaType, selectedOption)}
+            styles={customSelectStyles}
+            isDisabled={filtersLoading || loading}
+            classNamePrefix="react-select"
+          />
         </div>
 
+        {/* MODIFIED: Genre Filter with react-select */}
         <div className="filter-group">
-          <label htmlFor="genreFilter">Genre:</label>
-          <select
+          <label htmlFor="genreFilter">Genres:</label>
+          <Select
+            isMulti
+            closeMenuOnSelect={false}
             id="genreFilter"
+            name="genreFilter"
+            options={genreOptions}
             value={selectedGenre}
-            onChange={(e) => handleFilterChange(setSelectedGenre, e.target.value, "genre")}
-            disabled={filtersLoading || loading}
-          >
-            {genreOptions.map((genre) => (
-              <option key={genre} value={genre}>
-                {genre}
-              </option>
-            ))}
-          </select>
+            onChange={(selectedOptions) => handleMultiSelectChange(setSelectedGenre, selectedOptions)}
+            placeholder="Select genres..."
+            styles={customSelectStyles}
+            isDisabled={filtersLoading || loading}
+            classNamePrefix="react-select"
+          />
+        </div>
+
+        {/* MODIFIED: Theme Filter with react-select */}
+        <div className="filter-group">
+          <label htmlFor="themeFilter">Themes:</label>
+          <Select
+            isMulti
+            closeMenuOnSelect={false}
+            id="themeFilter"
+            name="themeFilter"
+            options={themeOptions}
+            value={selectedTheme}
+            onChange={(selectedOptions) => handleMultiSelectChange(setSelectedTheme, selectedOptions)}
+            placeholder="Select themes..."
+            styles={customSelectStyles}
+            isDisabled={filtersLoading || loading}
+            classNamePrefix="react-select"
+          />
+        </div>
+        {/* You can convert Demographic, Studio, Author similarly if desired */}
+        <div className="filter-group">
+          <label htmlFor="demographicFilter">Demographics:</label>
+          <Select
+            isMulti
+            closeMenuOnSelect={false}
+            id="demographicFilter"
+            options={demographicOptions}
+            value={selectedDemographic}
+            onChange={(opts) => handleMultiSelectChange(setSelectedDemographic, opts)}
+            placeholder="Select demographics..."
+            styles={customSelectStyles}
+            isDisabled={filtersLoading || loading}
+            classNamePrefix="react-select"
+          />
+        </div>
+        <div className="filter-group">
+          <label htmlFor="studioFilter">Studios:</label>
+          <Select
+            isMulti
+            closeMenuOnSelect={false}
+            id="studioFilter"
+            options={studioOptions}
+            value={selectedStudio}
+            onChange={(opts) => handleMultiSelectChange(setSelectedStudio, opts)}
+            placeholder="Select studios..."
+            styles={customSelectStyles}
+            isDisabled={filtersLoading || loading}
+            classNamePrefix="react-select"
+          />
+        </div>
+        <div className="filter-group">
+          <label htmlFor="authorFilter">Authors:</label>
+          <Select
+            isMulti
+            closeMenuOnSelect={false}
+            id="authorFilter"
+            options={authorOptions}
+            value={selectedAuthor}
+            onChange={(opts) => handleMultiSelectChange(setSelectedAuthor, opts)}
+            placeholder="Select authors..."
+            styles={customSelectStyles}
+            isDisabled={filtersLoading || loading}
+            classNamePrefix="react-select"
+          />
         </div>
 
         <div className="filter-group">
           <label htmlFor="statusFilter">Status:</label>
-          <select
+          <Select
             id="statusFilter"
-            value={selectedStatus}
-            onChange={(e) => handleFilterChange(setSelectedStatus, e.target.value, "status")}
-            disabled={filtersLoading || loading}
-          >
-            {statusOptions.map((statusOption) => (
-              <option key={statusOption} value={statusOption}>
-                {statusOption}
-              </option>
-            ))}
-          </select>
+            name="statusFilter"
+            options={statusOptions}
+            value={statusOptions.find((opt) => opt.value === selectedStatus) || statusOptions[0]}
+            onChange={(selectedOption) => handleSingleSelectChange(setSelectedStatus, selectedOption)}
+            styles={customSelectStyles}
+            isDisabled={filtersLoading || loading}
+            classNamePrefix="react-select"
+          />
         </div>
-
-        <div className="filter-group">
-          <label htmlFor="themeFilter">Theme:</label>
-          <select
-            id="themeFilter"
-            value={selectedTheme}
-            onChange={(e) => handleFilterChange(setSelectedTheme, e.target.value, "theme")}
-            disabled={filtersLoading || loading}
-          >
-            {themeOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="filter-group">
-          <label htmlFor="demographicFilter">Demographic:</label>
-          <select
-            id="demographicFilter"
-            value={selectedDemographic}
-            onChange={(e) => handleFilterChange(setSelectedDemographic, e.target.value, "demographic")}
-            disabled={filtersLoading || loading}
-          >
-            {demographicOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="filter-group">
-          <label htmlFor="studioFilter">Studio:</label>
-          <select
-            id="studioFilter"
-            value={selectedStudio}
-            onChange={(e) => handleFilterChange(setSelectedStudio, e.target.value, "studio")}
-            disabled={filtersLoading || loading}
-          >
-            {studioOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="filter-group">
-          <label htmlFor="authorFilter">Author:</label>
-          <select
-            id="authorFilter"
-            value={selectedAuthor}
-            onChange={(e) => handleFilterChange(setSelectedAuthor, e.target.value, "author")}
-            disabled={filtersLoading || loading}
-          >
-            {authorOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-
         <div className="filter-group">
           <label htmlFor="minScoreFilter">Min Score (0-10):</label>
           <input
@@ -508,11 +590,10 @@ function HomePage() {
             max="10"
             step="0.1"
             value={minScore}
-            onChange={(e) => handleFilterChange(setMinScore, e.target.value, "minScore")}
+            onChange={handleMinScoreChange}
             placeholder="e.g., 7.5"
           />
         </div>
-
         <div className="filter-group">
           <label htmlFor="yearFilter">Year:</label>
           <input
@@ -521,17 +602,15 @@ function HomePage() {
             min="1900"
             max={new Date().getFullYear() + 5}
             value={selectedYear}
-            onChange={(e) => handleFilterChange(setSelectedYear, e.target.value, "year")}
+            onChange={handleYearChange}
             placeholder="e.g., 2024"
           />
         </div>
-
         <button onClick={handleResetFilters} className="reset-filters-btn" disabled={loading}>
           Reset Filters
         </button>
       </div>
 
-      {/* --- Top Pagination and Items Per Page (Existing Controls Bar) --- */}
       <div className="controls-bar">
         <PaginationControls />
         <div className="items-per-page-selector">
@@ -542,51 +621,60 @@ function HomePage() {
             onChange={handleItemsPerPageChange}
             disabled={loading}
           >
-            <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={25}>25</option>
-            <option value={30}>30</option>
-            <option value={50}>50</option>
+            {[10, 20, 25, 30, 50].map((num) => (
+              <option key={num} value={num}>
+                {num}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
-      {loading && <p>Loading Items...</p>}
+      {loading && (
+        <div
+          className="loading-container"
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            flexDirection: "column",
+            padding: "50px",
+          }}
+        >
+          <Spinner size="70px" />
+          {/* Optionally add text: <p style={{marginTop: '15px', color: 'var(--text-secondary)'}}>Loading items...</p> */}
+        </div>
+      )}
       {error && <p style={{ color: "red" }}>Error: {error}</p>}
+
       {!loading && !error && (
         <>
           <div className="item-list">
             {Array.isArray(items) && items.length > 0
               ? items.map((item) => <ItemCard key={item.uid} item={item} />)
-              : // No direct message here, item-list will just be empty
-                null}
+              : null}
           </div>
-
-          {/* Conditionally render empty state message OUTSIDE and AFTER item-list */}
           {Array.isArray(items) && items.length === 0 && !loading && (
             <div className="empty-state-container">
-              {/* Example with a simple text icon, replace with SVG or Font Awesome if preferred */}
               <div className="empty-state-icon">😕</div>
               <p className="empty-state-message">No items found for the current filters.</p>
               <p className="empty-state-suggestion">Try adjusting your search or filter criteria.</p>
             </div>
           )}
-
-          {/* Only show bottom pagination if there are items AND more than one page */}
           {Array.isArray(items) && items.length > 0 && totalPages > 1 && (
-            <div className="bottom-pagination-wrapper">
-              <PaginationControls />
+            <div className="bottom-pagination-wrapper" style={{ marginTop: "20px" }}>
+              {" "}
+              <PaginationControls />{" "}
             </div>
           )}
         </>
       )}
       {!loading && Array.isArray(items) && items.length > 0 && (
         <button onClick={scrollToTop} className="scroll-to-top-btn">
-          Scroll to Top
+          ↑
         </button>
       )}
     </>
   );
 }
-
 export default HomePage;
