@@ -24,9 +24,20 @@ function ItemCard({ item }) {
     : "None";
 
   return (
-    <Link to={`/item/${item.uid}`} className="item-card-link">
-      <div className="item-card">
-        <img src={imageUrl} alt={title} />
+    <Link
+      to={`/item/${item.uid}`}
+      className="item-card-link"
+      aria-label={`View details for ${title} - ${mediaType} with score ${score}`}
+    >
+      <article className="item-card">
+        <img
+          src={imageUrl}
+          alt={`Cover image for ${title}`}
+          loading="lazy"
+          onError={(e) => {
+            e.target.src = DEFAULT_PLACEHOLDER_IMAGE;
+          }}
+        />
         <div className="item-card-content-wrapper">
           <h3>{title}</h3>
           <div className="details">
@@ -50,7 +61,7 @@ function ItemCard({ item }) {
             )}
           </div>
         </div>
-      </div>
+      </article>
     </Link>
   );
 }

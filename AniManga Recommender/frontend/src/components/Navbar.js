@@ -4,14 +4,14 @@ import "./Navbar.css";
 
 function Navbar() {
   return (
-    <nav className="navbar">
+    <nav className="navbar" role="navigation" aria-label="Main navigation">
       <div className="navbar-container">
-        <Link to="/" className="navbar-logo">
+        <Link to="/" className="navbar-logo" aria-label="AniManga Recommender - Go to homepage">
           AniMangaRecommender
         </Link>
-        <ul className="nav-menu">
-          <li className="nav-item">
-            <Link to="/" className="nav-links">
+        <ul className="nav-menu" role="menubar">
+          <li className="nav-item" role="none">
+            <Link to="/" className="nav-links" role="menuitem" aria-current="page">
               Home
             </Link>
           </li>
