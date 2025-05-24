@@ -36,12 +36,16 @@ const toSelectOptions = (optionsArray, includeAll = false) => {
 };
 
 // Helper to conver all string to empty array for multi-select or pass value
-const getMultiSelectValue = (value, options) => {
-  if (!value || value.toLowerCase() === "all") return [];
-  if (Array.isArray(value)) return value;
+const getMultiSelectValuesFromParam = (paramValue, optionsSource) => {
+  if (!paramValue) return [];
+  const selectedValues = paramValue.split(",").map((v) => v.trim().toLowerCase());
+  return optionsSource.filter((opt) => selectedValues.includes(opt.value.toLowerCase()));
+};
 
-  const selectedValues = value.split(",");
-  return options.filter((opt) => selectedValues.includes(opt.value));
+// Helper to convert react-select's array of {value, label} to URL param string
+const getParamFromMultiSelectValues = (selectedOptions) => {
+  if (!selectedOptions || selectedOptions.length === 0) return "";
+  return selectedOptions.map((opt) => opt.value).join(",");
 };
 
 function HomePage() {
@@ -87,6 +91,7 @@ function HomePage() {
   const topOfPageRef = useRef(null); // For scrolling NEED ANIMATION EFFECTS ON
   const debounceTimeoutRef = useRef(null);
   const isMounted = useRef(false);
+  const initialSyncDone = useRef(false); // Track when initial URL sync is complete
 
   // Effect 1: Fetch distinct filter options (runs once on mount)
   useEffect(() => {
@@ -124,6 +129,7 @@ function HomePage() {
         setAuthorOptions([]);
       } finally {
         setFiltersLoading(false);
+        isMounted.current = true; // Mark as mounted after filter options are loaded
       }
     };
     fetchFilterOptions();
@@ -131,7 +137,7 @@ function HomePage() {
 
   // Effect 2: Sync local state FROM URL searchParams (when URL changes externally)
   useEffect(() => {
-    if (filtersLoading && !isMounted.current) return; // Wait for filter options if not yet mounted
+    if (filtersLoading) return; // Wait for filter options to be loaded first
 
     setCurrentPage(parseInt(searchParams.get("page")) || 1);
     setItemsPerPage(parseInt(searchParams.get("per_page")) || DEFAULT_ITEMS_PER_PAGE);
@@ -140,12 +146,13 @@ function HomePage() {
     setSearchTerm(query);
     setSelectedMediaType(searchParams.get("media_type") || "All");
 
-    // MODIFIED: Handle multi-select from URL
-    setSelectedGenre(getMultiSelectValue(searchParams.get("genre"), genreOptions));
-    setSelectedTheme(getMultiSelectValue(searchParams.get("theme"), themeOptions));
-    setSelectedDemographic(getMultiSelectValue(searchParams.get("demographic"), demographicOptions));
-    setSelectedStudio(getMultiSelectValue(searchParams.get("studio"), studioOptions));
-    setSelectedAuthor(getMultiSelectValue(searchParams.get("author"), authorOptions));
+    setSelectedGenre(getMultiSelectValuesFromParam(searchParams.get("genre"), genreOptions));
+    setSelectedTheme(getMultiSelectValuesFromParam(searchParams.get("theme"), themeOptions));
+    setSelectedDemographic(
+      getMultiSelectValuesFromParam(searchParams.get("demographic"), demographicOptions)
+    );
+    setSelectedStudio(getMultiSelectValuesFromParam(searchParams.get("studio"), studioOptions));
+    setSelectedAuthor(getMultiSelectValuesFromParam(searchParams.get("author"), authorOptions));
 
     setSelectedStatus(searchParams.get("status") || "All");
     setMinScore(searchParams.get("min_score") || "");
@@ -159,7 +166,6 @@ function HomePage() {
     debounceTimeoutRef.current = setTimeout(() => {
       if (inputValue !== searchTerm) {
         setSearchTerm(inputValue);
-        // setCurrentPage(1); // Let main effect handle page reset if searchTerm changes
       }
     }, DEBOUNCE_DELAY);
     return () => {
@@ -167,23 +173,16 @@ function HomePage() {
     };
   }, [inputValue, searchTerm]);
 
-  // Effect 4: Sync URL searchParams FROM component filter states AND Fetch Items
-  // This is the main effect that reacts to user interactions or programmatic state changes.
-  useEffect(() => {
-    // Don't run if the very first URL->State sync isn't done OR if filter options are still loading
-    if (filtersLoading && !isMounted.current) {
-      console.log("Main Effect: Filters loading on initial mount, delaying.");
-      return;
-    }
-
-    // 1. Update URL from current state
+  // Create a stable fetch function
+  const fetchItems = useCallback(async () => {
+    // Build URL params from current state
     const newUrlParams = new URLSearchParams();
     if (currentPage > 1) newUrlParams.set("page", currentPage.toString());
     if (itemsPerPage !== DEFAULT_ITEMS_PER_PAGE) newUrlParams.set("per_page", itemsPerPage.toString());
     if (searchTerm) newUrlParams.set("q", searchTerm);
     if (selectedMediaType && selectedMediaType !== "All") newUrlParams.set("media_type", selectedMediaType);
 
-    // MODIFIED: Handle multi-select for URL
+    // Handle multi-select for URL
     if (selectedGenre.length > 0) newUrlParams.set("genre", selectedGenre.map((g) => g.value).join(","));
     if (selectedTheme.length > 0) newUrlParams.set("theme", selectedTheme.map((t) => t.value).join(","));
     if (selectedDemographic.length > 0)
@@ -196,88 +195,57 @@ function HomePage() {
     if (selectedYear) newUrlParams.set("year", selectedYear);
     if (sortBy && sortBy !== "score_desc") newUrlParams.set("sort_by", sortBy);
 
-    if (searchParams.toString() !== newUrlParams.toString()) {
-      console.log("Main Effect (URL Update): Updating URL to", newUrlParams.toString());
+    const paramsString = newUrlParams.toString();
+
+    // Update URL if needed
+    const currentParamsString = new URLSearchParams(window.location.search).toString();
+    if (currentParamsString !== paramsString) {
+      console.log("Updating URL. Current:", currentParamsString, "New:", paramsString);
       setSearchParams(newUrlParams, { replace: true });
-      // When setSearchParams is called, Effect 2 will run and re-sync states.
-      // This current effect will also re-run because `searchParams` is a dependency.
-      // On that re-run, this `if` block should be false, and it will proceed to fetch.
-      return; // Important: Exit this run to let URL sync and state re-sync happen.
     }
 
-    // 2. Fetch Items (only if URL is stable with current state)
-    const fetchItems = async () => {
-      if (
-        topOfPageRef.current &&
-        (currentPage !== 1 ||
-          itemsPerPage !== DEFAULT_ITEMS_PER_PAGE ||
-          searchTerm ||
-          selectedMediaType !== "All" ||
-          selectedGenre !== "All" ||
-          selectedStatus !== "All" ||
-          minScore ||
-          selectedYear ||
-          selectedTheme !== "All" ||
-          selectedDemographic !== "All" ||
-          selectedStudio !== "All" ||
-          selectedAuthor !== "All")
-      ) {
-        topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
-      }
-      setLoading(true);
-      setError(null);
-
-      const apiCallParamsString = newUrlParams.toString(); // Use the params we just built/verified
-      console.log("Main Effect (Fetch Items): Fetching with params:", apiCallParamsString);
-
-      try {
-        const response = await axios.get(`${API_BASE_URL}/items?${apiCallParamsString}`);
-        let responseData = response.data;
-        if (typeof responseData === "string") {
-          try {
-            responseData = JSON.parse(responseData);
-          } catch (e) {
-            console.error("Items data not valid JSON", e);
-            setItems([]);
-            setTotalPages(1);
-            setTotalItems(0);
-            setError("Invalid data format from server.");
-            setLoading(false);
-            return;
-          }
-        }
-        if (responseData && Array.isArray(responseData.items)) {
-          setItems(responseData.items);
-          setTotalPages(responseData.total_pages || 1);
-          setTotalItems(responseData.total_items || 0);
-        } else {
-          console.error("Unexpected items API structure:", responseData);
-          setItems([]);
-          setTotalPages(1);
-          setTotalItems(0);
-          setError("Unexpected data structure for items.");
-        }
-      } catch (err) {
-        console.error("Failed to fetch items:", err);
-        setItems([]);
-        setTotalPages(1);
-        setTotalItems(0);
-        setError(err.message || "Failed to fetch items.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (isMounted.current || searchParams.toString() !== "") {
-      // Fetch if not initial mount OR if URL has params
-      fetchItems();
-    } else if (!filtersLoading) {
-      // If initial mount, no URL params, but filters are loaded, then fetch
-      fetchItems();
+    // Handle scrolling
+    if (
+      topOfPageRef.current &&
+      (currentPage !== 1 ||
+        itemsPerPage !== DEFAULT_ITEMS_PER_PAGE ||
+        searchTerm ||
+        selectedMediaType !== "All" ||
+        selectedGenre.length > 0 ||
+        selectedStatus !== "All" ||
+        minScore ||
+        selectedYear ||
+        selectedTheme.length > 0 ||
+        selectedDemographic.length > 0 ||
+        selectedStudio.length > 0 ||
+        selectedAuthor.length > 0)
+    ) {
+      topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
     }
 
-    if (!isMounted.current) {
-      isMounted.current = true;
+    setLoading(true);
+    setError(null);
+
+    console.log("Fetching items with params:", paramsString);
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/items?${paramsString}`);
+      const responseData = response.data;
+      if (responseData && Array.isArray(responseData.items)) {
+        setItems(responseData.items);
+        setTotalPages(responseData.total_pages || 1);
+        setTotalItems(responseData.total_items || 0);
+      } else {
+        throw new Error("Unexpected API response structure for items");
+      }
+    } catch (err) {
+      console.error("Failed to fetch items:", err);
+      setItems([]);
+      setTotalPages(1);
+      setTotalItems(0);
+      setError(err.message || "Failed to fetch items.");
+    } finally {
+      setLoading(false);
     }
   }, [
     currentPage,
@@ -293,10 +261,24 @@ function HomePage() {
     selectedStudio,
     selectedAuthor,
     sortBy,
-    filtersLoading,
-    searchParams,
     setSearchParams,
   ]);
+
+  // Effect 4: Fetch items when state changes or initial load is complete
+  useEffect(() => {
+    // Don't run if filters are still loading or component hasn't mounted
+    if (filtersLoading || !isMounted.current) {
+      console.log("Waiting for filters to load and component to mount");
+      return;
+    }
+
+    // Small delay to ensure all state updates from URL sync are complete
+    const timeoutId = setTimeout(() => {
+      fetchItems();
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [fetchItems, filtersLoading]);
 
   const handleInputChange = (event) => {
     setInputValue(event.target.value);
