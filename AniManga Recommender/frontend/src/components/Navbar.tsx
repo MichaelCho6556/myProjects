@@ -2,7 +2,12 @@ import React from "react";
 import { Link } from "react-router-dom";
 import "./Navbar.css";
 
-function Navbar() {
+/**
+ * Navbar Component - Application navigation with TypeScript support
+ *
+ * @returns JSX.Element
+ */
+const Navbar: React.FC = () => {
   return (
     <nav className="navbar" role="navigation" aria-label="Main navigation">
       <div className="navbar-container">
@@ -19,6 +24,6 @@ function Navbar() {
       </div>
     </nav>
   );
-}
+};
 
 export default Navbar;

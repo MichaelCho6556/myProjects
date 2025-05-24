@@ -1,12 +1,14 @@
 /**
  * Error Handling Utilities
- * Provides consistent error parsing and user-friendly messages
+ * Provides consistent error parsing and user-friendly messages with full TypeScript support
  */
+
+import { ApiError, ParsedError, ErrorHandler, ValidationStructure, ApiOperation } from "../types";
 
 /**
  * HTTP Status Code Messages
  */
-const HTTP_STATUS_MESSAGES = {
+const HTTP_STATUS_MESSAGES: Record<number, string> = {
   400: "Bad request - please check your input",
   401: "Authentication required",
   403: "Access denied",
@@ -27,19 +29,19 @@ const NETWORK_ERRORS = {
   NETWORK: "Network error. Please check your internet connection.",
   CORS: "Cross-origin request blocked. Please contact support if this persists.",
   PARSE: "Invalid server response. Please try again or contact support.",
-};
+} as const;
 
 /**
  * Parse axios error and return user-friendly message with technical details
  *
- * @param {Error} error - The error object from axios or other source
- * @param {string} context - Context where the error occurred (e.g., "fetching items")
- * @returns {Object} Parsed error with userMessage and technicalDetails
+ * @param error - The error object from axios or other source
+ * @param context - Context where the error occurred (e.g., "fetching items")
+ * @returns Parsed error with userMessage and technicalDetails
  */
-export function parseError(error, context = "performing this action") {
+export function parseError(error: ApiError, context: string = "performing this action"): ParsedError {
   let userMessage = `Failed ${context}`;
   let technicalDetails = error.message || "Unknown error";
-  let statusCode = null;
+  let statusCode: number | null = null;
 
   // Handle axios errors
   if (error.response) {
@@ -94,15 +96,15 @@ export function parseError(error, context = "performing this action") {
 /**
  * Log error with appropriate level based on severity
  *
- * @param {Object} parsedError - Error object from parseError()
- * @param {string} component - Component name where error occurred
+ * @param parsedError - Error object from parseError()
+ * @param component - Component name where error occurred
  */
-export function logError(parsedError, component = "Unknown") {
+export function logError(parsedError: ParsedError, component: string = "Unknown"): void {
   const { statusCode, technicalDetails, originalError } = parsedError;
 
   // Determine log level based on error type
-  const isUserError = statusCode >= 400 && statusCode < 500;
-  const isServerError = statusCode >= 500;
+  const isUserError = statusCode !== null && statusCode >= 400 && statusCode < 500;
+  const isServerError = statusCode !== null && statusCode >= 500;
 
   const logMessage = `[${component}] ${technicalDetails}`;
 
@@ -118,13 +120,13 @@ export function logError(parsedError, component = "Unknown") {
 /**
  * Create a standardized error handler for components
  *
- * @param {string} component - Component name
- * @param {Function} setError - Error state setter
- * @returns {Function} Error handler function
+ * @param component - Component name
+ * @param setError - Error state setter
+ * @returns Error handler function
  */
-export function createErrorHandler(component, setError) {
-  return (error, context) => {
-    const parsedError = parseError(error, context);
+export function createErrorHandler(component: string, setError: (error: string) => void): ErrorHandler {
+  return (error: Error, context?: string): ParsedError => {
+    const parsedError = parseError(error as ApiError, context);
     logError(parsedError, component);
     setError(parsedError.userMessage);
     return parsedError;
@@ -134,45 +136,57 @@ export function createErrorHandler(component, setError) {
 /**
  * Retry logic for failed operations
  *
- * @param {Function} operation - Async operation to retry
- * @param {number} maxRetries - Maximum number of retry attempts
- * @param {number} delay - Delay between retries in milliseconds
- * @returns {Promise} Result of the operation
+ * @param operation - Async operation to retry
+ * @param maxRetries - Maximum number of retry attempts
+ * @param delay - Delay between retries in milliseconds
+ * @returns Result of the operation
  */
-export async function retryOperation(operation, maxRetries = 3, delay = 1000) {
-  let lastError;
+export async function retryOperation<T>(
+  operation: ApiOperation<T>,
+  maxRetries: number = 3,
+  delay: number = 1000
+): Promise<{ data: T }> {
+  let lastError: Error;
+  let currentDelay = delay;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await operation();
     } catch (error) {
-      lastError = error;
+      lastError = error as Error;
+      const apiError = error as ApiError;
 
       // Don't retry on client errors (4xx) except 408 (timeout)
-      if (error.response?.status >= 400 && error.response?.status < 500 && error.response?.status !== 408) {
+      if (
+        apiError.response?.status &&
+        apiError.response.status >= 400 &&
+        apiError.response.status < 500 &&
+        apiError.response.status !== 408
+      ) {
         throw error;
       }
 
       if (attempt < maxRetries) {
-        console.warn(`Operation failed, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 1.5; // Exponential backoff
+        console.warn(`Operation failed, retrying in ${currentDelay}ms (attempt ${attempt}/${maxRetries})`);
+        // eslint-disable-next-line no-loop-func
+        await new Promise((resolve) => setTimeout(resolve, currentDelay));
+        currentDelay *= 1.5; // Exponential backoff
       }
     }
   }
 
-  throw lastError;
+  throw new Error(`Operation failed after ${maxRetries} attempts: ${lastError!.message}`);
 }
 
 /**
  * Validate response data structure
  *
- * @param {any} data - Response data to validate
- * @param {Object} expectedStructure - Expected structure definition
- * @returns {boolean} True if valid
- * @throws {Error} If validation fails
+ * @param data - Response data to validate
+ * @param expectedStructure - Expected structure definition
+ * @returns True if valid
+ * @throws Error if validation fails
  */
-export function validateResponseData(data, expectedStructure) {
+export function validateResponseData(data: any, expectedStructure: ValidationStructure): boolean {
   if (!data) {
     throw new Error("Response data is null or undefined");
   }

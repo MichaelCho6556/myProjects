@@ -1,43 +1,53 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { ItemCardProps } from "../types";
 
 const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
 
-function ItemCard({ item }) {
+/**
+ * ItemCard Component - Displays individual anime/manga item with TypeScript support
+ *
+ * @param props - Component props with type safety
+ * @returns JSX.Element or null
+ */
+const ItemCard: React.FC<ItemCardProps> = ({ item, className = "" }) => {
   if (!item) {
     return null;
   }
+
   const title = item.title || "No Title";
   const mediaType = item.media_type || "N/A";
-  const score = item.score ? parseFloat(item.score).toFixed(2) : "N/A";
-  const imageUrl = item.main_picture || DEFAULT_PLACEHOLDER_IMAGE;
+  const score = item.score ? parseFloat(item.score.toString()).toFixed(2) : "N/A";
+  const imageUrl = item.image_url || DEFAULT_PLACEHOLDER_IMAGE;
 
   const genresDisplay = Array.isArray(item.genres)
     ? item.genres.join(", ")
     : typeof item.genres === "string"
     ? item.genres
     : "None";
+
   const themesDisplay = Array.isArray(item.themes)
     ? item.themes.join(", ")
     : typeof item.themes === "string"
     ? item.themes
     : "None";
 
+  /**
+   * Handle image load error by falling back to default placeholder
+   */
+  const handleImageError = (event: React.SyntheticEvent<HTMLImageElement, Event>): void => {
+    const target = event.target as HTMLImageElement;
+    target.src = DEFAULT_PLACEHOLDER_IMAGE;
+  };
+
   return (
     <Link
       to={`/item/${item.uid}`}
-      className="item-card-link"
+      className={`item-card-link ${className}`}
       aria-label={`View details for ${title} - ${mediaType} with score ${score}`}
     >
       <article className="item-card">
-        <img
-          src={imageUrl}
-          alt={`Cover image for ${title}`}
-          loading="lazy"
-          onError={(e) => {
-            e.target.src = DEFAULT_PLACEHOLDER_IMAGE;
-          }}
-        />
+        <img src={imageUrl} alt={`Cover for ${title}`} loading="lazy" onError={handleImageError} />
         <div className="item-card-content-wrapper">
           <h3>{title}</h3>
           <div className="details">
@@ -64,6 +74,6 @@ function ItemCard({ item }) {
       </article>
     </Link>
   );
-}
+};
 
 export default React.memo(ItemCard);
