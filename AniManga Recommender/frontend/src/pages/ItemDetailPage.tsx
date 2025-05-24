@@ -137,7 +137,8 @@ const ItemDetailPage: React.FC = () => {
         console.error(`Failed to fetch item ${uid}:`, err);
         const errorMessage = err instanceof Error ? err.message : `Failed to fetch item ${uid}.`;
 
-        if (!item) {
+        // If item is still null, it means the item fetch failed
+        if (item === null) {
           setItemError(errorMessage);
           setLoadingItem(false);
         }
@@ -149,7 +150,8 @@ const ItemDetailPage: React.FC = () => {
     };
 
     fetchAllData();
-  }, [uid, item]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid]);
 
   /**
    * Render clickable tags that link to filtered search
