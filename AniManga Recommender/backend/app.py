@@ -105,6 +105,32 @@ def load_data_and_tfidf():
         import traceback
         traceback.print_exc()
 
+
+def map_field_names_for_frontend(data_dict):
+    """
+    Map backend field names to frontend expected field names
+    Specifically maps 'main_picture' to 'image_url' for image display
+    """
+    if isinstance(data_dict, dict):
+        # Create a copy to avoid modifying the original
+        mapped_dict = data_dict.copy()
+        
+        # Map main_picture to image_url for frontend compatibility
+        if 'main_picture' in mapped_dict:
+            print(f"DEBUG: Mapping main_picture to image_url: {mapped_dict['main_picture']}")
+            mapped_dict['image_url'] = mapped_dict.pop('main_picture')
+        
+        return mapped_dict
+    return data_dict
+
+
+def map_records_for_frontend(records_list):
+    """
+    Map field names for a list of records
+    """
+    return [map_field_names_for_frontend(record) for record in records_list]
+
+
 load_data_and_tfidf()
 
 
@@ -210,9 +236,12 @@ def get_items():
     items_paginated_df = data_subset.iloc[start:end].copy()
     items_for_json = items_paginated_df.replace({np.nan: None})
     items_list_of_dicts = items_for_json.to_dict(orient='records')
+    
+    # Map field names for frontend compatibility
+    items_mapped = map_records_for_frontend(items_list_of_dicts)
 
     return jsonify({
-        "items": items_list_of_dicts,
+        "items": items_mapped,
         "page": page,
         "per_page": per_page,
         "total_items": total_items,
@@ -270,8 +299,12 @@ def get_item_details(item_uid):
     item_details_series = df_processed.loc[idx].copy()
 
     item_details_series_cleaned = item_details_series.replace({np.nan: None})
+    item_details_dict = item_details_series_cleaned.to_dict()
+    
+    # Map field names for frontend compatibility  
+    item_details_mapped = map_field_names_for_frontend(item_details_dict)
 
-    return jsonify(item_details_series_cleaned.to_dict())
+    return jsonify(item_details_mapped)
 
 @app.route('/api/recommendations/<item_uid>')
 def get_recommendations(item_uid):
@@ -300,6 +333,9 @@ def get_recommendations(item_uid):
         recommended_items_df = df_processed.loc[top_n_indices].copy()
         recommended_items_for_json = recommended_items_df.replace({np.nan: None})
         recommended_list_of_dicts = recommended_items_for_json[['uid', 'title', 'media_type', 'score', 'main_picture', 'genres', 'synopsis']].to_dict(orient='records')
+        
+        # Map field names for frontend compatibility
+        recommended_mapped = map_records_for_frontend(recommended_list_of_dicts)
 
         source_title = df_processed.loc[item_idx, 'title']
         cleaned_source_title = None if pd.isna(source_title) else cleaned_source_title
@@ -307,7 +343,7 @@ def get_recommendations(item_uid):
         return jsonify({
             "source_item_uid": item_uid,
             "source_item_title": cleaned_source_title,
-            "recommendations": recommended_list_of_dicts
+            "recommendations": recommended_mapped
         })
     except KeyError as ke:
         print(f"KeyError accessing title or other column for item_idx {item_idx}: {ke}")
