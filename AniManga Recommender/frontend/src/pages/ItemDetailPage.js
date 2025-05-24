@@ -205,7 +205,7 @@ function ItemDetailPage() {
         <div className="item-detail-content">
           <div className="item-detail-image">
             <img
-              src={item.main_picture || DEFAULT_PLACEHOLDER_IMAGE}
+              src={item.image_url || item.main_picture || DEFAULT_PLACEHOLDER_IMAGE}
               alt={`Cover image for ${item.title || "Unknown title"}`}
               loading="lazy"
               onError={(e) => {

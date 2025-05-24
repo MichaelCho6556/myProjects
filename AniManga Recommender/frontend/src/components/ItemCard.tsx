@@ -18,7 +18,8 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, className = "" }) => {
   const title = item.title || "No Title";
   const mediaType = item.media_type || "N/A";
   const score = item.score ? parseFloat(item.score.toString()).toFixed(2) : "N/A";
-  const imageUrl = item.image_url || DEFAULT_PLACEHOLDER_IMAGE;
+  // Handle both image_url and main_picture for backward compatibility
+  const imageUrl = item.image_url || (item as any).main_picture || DEFAULT_PLACEHOLDER_IMAGE;
 
   const genresDisplay = Array.isArray(item.genres)
     ? item.genres.join(", ")
