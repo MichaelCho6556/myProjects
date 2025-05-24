@@ -1,17 +1,20 @@
 import React from "react";
 import Select from "react-select";
+import { FilterBarProps, CustomSelectStyles } from "../types";
 
 /**
  * FilterBar Component - Handles all filtering controls for the application
  *
- * @param {Object} props - Component props
- * @param {Object} props.filters - Current filter values
- * @param {Object} props.filterOptions - Available options for dropdowns
- * @param {Object} props.handlers - Event handlers for filter changes
- * @param {boolean} props.loading - Loading state for disable controls
- * @param {boolean} props.filtersLoading - Loading state for filter options
+ * @param props - Component props with complete type safety
+ * @returns JSX.Element
  */
-function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }) {
+const FilterBar: React.FC<FilterBarProps> = ({
+  filters,
+  filterOptions,
+  handlers,
+  loading,
+  filtersLoading,
+}) => {
   const {
     inputValue,
     selectedMediaType,
@@ -58,8 +61,8 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
    * Custom styles for react-select components
    * Ensures consistent theming with the application
    */
-  const customSelectStyles = {
-    control: (provided, state) => ({
+  const customSelectStyles: CustomSelectStyles = {
+    control: (provided: any, state: any) => ({
       ...provided,
       backgroundColor: "var(--bg-dark)",
       borderColor: state.isFocused ? "var(--accent-primary)" : "var(--border-color)",
@@ -68,23 +71,23 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
       minHeight: "calc(0.6rem * 2 + 0.9rem * 2 + 2px)",
       height: "auto",
     }),
-    valueContainer: (provided) => ({ ...provided, padding: "calc(0.6rem - 2px) 0.9rem" }),
-    input: (provided) => ({ ...provided, color: "var(--text-primary)", margin: "0px", padding: "0px" }),
-    placeholder: (provided) => ({ ...provided, color: "var(--text-muted)" }),
-    singleValue: (provided) => ({ ...provided, color: "var(--text-primary)" }),
-    multiValue: (provided) => ({
+    valueContainer: (provided: any) => ({ ...provided, padding: "calc(0.6rem - 2px) 0.9rem" }),
+    input: (provided: any) => ({ ...provided, color: "var(--text-primary)", margin: "0px", padding: "0px" }),
+    placeholder: (provided: any) => ({ ...provided, color: "var(--text-muted)" }),
+    singleValue: (provided: any) => ({ ...provided, color: "var(--text-primary)" }),
+    multiValue: (provided: any) => ({
       ...provided,
       backgroundColor: "var(--accent-secondary)",
       borderRadius: "4px",
     }),
-    multiValueLabel: (provided) => ({ ...provided, color: "var(--text-primary)", fontWeight: "500" }),
-    multiValueRemove: (provided) => ({
+    multiValueLabel: (provided: any) => ({ ...provided, color: "var(--text-primary)", fontWeight: "500" }),
+    multiValueRemove: (provided: any) => ({
       ...provided,
       color: "var(--text-primary)",
       "&:hover": { backgroundColor: "var(--accent-secondary-hover)", color: "white" },
     }),
-    menu: (provided) => ({ ...provided, backgroundColor: "var(--bg-dark)", zIndex: 5 }),
-    option: (provided, state) => ({
+    menu: (provided: any) => ({ ...provided, backgroundColor: "var(--bg-dark)", zIndex: 5 }),
+    option: (provided: any, state: any) => ({
       ...provided,
       backgroundColor: state.isSelected
         ? "var(--accent-primary)"
@@ -95,7 +98,7 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
       "&:active": { backgroundColor: "var(--accent-primary-hover)" },
     }),
     indicatorSeparator: () => ({ display: "none" }),
-    dropdownIndicator: (provided) => ({
+    dropdownIndicator: (provided: any) => ({
       ...provided,
       color: "var(--text-muted)",
       "&:hover": { color: "var(--text-primary)" },
@@ -152,7 +155,7 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
           name="mediaTypeFilter"
           options={mediaTypeOptions}
           value={mediaTypeOptions.find((opt) => opt.value === selectedMediaType) || mediaTypeOptions[0]}
-          onChange={(selectedOption) => handleSingleSelectChange(setSelectedMediaType, selectedOption)}
+          onChange={(selectedOption) => handleSingleSelectChange(setSelectedMediaType, selectedOption!)}
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"
@@ -170,7 +173,9 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
           name="genreFilter"
           options={genreOptions}
           value={selectedGenre}
-          onChange={(selectedOptions) => handleMultiSelectChange(setSelectedGenre, selectedOptions)}
+          onChange={(selectedOptions) =>
+            handleMultiSelectChange(setSelectedGenre, selectedOptions ? [...selectedOptions] : null)
+          }
           placeholder="Select genres..."
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
@@ -189,7 +194,9 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
           name="themeFilter"
           options={themeOptions}
           value={selectedTheme}
-          onChange={(selectedOptions) => handleMultiSelectChange(setSelectedTheme, selectedOptions)}
+          onChange={(selectedOptions) =>
+            handleMultiSelectChange(setSelectedTheme, selectedOptions ? [...selectedOptions] : null)
+          }
           placeholder="Select themes..."
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
@@ -207,7 +214,7 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
           id="demographicFilter"
           options={demographicOptions}
           value={selectedDemographic}
-          onChange={(opts) => handleMultiSelectChange(setSelectedDemographic, opts)}
+          onChange={(opts) => handleMultiSelectChange(setSelectedDemographic, opts ? [...opts] : null)}
           placeholder="Select demographics..."
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
@@ -225,7 +232,7 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
           id="studioFilter"
           options={studioOptions}
           value={selectedStudio}
-          onChange={(opts) => handleMultiSelectChange(setSelectedStudio, opts)}
+          onChange={(opts) => handleMultiSelectChange(setSelectedStudio, opts ? [...opts] : null)}
           placeholder="Select studios..."
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
@@ -243,7 +250,7 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
           id="authorFilter"
           options={authorOptions}
           value={selectedAuthor}
-          onChange={(opts) => handleMultiSelectChange(setSelectedAuthor, opts)}
+          onChange={(opts) => handleMultiSelectChange(setSelectedAuthor, opts ? [...opts] : null)}
           placeholder="Select authors..."
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
@@ -260,7 +267,7 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
           name="statusFilter"
           options={statusOptions}
           value={statusOptions.find((opt) => opt.value === selectedStatus) || statusOptions[0]}
-          onChange={(selectedOption) => handleSingleSelectChange(setSelectedStatus, selectedOption)}
+          onChange={(selectedOption) => handleSingleSelectChange(setSelectedStatus, selectedOption!)}
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"
@@ -316,6 +323,6 @@ function FilterBar({ filters, filterOptions, handlers, loading, filtersLoading }
       </button>
     </section>
   );
-}
+};
 
 export default React.memo(FilterBar);

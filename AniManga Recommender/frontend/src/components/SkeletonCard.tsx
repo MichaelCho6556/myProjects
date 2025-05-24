@@ -1,11 +1,18 @@
 import React from "react";
 import Skeleton, { SkeletonTheme } from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
+import { SkeletonCardProps } from "../types";
 
-function SkeletonCard() {
+/**
+ * SkeletonCard Component - Loading placeholder for ItemCard with TypeScript support
+ *
+ * @param props - Component props with type safety
+ * @returns JSX.Element
+ */
+const SkeletonCard: React.FC<SkeletonCardProps> = ({ className = "" }) => {
   return (
     <SkeletonTheme baseColor="var(--bg-overlay)" highlightColor="var(--bg-light)">
-      <div className="item-card">
+      <div className={`item-card ${className}`}>
         <Skeleton height={300} width="100%" style={{ aspectRatio: "3/4" }} />
         <div className="item-card-content-wrapper">
           <h3>
@@ -31,6 +38,6 @@ function SkeletonCard() {
       </div>
     </SkeletonTheme>
   );
-}
+};
 
 export default React.memo(SkeletonCard);

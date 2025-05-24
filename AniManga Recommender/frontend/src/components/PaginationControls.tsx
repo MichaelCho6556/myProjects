@@ -1,20 +1,13 @@
 import React from "react";
+import { PaginationControlsProps } from "../types";
 
 /**
- * PaginationControls Component - Handles pagination navigation
+ * PaginationControls Component - Handles pagination navigation with full TypeScript support
  *
- * @param {Object} props - Component props
- * @param {number} props.currentPage - Current active page number
- * @param {number} props.totalPages - Total number of available pages
- * @param {number} props.totalItems - Total number of items across all pages
- * @param {number} props.itemsPerPage - Number of items displayed per page
- * @param {Array} props.items - Current page items (for display calculations)
- * @param {boolean} props.loading - Loading state to disable controls
- * @param {Function} props.onPrevPage - Handler for previous page navigation
- * @param {Function} props.onNextPage - Handler for next page navigation
- * @param {string} props.className - Additional CSS classes
+ * @param props - Component props with complete type safety
+ * @returns JSX.Element
  */
-function PaginationControls({
+const PaginationControls: React.FC<PaginationControlsProps> = ({
   currentPage,
   totalPages,
   totalItems,
@@ -24,12 +17,12 @@ function PaginationControls({
   onPrevPage,
   onNextPage,
   className = "",
-}) {
+}) => {
   /**
    * Calculate the range of items being displayed
-   * @returns {Object} Object containing start and end item numbers
+   * @returns Object containing start and end item numbers
    */
-  const getDisplayRange = () => {
+  const getDisplayRange = (): { start: number; end: number } => {
     const start = (currentPage - 1) * itemsPerPage + 1;
     const end = Math.min(currentPage * itemsPerPage, totalItems);
     return { start, end };
@@ -43,7 +36,7 @@ function PaginationControls({
   /**
    * Handle previous page navigation with validation
    */
-  const handlePrevious = () => {
+  const handlePrevious = (): void => {
     if (canGoPrevious && onPrevPage) {
       onPrevPage();
     }
@@ -52,7 +45,7 @@ function PaginationControls({
   /**
    * Handle next page navigation with validation
    */
-  const handleNext = () => {
+  const handleNext = (): void => {
     if (canGoNext && onNextPage) {
       onNextPage();
     }
@@ -65,6 +58,7 @@ function PaginationControls({
         disabled={!canGoPrevious}
         aria-label={`Go to previous page (currently on page ${currentPage})`}
         title="Previous page"
+        type="button"
       >
         Previous
       </button>
@@ -79,11 +73,12 @@ function PaginationControls({
         disabled={!canGoNext}
         aria-label={`Go to next page (currently on page ${currentPage} of ${totalPages})`}
         title="Next page"
+        type="button"
       >
         Next
       </button>
     </div>
   );
-}
+};
 
 export default React.memo(PaginationControls);

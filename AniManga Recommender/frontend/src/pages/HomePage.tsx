@@ -9,16 +9,28 @@ import Spinner from "../components/Spinner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { createErrorHandler, retryOperation, validateResponseData } from "../utils/errorHandler";
 import "../App.css";
+import {
+  AnimeItem,
+  ItemsApiResponse,
+  DistinctValuesApiResponse,
+  SelectOption,
+  SortOption,
+  MediaType,
+  StatusType,
+  InputChangeHandler,
+  SelectChangeHandler,
+  FormSubmitHandler,
+  FilterBarProps,
+} from "../types";
 
 const API_BASE_URL = "http://localhost:5000/api";
-
 const DEBOUNCE_DELAY = 500;
 
 /**
  * Get initial items per page from localStorage with validation
- * @returns {number} Valid items per page value
+ * @returns Valid items per page value
  */
-const getInitialItemsPerPage = () => {
+const getInitialItemsPerPage = (): number => {
   const storedValue = localStorage.getItem("aniMangaItemsPerPage");
   if (storedValue) {
     const parsedValue = parseInt(storedValue, 10);
@@ -33,11 +45,11 @@ const DEFAULT_ITEMS_PER_PAGE = getInitialItemsPerPage();
 
 /**
  * Helper function to convert string options to react-select format
- * @param {Array} optionsArray - Array of string options
- * @param {boolean} includeAll - Whether to include "All" option
- * @returns {Array} Array of {value, label} objects
+ * @param optionsArray - Array of string options
+ * @param includeAll - Whether to include "All" option
+ * @returns Array of {value, label} objects
  */
-const toSelectOptions = (optionsArray, includeAll = false) => {
+const toSelectOptions = (optionsArray: string[], includeAll: boolean = false): SelectOption[] => {
   const mapped = optionsArray
     .filter((opt) => typeof opt === "string" && opt.toLowerCase() !== "all")
     .map((opt) => ({ value: opt, label: opt }));
@@ -46,11 +58,14 @@ const toSelectOptions = (optionsArray, includeAll = false) => {
 
 /**
  * Helper to parse multi-select values from URL parameters
- * @param {string} paramValue - Comma-separated parameter value
- * @param {Array} optionsSource - Available options to match against
- * @returns {Array} Array of selected option objects
+ * @param paramValue - Comma-separated parameter value
+ * @param optionsSource - Available options to match against
+ * @returns Array of selected option objects
  */
-const getMultiSelectValuesFromParam = (paramValue, optionsSource) => {
+const getMultiSelectValuesFromParam = (
+  paramValue: string | null,
+  optionsSource: SelectOption[]
+): SelectOption[] => {
   if (!paramValue) return [];
   const selectedValues = paramValue.split(",").map((v) => v.trim().toLowerCase());
   return optionsSource.filter((opt) => selectedValues.includes(opt.value.toLowerCase()));
@@ -66,63 +81,70 @@ const getMultiSelectValuesFromParam = (paramValue, optionsSource) => {
  * - Loading states and error handling
  * - Responsive design with accessibility
  */
-function HomePage() {
+const HomePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Data and loading states
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [filtersLoading, setFiltersLoading] = useState(true);
+  const [items, setItems] = useState<AnimeItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filtersLoading, setFiltersLoading] = useState<boolean>(true);
 
   // Pagination states
-  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get("page")) || 1);
-  const [itemsPerPage, setItemsPerPage] = useState(
-    parseInt(searchParams.get("per_page")) || DEFAULT_ITEMS_PER_PAGE
+  const [currentPage, setCurrentPage] = useState<number>(parseInt(searchParams.get("page") || "1"));
+  const [itemsPerPage, setItemsPerPage] = useState<number>(
+    parseInt(searchParams.get("per_page") || "") || DEFAULT_ITEMS_PER_PAGE
   );
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalItems, setTotalItems] = useState<number>(0);
 
   // Search and filter states
-  const [inputValue, setInputValue] = useState(searchParams.get("q") || "");
-  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
-  const [selectedMediaType, setSelectedMediaType] = useState(searchParams.get("media_type") || "All");
-  const [selectedGenre, setSelectedGenre] = useState([]);
-  const [selectedStatus, setSelectedStatus] = useState(searchParams.get("status") || "All");
-  const [minScore, setMinScore] = useState(searchParams.get("min_score") || "");
-  const [selectedYear, setSelectedYear] = useState(searchParams.get("year") || "");
-  const [selectedTheme, setSelectedTheme] = useState([]);
-  const [selectedDemographic, setSelectedDemographic] = useState([]);
-  const [selectedStudio, setSelectedStudio] = useState([]);
-  const [selectedAuthor, setSelectedAuthor] = useState([]);
-  const [sortBy, setSortBy] = useState(searchParams.get("sort_by") || "score_desc");
+  const [inputValue, setInputValue] = useState<string>(searchParams.get("q") || "");
+  const [searchTerm, setSearchTerm] = useState<string>(searchParams.get("q") || "");
+  const [selectedMediaType, setSelectedMediaType] = useState<MediaType>(
+    (searchParams.get("media_type") as MediaType) || "All"
+  );
+  const [selectedGenre, setSelectedGenre] = useState<SelectOption[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<StatusType>(
+    (searchParams.get("status") as StatusType) || "All"
+  );
+  const [minScore, setMinScore] = useState<string>(searchParams.get("min_score") || "");
+  const [selectedYear, setSelectedYear] = useState<string>(searchParams.get("year") || "");
+  const [selectedTheme, setSelectedTheme] = useState<SelectOption[]>([]);
+  const [selectedDemographic, setSelectedDemographic] = useState<SelectOption[]>([]);
+  const [selectedStudio, setSelectedStudio] = useState<SelectOption[]>([]);
+  const [selectedAuthor, setSelectedAuthor] = useState<SelectOption[]>([]);
+  const [sortBy, setSortBy] = useState<SortOption>(
+    (searchParams.get("sort_by") as SortOption) || "score_desc"
+  );
 
   // Filter options for dropdowns
-  const [genreOptions, setGenreOptions] = useState([]);
-  const [statusOptions, setStatusOptions] = useState([{ value: "All", label: "All" }]);
-  const [mediaTypeOptions, setMediaTypeOptions] = useState([{ value: "All", label: "All" }]);
-  const [themeOptions, setThemeOptions] = useState([]);
-  const [demographicOptions, setDemographicOptions] = useState([]);
-  const [studioOptions, setStudioOptions] = useState([]);
-  const [authorOptions, setAuthorOptions] = useState([]);
+  const [genreOptions, setGenreOptions] = useState<SelectOption[]>([]);
+  const [statusOptions, setStatusOptions] = useState<SelectOption[]>([{ value: "All", label: "All" }]);
+  const [mediaTypeOptions, setMediaTypeOptions] = useState<SelectOption[]>([{ value: "All", label: "All" }]);
+  const [themeOptions, setThemeOptions] = useState<SelectOption[]>([]);
+  const [demographicOptions, setDemographicOptions] = useState<SelectOption[]>([]);
+  const [studioOptions, setStudioOptions] = useState<SelectOption[]>([]);
+  const [authorOptions, setAuthorOptions] = useState<SelectOption[]>([]);
 
   // Refs for component lifecycle and debouncing
-  const topOfPageRef = useRef(null);
-  const debounceTimeoutRef = useRef(null);
-  const isMounted = useRef(false);
+  const topOfPageRef = useRef<HTMLDivElement>(null);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMounted = useRef<boolean>(false);
 
   // Create error handler for this component
-  const handleError = createErrorHandler("HomePage", setError);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleError = useCallback(createErrorHandler("HomePage", setError), [setError]);
 
   /**
    * Effect 1: Fetch distinct filter options on component mount
    * This runs once to populate dropdown options for all filters
    */
   useEffect(() => {
-    const fetchFilterOptions = async () => {
+    const fetchFilterOptions = async (): Promise<void> => {
       setFiltersLoading(true);
       try {
-        const operation = () => axios.get(`${API_BASE_URL}/distinct-values`);
+        const operation = () => axios.get<DistinctValuesApiResponse>(`${API_BASE_URL}/distinct-values`);
         const response = await retryOperation(operation, 3, 1000);
 
         let distinctData = response.data;
@@ -156,7 +178,7 @@ function HomePage() {
         setStudioOptions(toSelectOptions(distinctData.studios || []));
         setAuthorOptions(toSelectOptions(distinctData.authors || []));
       } catch (err) {
-        handleError(err, "loading filter options");
+        handleError(err as Error, "loading filter options");
 
         // Set minimal default options to prevent UI errors
         setMediaTypeOptions([{ value: "All", label: "All" }]);
@@ -173,7 +195,7 @@ function HomePage() {
     };
 
     fetchFilterOptions();
-  }, []);
+  }, [handleError]);
 
   /**
    * Effect 2: Synchronize component state with URL parameters
@@ -182,18 +204,18 @@ function HomePage() {
   useEffect(() => {
     if (filtersLoading) return; // Wait for filter options to load
 
-    setCurrentPage(parseInt(searchParams.get("page")) || 1);
-    setItemsPerPage(parseInt(searchParams.get("per_page")) || DEFAULT_ITEMS_PER_PAGE);
+    setCurrentPage(parseInt(searchParams.get("page") || "1"));
+    setItemsPerPage(parseInt(searchParams.get("per_page") || "") || DEFAULT_ITEMS_PER_PAGE);
 
     const query = searchParams.get("q") || "";
     setInputValue(query);
     setSearchTerm(query);
 
-    setSelectedMediaType(searchParams.get("media_type") || "All");
-    setSelectedStatus(searchParams.get("status") || "All");
+    setSelectedMediaType((searchParams.get("media_type") as MediaType) || "All");
+    setSelectedStatus((searchParams.get("status") as StatusType) || "All");
     setMinScore(searchParams.get("min_score") || "");
     setSelectedYear(searchParams.get("year") || "");
-    setSortBy(searchParams.get("sort_by") || "score_desc");
+    setSortBy((searchParams.get("sort_by") as SortOption) || "score_desc");
 
     // Set multi-select values from URL parameters
     setSelectedGenre(getMultiSelectValuesFromParam(searchParams.get("genre"), genreOptions));
@@ -203,7 +225,15 @@ function HomePage() {
     );
     setSelectedStudio(getMultiSelectValuesFromParam(searchParams.get("studio"), studioOptions));
     setSelectedAuthor(getMultiSelectValuesFromParam(searchParams.get("author"), authorOptions));
-  }, [searchParams, filtersLoading]);
+  }, [
+    searchParams,
+    filtersLoading,
+    genreOptions,
+    themeOptions,
+    demographicOptions,
+    studioOptions,
+    authorOptions,
+  ]);
 
   /**
    * Effect 3: Debounce search input changes
@@ -227,7 +257,7 @@ function HomePage() {
    * Stable function to fetch items from API with current filter state
    * Uses useCallback to prevent unnecessary re-renders and effect loops
    */
-  const fetchItems = useCallback(async () => {
+  const fetchItems = useCallback(async (): Promise<void> => {
     // Build URL parameters from current state
     const newUrlParams = new URLSearchParams();
 
@@ -279,7 +309,7 @@ function HomePage() {
     setError(null);
 
     try {
-      const operation = () => axios.get(`${API_BASE_URL}/items?${paramsString}`);
+      const operation = () => axios.get<ItemsApiResponse>(`${API_BASE_URL}/items?${paramsString}`);
       const response = await retryOperation(operation, 2, 1000);
 
       const responseData = response.data;
@@ -295,7 +325,7 @@ function HomePage() {
       setTotalPages(responseData.total_pages || 1);
       setTotalItems(responseData.total_items || 0);
     } catch (err) {
-      handleError(err, "fetching items");
+      handleError(err as Error, "fetching items");
       setItems([]);
       setTotalPages(1);
       setTotalItems(0);
@@ -317,6 +347,7 @@ function HomePage() {
     selectedAuthor,
     sortBy,
     setSearchParams,
+    handleError,
   ]);
 
   /**
@@ -337,45 +368,49 @@ function HomePage() {
   }, [fetchItems, filtersLoading]);
 
   // Event handlers for filter changes
-  const handleInputChange = (event) => setInputValue(event.target.value);
+  const handleInputChange: InputChangeHandler = (event) => setInputValue(event.target.value);
 
-  const handleSearchSubmit = (event) => {
+  const handleSearchSubmit: FormSubmitHandler = (event) => {
     event.preventDefault();
     if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
     if (searchTerm !== inputValue) setSearchTerm(inputValue);
     if (currentPage !== 1) setCurrentPage(1);
   };
 
-  const handleMultiSelectChange = (setter, selectedOptions) => {
-    setter(selectedOptions || []);
+  const handleMultiSelectChange = (
+    setter: (options: SelectOption[]) => void,
+    selectedOptions: readonly SelectOption[] | null
+  ): void => {
+    setter(selectedOptions ? [...selectedOptions] : []);
     if (currentPage !== 1) setCurrentPage(1);
   };
 
-  const handleSingleSelectChange = (setter, selectedOptionOrEvent) => {
+  const handleSingleSelectChange = (
+    setter: React.Dispatch<React.SetStateAction<any>>,
+    selectedOptionOrEvent: SelectOption | React.ChangeEvent<HTMLSelectElement>
+  ): void => {
     const value =
-      selectedOptionOrEvent?.value !== undefined
-        ? selectedOptionOrEvent.value
-        : selectedOptionOrEvent.target.value;
+      "value" in selectedOptionOrEvent ? selectedOptionOrEvent.value : selectedOptionOrEvent.target.value;
     setter(value || "All");
     if (currentPage !== 1) setCurrentPage(1);
   };
 
-  const handleSortChange = (event) => {
-    setSortBy(event.target.value);
+  const handleSortChange: SelectChangeHandler = (event) => {
+    setSortBy(event.target.value as SortOption);
     setCurrentPage(1);
   };
 
-  const handleMinScoreChange = (event) => {
+  const handleMinScoreChange: InputChangeHandler = (event) => {
     setMinScore(event.target.value);
     setCurrentPage(1);
   };
 
-  const handleYearChange = (event) => {
+  const handleYearChange: InputChangeHandler = (event) => {
     setSelectedYear(event.target.value);
     setCurrentPage(1);
   };
 
-  const handleResetFilters = () => {
+  const handleResetFilters = (): void => {
     setInputValue("");
     setSearchTerm("");
     setSelectedMediaType("All");
@@ -392,26 +427,26 @@ function HomePage() {
   };
 
   // Pagination handlers
-  const handleNextPage = () => {
+  const handleNextPage = (): void => {
     if (currentPage < totalPages) {
       setCurrentPage((prevPage) => prevPage + 1);
     }
   };
 
-  const handlePrevPage = () => {
+  const handlePrevPage = (): void => {
     if (currentPage > 1) {
       setCurrentPage((prevPage) => prevPage - 1);
     }
   };
 
-  const handleItemsPerPageChange = (event) => {
+  const handleItemsPerPageChange: SelectChangeHandler = (event) => {
     const newIPP = Number(event.target.value);
     localStorage.setItem("aniMangaItemsPerPage", newIPP.toString());
     setItemsPerPage(newIPP);
     setCurrentPage(1);
   };
 
-  const scrollToTop = () => {
+  const scrollToTop = (): void => {
     if (topOfPageRef.current) {
       topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
     }
@@ -420,7 +455,7 @@ function HomePage() {
   /**
    * Generate dynamic document title based on current filters and search
    */
-  const generateDocumentTitle = () => {
+  const generateDocumentTitle = (): string => {
     let title = "AniManga Recommender";
 
     if (searchTerm) {
@@ -447,7 +482,7 @@ function HomePage() {
   useDocumentTitle(generateDocumentTitle());
 
   // Prepare props for FilterBar component
-  const filterProps = {
+  const filterProps: FilterBarProps = {
     filters: {
       inputValue,
       selectedMediaType,
@@ -548,6 +583,7 @@ function HomePage() {
           </div>
         )}
 
+        {/* Error State */}
         {error && (
           <section className="error-state" role="alert" aria-live="assertive">
             <div className="error-content">
@@ -567,8 +603,10 @@ function HomePage() {
           </section>
         )}
 
+        {/* Content Display */}
         {!loading && !error && (
           <>
+            {/* Results Summary */}
             {Array.isArray(items) && items.length > 0 && (
               <div className="results-summary" aria-live="polite">
                 <p>
@@ -578,12 +616,14 @@ function HomePage() {
               </div>
             )}
 
+            {/* Items Grid */}
             <section className="item-list" aria-label="Search results">
               {Array.isArray(items) && items.length > 0
                 ? items.map((item) => <ItemCard key={item.uid} item={item} />)
                 : null}
             </section>
 
+            {/* Empty State */}
             {Array.isArray(items) && items.length === 0 && !loading && (
               <section className="empty-state-container" role="status" aria-live="polite">
                 <div className="empty-state-icon" aria-hidden="true">
@@ -622,6 +662,7 @@ function HomePage() {
           </>
         )}
 
+        {/* Scroll to Top Button */}
         {!loading && Array.isArray(items) && items.length > 0 && (
           <button
             onClick={scrollToTop}
@@ -635,5 +676,6 @@ function HomePage() {
       </main>
     </>
   );
-}
+};
+
 export default HomePage;
