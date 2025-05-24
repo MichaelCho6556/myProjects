@@ -56,6 +56,7 @@ export interface AnimeItem {
   type?: string;
   aired?: string;
   published?: string;
+  url?: string;
   related?: Record<string, string[]>;
   external_links?: Array<{ name: string; url: string }>;
 }

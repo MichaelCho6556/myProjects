@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
+import ItemDetailPage from "./pages/ItemDetailPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./App.css";
 
@@ -17,6 +18,7 @@ const App: React.FC = () => {
           <Navbar />
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/item/:uid" element={<ItemDetailPage />} />
           </Routes>
         </div>
       </Router>

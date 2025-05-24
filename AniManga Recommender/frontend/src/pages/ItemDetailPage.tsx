@@ -1,53 +1,72 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import ItemCard from "../components/ItemCard";
 import "./ItemDetail.css";
 import Spinner from "../components/Spinner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
+import { AnimeItem } from "../types";
 
 const API_BASE_URL = "http://localhost:5000/api";
 const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
 
-const getYouTubeID = (url) => {
+/**
+ * Extract YouTube video ID from URL
+ */
+const getYouTubeID = (url?: string): string | null => {
   if (!url) return null;
   const regExp = /^.*(youtu.be\/|v\/|u\/w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
   const match = url.match(regExp);
   return match && match[2].length === 11 ? match[2] : null;
 };
 
-const renderSimpleList = (listData, label) => {
-  if (!listData || !Array.isArray(listData) || listData.length === 0) {
-    if (typeof listData === "string" && listData.trim() !== "") {
-      return (
-        <p>
-          <strong>{label}:</strong> {listData}
-        </p>
-      );
-    }
+/**
+ * Render simple list data as a paragraph
+ */
+const renderSimpleList = (
+  listData: string[] | string | undefined,
+  label: string
+): React.JSX.Element | null => {
+  if (!listData || (Array.isArray(listData) && listData.length === 0)) {
     return null;
   }
-  const filteredList = listData.filter((item) => typeof item === "string" && item.trim() !== "");
-  if (filteredList.length === 0) return null;
-  return (
-    <p>
-      <strong>
-        {label}: {filteredList.join(", ")}
-      </strong>
-    </p>
-  );
+
+  if (typeof listData === "string" && listData.trim() !== "") {
+    return (
+      <p>
+        <strong>{label}:</strong> {listData}
+      </p>
+    );
+  }
+
+  if (Array.isArray(listData)) {
+    const filteredList = listData.filter((item) => typeof item === "string" && item.trim() !== "");
+    if (filteredList.length === 0) return null;
+    return (
+      <p>
+        <strong>{label}:</strong> {filteredList.join(", ")}
+      </p>
+    );
+  }
+
+  return null;
 };
 
-function ItemDetailPage() {
-  const { uid } = useParams(); // Get the 'uid' from the URL parameter
-  const navigate = useNavigate();
-  const [item, setItem] = useState(null);
-  const [loadingItem, setLoadingItem] = useState(true);
-  const [itemError, setItemError] = useState(null);
+/**
+ * ItemDetailPage Component - Display detailed information about an anime/manga item
+ */
+const ItemDetailPage: React.FC = () => {
+  const { uid } = useParams<{ uid: string }>();
 
-  const [recommendations, setRecommendations] = useState([]);
-  const [loadingRecs, setLoadingRecs] = useState(false);
-  const [recsError, setRecsError] = useState(null);
+  // Item state
+  const [item, setItem] = useState<AnimeItem | null>(null);
+  const [loadingItem, setLoadingItem] = useState<boolean>(true);
+  const [itemError, setItemError] = useState<string | null>(null);
+
+  // Recommendations state
+  const [recommendations, setRecommendations] = useState<AnimeItem[]>([]);
+  const [loadingRecs, setLoadingRecs] = useState<boolean>(false);
+  const [recsError, setRecsError] = useState<string | null>(null);
 
   // Dynamic document title
   useDocumentTitle(
@@ -58,9 +77,12 @@ function ItemDetailPage() {
       : "Item Details | AniManga Recommender"
   );
 
+  /**
+   * Fetch item details and recommendations
+   */
   useEffect(() => {
-    const fetchAllData = async () => {
-      if (!uid) return; // Don't fetch if uid is not available
+    const fetchAllData = async (): Promise<void> => {
+      if (!uid) return;
 
       setLoadingItem(true);
       setItemError(null);
@@ -71,11 +93,15 @@ function ItemDetailPage() {
       setRecommendations([]);
 
       window.scrollTo(0, 0);
+
       try {
         console.log(`Fetching details for UID: ${uid}`);
-        const itemResponse = await axios.get(`${API_BASE_URL}/items/${uid}`);
 
+        // Fetch item details
+        const itemResponse = await axios.get<AnimeItem>(`${API_BASE_URL}/items/${uid}`);
         let itemData = itemResponse.data;
+
+        // Handle potential string response
         if (typeof itemData === "string") {
           try {
             itemData = JSON.parse(itemData);
@@ -83,12 +109,16 @@ function ItemDetailPage() {
             throw new Error("Item detail data is not valid JSON");
           }
         }
+
         setItem(itemData);
         setLoadingItem(false);
 
-        console.log(`Fetching recommendation for UID: ${uid}`);
+        // Fetch recommendations
+        console.log(`Fetching recommendations for UID: ${uid}`);
         const recsResponse = await axios.get(`${API_BASE_URL}/recommendations/${uid}?n=10`);
         let recsData = recsResponse.data;
+
+        // Handle potential string response
         if (typeof recsData === "string") {
           try {
             recsData = JSON.parse(recsData);
@@ -100,16 +130,18 @@ function ItemDetailPage() {
         if (recsData && Array.isArray(recsData.recommendations)) {
           setRecommendations(recsData.recommendations);
         } else {
-          console.error("unexpected recommendations structure:", recsData);
+          console.error("Unexpected recommendations structure:", recsData);
           setRecommendations([]);
         }
       } catch (err) {
         console.error(`Failed to fetch item ${uid}:`, err);
+        const errorMessage = err instanceof Error ? err.message : `Failed to fetch item ${uid}.`;
+
         if (!item) {
-          setItemError(err.message || `Failed to fetch item ${uid}.`);
+          setItemError(errorMessage);
           setLoadingItem(false);
         }
-        setRecsError(err.message || `Failed to fetch recommendations for ${uid}.`);
+        setRecsError(errorMessage);
       } finally {
         setLoadingItem(false);
         setLoadingRecs(false);
@@ -117,20 +149,28 @@ function ItemDetailPage() {
     };
 
     fetchAllData();
-  }, [uid]);
+  }, [uid, item]);
 
-  //helper to render clickable tags
-  const renderClickableTags = (tagArray, filterType, label) => {
+  /**
+   * Render clickable tags that link to filtered search
+   */
+  const renderClickableTags = (
+    tagArray: string[] | undefined,
+    filterType: string,
+    label: string
+  ): React.JSX.Element | null => {
     if (!tagArray || !Array.isArray(tagArray) || tagArray.length === 0) return null;
+
     const validTags = tagArray.filter((tag) => typeof tag === "string" && tag.trim() !== "");
     if (validTags.length === 0) return null;
+
     return (
       <div className="tag-list-container">
         <strong>{label}: </strong>
         {validTags.map((tag, index) => (
           <Link
             key={`${filterType}-${tag.trim()}-${index}`}
-            to={{ pathname: "/", search: `?${filterType}=${encodeURIComponent(tag.trim())}` }}
+            to={`/?${filterType}=${encodeURIComponent(tag.trim())}`}
             className="tag-link"
           >
             {tag.trim()}
@@ -140,7 +180,8 @@ function ItemDetailPage() {
     );
   };
 
-  if (loadingItem && !item)
+  // Loading state
+  if (loadingItem && !item) {
     return (
       <main className="loading-container" role="main" aria-live="polite">
         <div className="loading-content">
@@ -149,8 +190,10 @@ function ItemDetailPage() {
         </div>
       </main>
     );
+  }
 
-  if (itemError)
+  // Error state
+  if (itemError) {
     return (
       <main className="error-container" role="main">
         <section className="error-state" role="alert">
@@ -176,8 +219,10 @@ function ItemDetailPage() {
         </section>
       </main>
     );
+  }
 
-  if (!item)
+  // No item found
+  if (!item) {
     return (
       <main role="main">
         <p className="info-message">Item not found.</p>
@@ -186,6 +231,7 @@ function ItemDetailPage() {
         </Link>
       </main>
     );
+  }
 
   const youtubeID = item.trailer_url ? getYouTubeID(item.trailer_url) : null;
 
@@ -205,12 +251,13 @@ function ItemDetailPage() {
         <div className="item-detail-content">
           <div className="item-detail-image">
             <img
-              src={item.image_url || item.main_picture || DEFAULT_PLACEHOLDER_IMAGE}
-              alt={`Cover image for ${item.title || "Unknown title"}`}
+              src={item.image_url || (item as any).main_picture || DEFAULT_PLACEHOLDER_IMAGE}
+              alt={`${item.title || "Unknown title"} cover`}
               loading="lazy"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = DEFAULT_PLACEHOLDER_IMAGE;
+              onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                const target = e.target as HTMLImageElement;
+                target.onerror = null;
+                target.src = DEFAULT_PLACEHOLDER_IMAGE;
               }}
             />
           </div>
@@ -220,7 +267,7 @@ function ItemDetailPage() {
               <strong>Type:</strong> {item.media_type ? item.media_type.toUpperCase() : "N/A"}
             </p>
             <p>
-              <strong>Score:</strong> {item.score ? parseFloat(item.score).toFixed(2) : "N/A"}
+              <strong>Score:</strong> {item.score ? parseFloat(item.score.toString()).toFixed(2) : "N/A"}
               {item.scored_by ? ` (by ${item.scored_by.toLocaleString()} users)` : ""}
             </p>
             {item.status && (
@@ -233,22 +280,22 @@ function ItemDetailPage() {
                 <strong>Rating:</strong> {item.rating.toUpperCase()}
               </p>
             )}
-            {item.media_type === "anime" && item.episodes > 0 && (
+            {item.media_type === "anime" && item.episodes && item.episodes > 0 && (
               <p>
                 <strong>Episodes:</strong> {item.episodes}
               </p>
             )}
-            {item.media_type === "anime" && item.episode_duration && (
+            {item.media_type === "anime" && item.duration && (
               <p>
-                <strong>Duration:</strong> {item.episode_duration}
+                <strong>Duration:</strong> {item.duration}
               </p>
             )}
-            {item.media_type === "manga" && item.chapters > 0 && (
+            {item.media_type === "manga" && item.chapters && item.chapters > 0 && (
               <p>
                 <strong>Chapters:</strong> {item.chapters}
               </p>
             )}
-            {item.media_type === "manga" && item.volumes > 0 && (
+            {item.media_type === "manga" && item.volumes && item.volumes > 0 && (
               <p>
                 <strong>Volumes:</strong> {item.volumes}
               </p>
@@ -295,6 +342,7 @@ function ItemDetailPage() {
         </div>
       </article>
 
+      {/* Trailer Section */}
       {youtubeID && item.media_type === "anime" && (
         <div className="trailer-section">
           <h3>Trailer</h3>
@@ -305,11 +353,12 @@ function ItemDetailPage() {
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-            ></iframe>
+            />
           </div>
         </div>
       )}
 
+      {/* Recommendations Section */}
       <div className="recommendations-section">
         <h3>Recommended for you:</h3>
         {loadingRecs && (
@@ -341,5 +390,6 @@ function ItemDetailPage() {
       </div>
     </main>
   );
-}
+};
+
 export default ItemDetailPage;
