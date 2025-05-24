@@ -41,9 +41,9 @@ body {
 }
 
 .app-container {
-  max-width: 1300px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 25px;
 }
 
 /* Item List & Cards (from previous response - unchanged) */
@@ -52,7 +52,8 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   grid-auto-rows: 1fr; /* Make all grid items the same height */
   gap: 30px;
-  padding: 30px 0;
+  padding: 30px 15px;
+  margin: 0 auto; /* Center the grid */
 }
 .item-card {
   background-color: var(--bg-dark);
@@ -312,54 +313,47 @@ button.btn-primary:disabled,
 @media (max-width: 768px) {
   .item-list {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 20px;
+    gap: 25px;
+    padding: 25px 10px; /* Maintain some horizontal padding */
   }
   .item-card img {
     height: 280px;
   }
-
-  /* Enhanced mobile controls - already handled by 992px breakpoint */
   .controls-bar .items-per-page-selector {
-    background: none;
-    border: none;
-    padding: 4px 8px;
-    min-width: auto;
+    min-width: 120px;
+    font-size: 0.85rem;
   }
 
-  /* Mobile pagination overrides */
+  /* Stack pagination controls on smaller screens */
   .pagination-controls {
+    flex-direction: column;
     gap: 12px;
   }
 
   .pagination-controls button {
-    padding: 8px 12px;
-    min-width: 70px;
-    font-size: 0.9rem;
+    width: auto;
+    min-width: 60px;
   }
 
   .pagination-info {
-    font-size: 0.8rem;
-    order: 3;
-    width: 100%;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-color);
+    order: 1; /* Put page info at top */
+    margin-bottom: 8px;
   }
 
+  /* Update filter bar for mobile */
   .filter-bar > .search-form,
   .filter-bar > .filter-group {
-    /* Includes .sort-by-selector */
-    flex-basis: 100%; /* Each filter item takes full width */
-    max-width: none; /* Remove max-width constraint if any was set */
+    margin-bottom: 15px;
   }
+
   .filter-bar > .reset-filters-btn {
-    width: auto; /* Allow it to size to content */
-    margin-top: 0; /* Reset margin-top if it's part of the full-width stack */
+    margin-left: 0; /* Reset margin-left auto */
+    width: 100%;
+    margin-top: 10px; /* Add space if it wraps to a new line */
   }
 
   .bottom-pagination-wrapper {
-    padding: 16px;
-    margin-top: 30px;
+    padding: 25px 15px; /* Consistent padding with containers */
   }
 }
 
@@ -537,6 +531,7 @@ button.btn-primary:disabled,
   .item-list {
     grid-template-columns: 1fr;
     gap: 20px;
+    padding: 20px 5px; /* Reduced padding for very small screens */
   }
   .item-card img {
     height: auto;
