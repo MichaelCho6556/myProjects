@@ -135,7 +135,7 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Controls Bar (Pagination, Items per page) (from previous response - unchanged) */
+/* Controls Bar (Pagination, Items per page) - Improved Flexible Layout */
 .controls-bar {
   display: flex;
   justify-content: space-between;
@@ -147,6 +147,47 @@ body {
   border-radius: 8px;
   margin-bottom: 25px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  min-height: 60px; /* Ensure consistent height */
+}
+
+/* Create a centered container for pagination */
+.controls-bar .pagination-controls {
+  flex: 1;
+  justify-content: center;
+  min-width: 200px; /* Minimum space for pagination */
+  max-width: none;
+}
+
+/* Style items per page selector as a normal flex item */
+.controls-bar .items-per-page-selector {
+  flex-shrink: 0;
+  background-color: var(--bg-dark);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  min-width: 140px; /* Ensure consistent width */
+  white-space: nowrap; /* Prevent text wrapping */
+}
+
+/* Responsive breakpoint for medium screens */
+@media (max-width: 992px) {
+  .controls-bar {
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+  }
+
+  .controls-bar .pagination-controls {
+    flex: none;
+    width: 100%;
+    justify-content: center;
+    order: 1; /* Pagination comes first */
+  }
+
+  .controls-bar .items-per-page-selector {
+    order: 2; /* Items per page comes second */
+    align-self: center;
+  }
 }
 
 /* Shared Button and Select Styling (from previous response - unchanged) */
@@ -210,41 +251,118 @@ button.btn-primary:disabled,
   border-color: transparent;
   color: rgba(18, 24, 35, 0.7);
 }
+
+/* Enhanced Pagination Controls */
 .pagination-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
+
 .pagination-controls button {
   background-color: var(--bg-dark);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  min-width: 80px;
+  transition: all 0.2s ease;
 }
+
 .pagination-controls button:not(:disabled):hover {
   color: var(--accent-primary);
   border-color: var(--accent-primary);
   background-color: var(--bg-overlay);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(20, 184, 166, 0.15);
 }
+
 .pagination-controls button:disabled {
   background-color: var(--bg-overlay);
   color: var(--text-muted);
   border-color: var(--border-color);
-  opacity: 0.6;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
-.pagination-controls span {
-  margin: 0 8px;
+
+.pagination-info {
   color: var(--text-secondary);
+  font-weight: 500;
   font-size: 0.9rem;
+  text-align: center;
+  padding: 0 8px;
+  line-height: 1.4;
 }
-.items-per-page-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+
+/* Bottom pagination wrapper styling */
+.bottom-pagination-wrapper {
+  margin-top: 40px;
+  margin-bottom: 30px;
+  padding: 20px;
+  background-color: var(--bg-overlay);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
-.items-per-page-selector label {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
+
+/* Enhanced pagination for mobile */
+@media (max-width: 768px) {
+  .item-list {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+  }
+  .item-card img {
+    height: 280px;
+  }
+
+  /* Enhanced mobile controls - already handled by 992px breakpoint */
+  .controls-bar .items-per-page-selector {
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    min-width: auto;
+  }
+
+  /* Mobile pagination overrides */
+  .pagination-controls {
+    gap: 12px;
+  }
+
+  .pagination-controls button {
+    padding: 8px 12px;
+    min-width: 70px;
+    font-size: 0.9rem;
+  }
+
+  .pagination-info {
+    font-size: 0.8rem;
+    order: 3;
+    width: 100%;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .filter-bar > .search-form,
+  .filter-bar > .filter-group {
+    /* Includes .sort-by-selector */
+    flex-basis: 100%; /* Each filter item takes full width */
+    max-width: none; /* Remove max-width constraint if any was set */
+  }
+  .filter-bar > .reset-filters-btn {
+    width: auto; /* Allow it to size to content */
+    margin-top: 0; /* Reset margin-top if it's part of the full-width stack */
+  }
+
+  .bottom-pagination-wrapper {
+    padding: 16px;
+    margin-top: 30px;
+  }
 }
+
 .scroll-to-top-btn {
   position: fixed;
   bottom: 25px;
@@ -415,38 +533,6 @@ button.btn-primary:disabled,
   }
 }
 
-@media (max-width: 768px) {
-  .item-list {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 20px;
-  }
-  .item-card img {
-    height: 280px;
-  }
-  .controls-bar {
-    flex-direction: column;
-    gap: 15px;
-    align-items: stretch;
-  }
-  .pagination-controls {
-    justify-content: center;
-  }
-  .items-per-page-selector {
-    justify-content: center;
-  }
-
-  .filter-bar > .search-form,
-  .filter-bar > .filter-group {
-    /* Includes .sort-by-selector */
-    flex-basis: 100%; /* Each filter item takes full width */
-    max-width: none; /* Remove max-width constraint if any was set */
-  }
-  .filter-bar > .reset-filters-btn {
-    width: auto; /* Allow it to size to content */
-    margin-top: 0; /* Reset margin-top if it's part of the full-width stack */
-  }
-}
-
 @media (max-width: 480px) {
   .item-list {
     grid-template-columns: 1fr;
@@ -463,6 +549,24 @@ button.btn-primary:disabled,
   .controls-bar {
     padding: 15px;
   }
+
+  /* Very small screen pagination adjustments */
+  .pagination-controls {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .pagination-controls button {
+    width: 100%;
+    max-width: 200px;
+  }
+
+  .pagination-info {
+    order: 2;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
   button,
   select,
   input[type="text"],
@@ -645,13 +749,6 @@ button.btn-primary:disabled,
   text-align: center;
 }
 
-/* Enhanced Pagination */
-.pagination-info {
-  color: var(--text-secondary);
-  font-weight: 500;
-  font-size: 0.9rem;
-}
-
 /* Focus improvements */
 button:focus-visible,
 select:focus-visible,
@@ -714,4 +811,15 @@ input:focus-visible {
   padding: 40px 20px;
   color: var(--text-secondary);
   font-size: 1.1rem;
+}
+
+.items-per-page-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.items-per-page-selector label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
