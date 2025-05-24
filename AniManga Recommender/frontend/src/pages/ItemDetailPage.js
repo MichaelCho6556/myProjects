@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import ItemCard from "../components/ItemCard";
 import "./ItemDetail.css";
+import Spinner from "../components/Spinner";
 
 const API_BASE_URL = "http://localhost:5000/api";
 const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
@@ -129,7 +130,27 @@ function ItemDetailPage() {
     );
   };
 
-  if (loadingItem && !item) return <p className="loading-message">Loading item details...</p>; // Show loading only if item is not yet set
+  if (loadingItem && !item)
+    return (
+      <div
+        className="loading-container"
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          flexDirection: "column",
+          padding: "50px",
+          minHeight: "300px",
+        }}
+      >
+        <Spinner size="80px" />
+        <p
+          style={{ marginLeft: "0px", marginTop: "20px", fontSize: "1.2em", color: "var(--text-secondary)" }}
+        >
+          Loading item details...
+        </p>
+      </div>
+    );
   if (itemError)
     return (
       <p style={{ color: "red" }} className="error-message">
@@ -254,7 +275,14 @@ function ItemDetailPage() {
 
       <div className="recommendations-section">
         <h3>Recommended for you:</h3>
-        {loadingRecs && <p className="loading-message">Loading recommendations...</p>}
+        {loadingRecs && (
+          <div
+            className="loading-container"
+            style={{ display: "flex", justifyContent: "center", padding: "30px" }}
+          >
+            <Spinner size="50px" />
+          </div>
+        )}
         {recsError && (
           <p style={{ color: "red" }} className="error-message">
             Error loading recommendations: {recsError}
