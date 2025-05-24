@@ -4,6 +4,7 @@ import axios from "axios";
 import ItemCard from "../components/ItemCard";
 import "./ItemDetail.css";
 import Spinner from "../components/Spinner";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 
 const API_BASE_URL = "http://localhost:5000/api";
 const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
@@ -47,6 +48,15 @@ function ItemDetailPage() {
   const [recommendations, setRecommendations] = useState([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [recsError, setRecsError] = useState(null);
+
+  // Dynamic document title
+  useDocumentTitle(
+    item
+      ? `${item.title} - ${item.media_type?.toUpperCase() || "Details"} | AniManga Recommender`
+      : loadingItem
+      ? "Loading... | AniManga Recommender"
+      : "Item Details | AniManga Recommender"
+  );
 
   useEffect(() => {
     const fetchAllData = async () => {
@@ -132,131 +142,158 @@ function ItemDetailPage() {
 
   if (loadingItem && !item)
     return (
-      <div
-        className="loading-container"
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          flexDirection: "column",
-          padding: "50px",
-          minHeight: "300px",
-        }}
-      >
-        <Spinner size="80px" />
-        <p
-          style={{ marginLeft: "0px", marginTop: "20px", fontSize: "1.2em", color: "var(--text-secondary)" }}
-        >
-          Loading item details...
-        </p>
-      </div>
+      <main className="loading-container" role="main" aria-live="polite">
+        <div className="loading-content">
+          <Spinner size="80px" />
+          <p>Loading item details...</p>
+        </div>
+      </main>
     );
+
   if (itemError)
     return (
-      <p style={{ color: "red" }} className="error-message">
-        Error loading item: {itemError}
-      </p>
+      <main className="error-container" role="main">
+        <section className="error-state" role="alert">
+          <div className="error-content">
+            <div className="error-icon" aria-hidden="true">
+              ⚠️
+            </div>
+            <h1>Unable to Load Item</h1>
+            <p>We couldn't load the details for this item. Please try again later.</p>
+            <details>
+              <summary>Technical details</summary>
+              <p>{itemError}</p>
+            </details>
+            <div className="error-actions">
+              <Link to="/" className="btn-primary">
+                ← Back to Home
+              </Link>
+              <button onClick={() => window.location.reload()} className="retry-button">
+                Try Again
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
     );
-  if (!item) return <p className="info-message">Item not found or still loading.</p>; // Fallback if item is null after loading attempt
+
+  if (!item)
+    return (
+      <main role="main">
+        <p className="info-message">Item not found.</p>
+        <Link to="/" className="btn-primary">
+          ← Back to Home
+        </Link>
+      </main>
+    );
 
   const youtubeID = item.trailer_url ? getYouTubeID(item.trailer_url) : null;
 
   return (
-    <div className="item-detail-page">
-      <Link to="/" className="back-link">
-        ← Back to list
-      </Link>
-      <h2>{item.title || "No Title"}</h2>
-      <div className="item-detail-content">
-        <div className="item-detail-image">
-          <img
-            src={item.main_picture || DEFAULT_PLACEHOLDER_IMAGE}
-            alt={item.title || "Item image"}
-            onError={(e) => {
-              e.target.onerror = null;
-              e.target.src = DEFAULT_PLACEHOLDER_IMAGE;
-            }}
-          />
+    <main className="item-detail-page" role="main">
+      <nav aria-label="Breadcrumb">
+        <Link to="/" className="back-link" aria-label="Go back to anime and manga list">
+          ← Back to list
+        </Link>
+      </nav>
+
+      <article className="item-detail-article">
+        <header>
+          <h1>{item.title || "No Title"}</h1>
+        </header>
+
+        <div className="item-detail-content">
+          <div className="item-detail-image">
+            <img
+              src={item.main_picture || DEFAULT_PLACEHOLDER_IMAGE}
+              alt={`Cover image for ${item.title || "Unknown title"}`}
+              loading="lazy"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = DEFAULT_PLACEHOLDER_IMAGE;
+              }}
+            />
+          </div>
+
+          <section className="item-detail-info" aria-label="Item details">
+            <p>
+              <strong>Type:</strong> {item.media_type ? item.media_type.toUpperCase() : "N/A"}
+            </p>
+            <p>
+              <strong>Score:</strong> {item.score ? parseFloat(item.score).toFixed(2) : "N/A"}
+              {item.scored_by ? ` (by ${item.scored_by.toLocaleString()} users)` : ""}
+            </p>
+            {item.status && (
+              <p>
+                <strong>Status:</strong> {item.status}
+              </p>
+            )}
+            {item.rating && item.rating !== "Unknown" && (
+              <p>
+                <strong>Rating:</strong> {item.rating.toUpperCase()}
+              </p>
+            )}
+            {item.media_type === "anime" && item.episodes > 0 && (
+              <p>
+                <strong>Episodes:</strong> {item.episodes}
+              </p>
+            )}
+            {item.media_type === "anime" && item.episode_duration && (
+              <p>
+                <strong>Duration:</strong> {item.episode_duration}
+              </p>
+            )}
+            {item.media_type === "manga" && item.chapters > 0 && (
+              <p>
+                <strong>Chapters:</strong> {item.chapters}
+              </p>
+            )}
+            {item.media_type === "manga" && item.volumes > 0 && (
+              <p>
+                <strong>Volumes:</strong> {item.volumes}
+              </p>
+            )}
+            {item.start_date && (
+              <p>
+                <strong>Start Date:</strong> {new Date(item.start_date).toLocaleDateString()}
+              </p>
+            )}
+            {item.end_date && (
+              <p>
+                <strong>End Date:</strong> {new Date(item.end_date).toLocaleDateString()}
+              </p>
+            )}
+            {renderClickableTags(item.genres, "genre", "Genres")}
+            {renderClickableTags(item.themes, "theme", "Themes")}
+            {renderClickableTags(item.demographics, "demographic", "Demographics")}
+            {item.media_type === "anime" && renderClickableTags(item.studios, "studio", "Studios")}
+            {renderSimpleList(item.producers, "Producers")}
+            {renderSimpleList(item.licensors, "Licensors")}
+            {item.media_type === "manga" && renderClickableTags(item.authors, "author", "Authors")}
+            {renderSimpleList(item.serializations, "Serializations")}
+            {renderSimpleList(item.title_synonyms, "Other Titles")}
+            {item.synopsis && (
+              <div className="synopsis-section">
+                <strong>Synopsis:</strong>
+                <p>{item.synopsis}</p>
+              </div>
+            )}
+            {item.background && (
+              <div className="background-section">
+                <strong>Background:</strong>
+                <p>{item.background}</p>
+              </div>
+            )}
+            {item.url && (
+              <p>
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="external-link">
+                  View on MyAnimeList
+                </a>
+              </p>
+            )}
+          </section>
         </div>
-        <div className="item-detail-info">
-          <p>
-            <strong>Type:</strong> {item.media_type ? item.media_type.toUpperCase() : "N/A"}
-          </p>
-          <p>
-            <strong>Score:</strong> {item.score ? parseFloat(item.score).toFixed(2) : "N/A"}
-            {item.scored_by ? ` (by ${item.scored_by.toLocaleString()} users)` : ""}
-          </p>
-          {item.status && (
-            <p>
-              <strong>Status:</strong> {item.status}
-            </p>
-          )}
-          {item.rating && item.rating !== "Unknown" && (
-            <p>
-              <strong>Rating:</strong> {item.rating.toUpperCase()}
-            </p>
-          )}{" "}
-          {/* e.g., PG-13, R */}
-          {item.media_type === "anime" && item.episodes > 0 && (
-            <p>
-              <strong>Episodes:</strong> {item.episodes}
-            </p>
-          )}
-          {item.media_type === "anime" && item.episode_duration && (
-            <p>
-              <strong>Duration:</strong> {item.episode_duration}
-            </p>
-          )}
-          {item.media_type === "manga" && item.chapters > 0 && (
-            <p>
-              <strong>Chapters:</strong> {item.chapters}
-            </p>
-          )}
-          {item.media_type === "manga" && item.volumes > 0 && (
-            <p>
-              <strong>Volumes:</strong> {item.volumes}
-            </p>
-          )}
-          {item.start_date && (
-            <p>
-              <strong>Start Date:</strong> {new Date(item.start_date).toLocaleDateString()}
-            </p>
-          )}
-          {item.end_date && (
-            <p>
-              <strong>End Date:</strong> {new Date(item.end_date).toLocaleDateString()}
-            </p>
-          )}
-          {renderClickableTags(item.genres, "genre", "Genres")}
-          {renderClickableTags(item.themes, "theme", "Themes")}
-          {renderClickableTags(item.demographics, "demographic", "Demographics")}
-          {item.media_type === "anime" && renderClickableTags(item.studios, "studio", "Studios")}
-          {renderSimpleList(item.producers, "Producers")}
-          {renderSimpleList(item.licensors, "Licensors")}
-          {item.media_type === "manga" && renderClickableTags(item.authors, "author", "Authors")}
-          {renderSimpleList(item.serializations, "Serializations")}
-          {renderSimpleList(item.title_synonyms, "Other Titles")}
-          {item.synopsis && (
-            <div className="synopsis-section">
-              <strong>Synopsis:</strong>
-              <p>{item.synopsis}</p>
-            </div>
-          )}
-          {item.background && (
-            <div className="background-section">
-              <strong>Background:</strong>
-              <p>{item.background}</p>
-            </div>
-          )}
-          {item.url && (
-            <p>
-              <a href={item.url} target="_blank" rel="noopener noreferrer" className="external-link">
-                View on MyAnimeList
-              </a>
-            </p>
-          )}
-        </div>
-      </div>
+      </article>
 
       {youtubeID && item.media_type === "anime" && (
         <div className="trailer-section">
@@ -302,7 +339,7 @@ function ItemDetailPage() {
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }
 export default ItemDetailPage;

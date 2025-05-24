@@ -2,11 +2,13 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 import ItemCard from "../components/ItemCard";
+import SkeletonCard from "../components/SkeletonCard";
 import "../App.css";
 import Select from "react-select";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 import Spinner from "../components/Spinner";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 
 const API_BASE_URL = "http://localhost:5000/api";
 
@@ -369,11 +371,16 @@ function HomePage() {
   };
 
   const PaginationControls = React.memo(() => (
-    <div className="pagination-controls">
-      <button onClick={handlePrevPage} disabled={currentPage <= 1 || loading}>
+    <div className="pagination-controls" role="navigation" aria-label="Pagination">
+      <button
+        onClick={handlePrevPage}
+        disabled={currentPage <= 1 || loading}
+        aria-label={`Go to previous page (currently on page ${currentPage})`}
+        title="Previous page"
+      >
         Previous
       </button>
-      <span>
+      <span className="pagination-info" aria-live="polite">
         Page {currentPage} of {totalPages}
         {items.length > 0 &&
           !loading &&
@@ -382,7 +389,12 @@ function HomePage() {
             totalItems
           )} of ${totalItems})`}
       </span>
-      <button onClick={handleNextPage} disabled={currentPage >= totalPages || loading}>
+      <button
+        onClick={handleNextPage}
+        disabled={currentPage >= totalPages || loading}
+        aria-label={`Go to next page (currently on page ${currentPage} of ${totalPages})`}
+        title="Next page"
+      >
         Next
       </button>
     </div>
@@ -432,230 +444,358 @@ function HomePage() {
     }),
   };
 
+  // Generate dynamic document title based on current state
+  const generateDocumentTitle = () => {
+    let title = "AniManga Recommender";
+
+    if (searchTerm) {
+      title = `"${searchTerm}" - Search Results | ${title}`;
+    } else if (
+      selectedMediaType !== "All" ||
+      selectedGenre.length > 0 ||
+      selectedTheme.length > 0 ||
+      selectedDemographic.length > 0 ||
+      selectedStudio.length > 0 ||
+      selectedAuthor.length > 0 ||
+      selectedStatus !== "All" ||
+      minScore ||
+      selectedYear
+    ) {
+      title = `Filtered Results | ${title}`;
+    } else {
+      title = `Discover Anime & Manga | ${title}`;
+    }
+
+    return title;
+  };
+
+  useDocumentTitle(generateDocumentTitle());
+
   return (
     <>
       <div ref={topOfPageRef}></div>
-      <div className="filter-bar">
-        <form onSubmit={handleSearchSubmit} className="search-form">
-          <input type="text" placeholder="Search titles..." value={inputValue} onChange={handleInputChange} />
-          <button type="submit">Search</button>
-        </form>
+      <main>
+        <section className="filter-bar" role="search" aria-label="Filter and search options">
+          <form onSubmit={handleSearchSubmit} className="search-form">
+            <label htmlFor="search-input" className="sr-only">
+              Search anime and manga titles
+            </label>
+            <input
+              id="search-input"
+              type="text"
+              placeholder="Search titles..."
+              value={inputValue}
+              onChange={handleInputChange}
+              aria-describedby="search-help"
+            />
+            <span id="search-help" className="sr-only">
+              Enter keywords to search for anime and manga titles
+            </span>
+            <button type="submit" aria-label="Submit search">
+              Search
+            </button>
+          </form>
 
-        <div className="filter-group sort-by-selector">
-          <label htmlFor="sortBy">Sort by:</label>
-          <select id="sortBy" value={sortBy} onChange={handleSortChange} disabled={loading || filtersLoading}>
-            <option value="score_desc">Score (High to Low)</option>
-            <option value="score_asc">Score (Low to High)</option>
-            <option value="popularity_desc">Popularity</option>
-            <option value="title_asc">Title (A-Z)</option>
-            <option value="title_desc">Title (Z-A)</option>
-            <option value="start_date_desc">Release Date (Newest)</option>
-            <option value="start_date_asc">Release Date (Oldest)</option>
-          </select>
-        </div>
-
-        <div className="filter-group">
-          <label htmlFor="mediaTypeFilter">Type:</label>
-          <Select
-            id="mediaTypeFilter"
-            name="mediaTypeFilter"
-            options={mediaTypeOptions}
-            value={mediaTypeOptions.find((opt) => opt.value === selectedMediaType) || mediaTypeOptions[0]}
-            onChange={(selectedOption) => handleSingleSelectChange(setSelectedMediaType, selectedOption)}
-            styles={customSelectStyles}
-            isDisabled={filtersLoading || loading}
-            classNamePrefix="react-select"
-          />
-        </div>
-
-        {/* MODIFIED: Genre Filter with react-select */}
-        <div className="filter-group">
-          <label htmlFor="genreFilter">Genres:</label>
-          <Select
-            isMulti
-            closeMenuOnSelect={false}
-            id="genreFilter"
-            name="genreFilter"
-            options={genreOptions}
-            value={selectedGenre}
-            onChange={(selectedOptions) => handleMultiSelectChange(setSelectedGenre, selectedOptions)}
-            placeholder="Select genres..."
-            styles={customSelectStyles}
-            isDisabled={filtersLoading || loading}
-            classNamePrefix="react-select"
-          />
-        </div>
-
-        {/* MODIFIED: Theme Filter with react-select */}
-        <div className="filter-group">
-          <label htmlFor="themeFilter">Themes:</label>
-          <Select
-            isMulti
-            closeMenuOnSelect={false}
-            id="themeFilter"
-            name="themeFilter"
-            options={themeOptions}
-            value={selectedTheme}
-            onChange={(selectedOptions) => handleMultiSelectChange(setSelectedTheme, selectedOptions)}
-            placeholder="Select themes..."
-            styles={customSelectStyles}
-            isDisabled={filtersLoading || loading}
-            classNamePrefix="react-select"
-          />
-        </div>
-        {/* You can convert Demographic, Studio, Author similarly if desired */}
-        <div className="filter-group">
-          <label htmlFor="demographicFilter">Demographics:</label>
-          <Select
-            isMulti
-            closeMenuOnSelect={false}
-            id="demographicFilter"
-            options={demographicOptions}
-            value={selectedDemographic}
-            onChange={(opts) => handleMultiSelectChange(setSelectedDemographic, opts)}
-            placeholder="Select demographics..."
-            styles={customSelectStyles}
-            isDisabled={filtersLoading || loading}
-            classNamePrefix="react-select"
-          />
-        </div>
-        <div className="filter-group">
-          <label htmlFor="studioFilter">Studios:</label>
-          <Select
-            isMulti
-            closeMenuOnSelect={false}
-            id="studioFilter"
-            options={studioOptions}
-            value={selectedStudio}
-            onChange={(opts) => handleMultiSelectChange(setSelectedStudio, opts)}
-            placeholder="Select studios..."
-            styles={customSelectStyles}
-            isDisabled={filtersLoading || loading}
-            classNamePrefix="react-select"
-          />
-        </div>
-        <div className="filter-group">
-          <label htmlFor="authorFilter">Authors:</label>
-          <Select
-            isMulti
-            closeMenuOnSelect={false}
-            id="authorFilter"
-            options={authorOptions}
-            value={selectedAuthor}
-            onChange={(opts) => handleMultiSelectChange(setSelectedAuthor, opts)}
-            placeholder="Select authors..."
-            styles={customSelectStyles}
-            isDisabled={filtersLoading || loading}
-            classNamePrefix="react-select"
-          />
-        </div>
-
-        <div className="filter-group">
-          <label htmlFor="statusFilter">Status:</label>
-          <Select
-            id="statusFilter"
-            name="statusFilter"
-            options={statusOptions}
-            value={statusOptions.find((opt) => opt.value === selectedStatus) || statusOptions[0]}
-            onChange={(selectedOption) => handleSingleSelectChange(setSelectedStatus, selectedOption)}
-            styles={customSelectStyles}
-            isDisabled={filtersLoading || loading}
-            classNamePrefix="react-select"
-          />
-        </div>
-        <div className="filter-group">
-          <label htmlFor="minScoreFilter">Min Score (0-10):</label>
-          <input
-            type="number"
-            id="minScoreFilter"
-            min="0"
-            max="10"
-            step="0.1"
-            value={minScore}
-            onChange={handleMinScoreChange}
-            placeholder="e.g., 7.5"
-          />
-        </div>
-        <div className="filter-group">
-          <label htmlFor="yearFilter">Year:</label>
-          <input
-            type="number"
-            id="yearFilter"
-            min="1900"
-            max={new Date().getFullYear() + 5}
-            value={selectedYear}
-            onChange={handleYearChange}
-            placeholder="e.g., 2024"
-          />
-        </div>
-        <button onClick={handleResetFilters} className="reset-filters-btn" disabled={loading}>
-          Reset Filters
-        </button>
-      </div>
-
-      <div className="controls-bar">
-        <PaginationControls />
-        <div className="items-per-page-selector">
-          <label htmlFor="itemsPerPage">Items per page: </label>
-          <select
-            id="itemsPerPage"
-            value={itemsPerPage}
-            onChange={handleItemsPerPageChange}
-            disabled={loading}
-          >
-            {[10, 20, 25, 30, 50].map((num) => (
-              <option key={num} value={num}>
-                {num}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {loading && (
-        <div
-          className="loading-container"
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            flexDirection: "column",
-            padding: "50px",
-          }}
-        >
-          <Spinner size="70px" />
-          {/* Optionally add text: <p style={{marginTop: '15px', color: 'var(--text-secondary)'}}>Loading items...</p> */}
-        </div>
-      )}
-      {error && <p style={{ color: "red" }}>Error: {error}</p>}
-
-      {!loading && !error && (
-        <>
-          <div className="item-list">
-            {Array.isArray(items) && items.length > 0
-              ? items.map((item) => <ItemCard key={item.uid} item={item} />)
-              : null}
+          <div className="filter-group sort-by-selector">
+            <label htmlFor="sortBy">Sort by:</label>
+            <select
+              id="sortBy"
+              value={sortBy}
+              onChange={handleSortChange}
+              disabled={loading || filtersLoading}
+            >
+              <option value="score_desc">Score (High to Low)</option>
+              <option value="score_asc">Score (Low to High)</option>
+              <option value="popularity_desc">Popularity</option>
+              <option value="title_asc">Title (A-Z)</option>
+              <option value="title_desc">Title (Z-A)</option>
+              <option value="start_date_desc">Release Date (Newest)</option>
+              <option value="start_date_asc">Release Date (Oldest)</option>
+            </select>
+            {filtersLoading && (
+              <span className="filter-loading-indicator" aria-hidden="true">
+                ⟳
+              </span>
+            )}
           </div>
-          {Array.isArray(items) && items.length === 0 && !loading && (
-            <div className="empty-state-container">
-              <div className="empty-state-icon">😕</div>
-              <p className="empty-state-message">No items found for the current filters.</p>
-              <p className="empty-state-suggestion">Try adjusting your search or filter criteria.</p>
+
+          <div className="filter-group">
+            <label htmlFor="mediaTypeFilter">Type:</label>
+            <Select
+              id="mediaTypeFilter"
+              name="mediaTypeFilter"
+              options={mediaTypeOptions}
+              value={mediaTypeOptions.find((opt) => opt.value === selectedMediaType) || mediaTypeOptions[0]}
+              onChange={(selectedOption) => handleSingleSelectChange(setSelectedMediaType, selectedOption)}
+              styles={customSelectStyles}
+              isDisabled={filtersLoading || loading}
+              classNamePrefix="react-select"
+              aria-label="Filter by media type"
+            />
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="genreFilter">Genres:</label>
+            <Select
+              isMulti
+              closeMenuOnSelect={false}
+              id="genreFilter"
+              name="genreFilter"
+              options={genreOptions}
+              value={selectedGenre}
+              onChange={(selectedOptions) => handleMultiSelectChange(setSelectedGenre, selectedOptions)}
+              placeholder="Select genres..."
+              styles={customSelectStyles}
+              isDisabled={filtersLoading || loading}
+              classNamePrefix="react-select"
+              aria-label="Filter by genres"
+            />
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="themeFilter">Themes:</label>
+            <Select
+              isMulti
+              closeMenuOnSelect={false}
+              id="themeFilter"
+              name="themeFilter"
+              options={themeOptions}
+              value={selectedTheme}
+              onChange={(selectedOptions) => handleMultiSelectChange(setSelectedTheme, selectedOptions)}
+              placeholder="Select themes..."
+              styles={customSelectStyles}
+              isDisabled={filtersLoading || loading}
+              classNamePrefix="react-select"
+              aria-label="Filter by themes"
+            />
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="demographicFilter">Demographics:</label>
+            <Select
+              isMulti
+              closeMenuOnSelect={false}
+              id="demographicFilter"
+              options={demographicOptions}
+              value={selectedDemographic}
+              onChange={(opts) => handleMultiSelectChange(setSelectedDemographic, opts)}
+              placeholder="Select demographics..."
+              styles={customSelectStyles}
+              isDisabled={filtersLoading || loading}
+              classNamePrefix="react-select"
+              aria-label="Filter by demographics"
+            />
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="studioFilter">Studios:</label>
+            <Select
+              isMulti
+              closeMenuOnSelect={false}
+              id="studioFilter"
+              options={studioOptions}
+              value={selectedStudio}
+              onChange={(opts) => handleMultiSelectChange(setSelectedStudio, opts)}
+              placeholder="Select studios..."
+              styles={customSelectStyles}
+              isDisabled={filtersLoading || loading}
+              classNamePrefix="react-select"
+              aria-label="Filter by studios"
+            />
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="authorFilter">Authors:</label>
+            <Select
+              isMulti
+              closeMenuOnSelect={false}
+              id="authorFilter"
+              options={authorOptions}
+              value={selectedAuthor}
+              onChange={(opts) => handleMultiSelectChange(setSelectedAuthor, opts)}
+              placeholder="Select authors..."
+              styles={customSelectStyles}
+              isDisabled={filtersLoading || loading}
+              classNamePrefix="react-select"
+              aria-label="Filter by authors"
+            />
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="statusFilter">Status:</label>
+            <Select
+              id="statusFilter"
+              name="statusFilter"
+              options={statusOptions}
+              value={statusOptions.find((opt) => opt.value === selectedStatus) || statusOptions[0]}
+              onChange={(selectedOption) => handleSingleSelectChange(setSelectedStatus, selectedOption)}
+              styles={customSelectStyles}
+              isDisabled={filtersLoading || loading}
+              classNamePrefix="react-select"
+              aria-label="Filter by status"
+            />
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="minScoreFilter">Min Score (0-10):</label>
+            <input
+              type="number"
+              id="minScoreFilter"
+              min="0"
+              max="10"
+              step="0.1"
+              value={minScore}
+              onChange={handleMinScoreChange}
+              placeholder="e.g., 7.5"
+              aria-describedby="score-help"
+            />
+            <span id="score-help" className="sr-only">
+              Enter minimum score from 0 to 10
+            </span>
+          </div>
+
+          <div className="filter-group">
+            <label htmlFor="yearFilter">Year:</label>
+            <input
+              type="number"
+              id="yearFilter"
+              min="1900"
+              max={new Date().getFullYear() + 5}
+              value={selectedYear}
+              onChange={handleYearChange}
+              placeholder="e.g., 2024"
+              aria-describedby="year-help"
+            />
+            <span id="year-help" className="sr-only">
+              Enter release year
+            </span>
+          </div>
+
+          <button
+            onClick={handleResetFilters}
+            className="reset-filters-btn"
+            disabled={loading}
+            aria-label="Reset all filters to default values"
+          >
+            Reset Filters
+          </button>
+        </section>
+
+        <div className="controls-bar">
+          <PaginationControls />
+          <div className="items-per-page-selector">
+            <label htmlFor="itemsPerPage">Items per page: </label>
+            <select
+              id="itemsPerPage"
+              value={itemsPerPage}
+              onChange={handleItemsPerPageChange}
+              disabled={loading}
+              aria-label="Select number of items to display per page"
+            >
+              {[10, 20, 25, 30, 50].map((num) => (
+                <option key={num} value={num}>
+                  {num}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Loading States */}
+        {loading && items.length === 0 && (
+          <section className="skeleton-container" aria-label="Loading content">
+            <div className="item-list">
+              {Array.from({ length: itemsPerPage }).map((_, index) => (
+                <SkeletonCard key={`skeleton-${index}`} />
+              ))}
             </div>
-          )}
-          {Array.isArray(items) && items.length > 0 && totalPages > 1 && (
-            <div className="bottom-pagination-wrapper" style={{ marginTop: "20px" }}>
-              {" "}
-              <PaginationControls />{" "}
+          </section>
+        )}
+
+        {loading && items.length > 0 && (
+          <div className="partial-loading-overlay" aria-live="polite">
+            <div className="partial-loading-content">
+              <Spinner size="40px" />
+              <span>Updating results...</span>
             </div>
-          )}
-        </>
-      )}
-      {!loading && Array.isArray(items) && items.length > 0 && (
-        <button onClick={scrollToTop} className="scroll-to-top-btn">
-          ↑
-        </button>
-      )}
+          </div>
+        )}
+
+        {error && (
+          <section className="error-state" role="alert" aria-live="assertive">
+            <div className="error-content">
+              <div className="error-icon" aria-hidden="true">
+                ⚠️
+              </div>
+              <h2>Oops! Something went wrong</h2>
+              <p>We couldn't fetch the data right now. Please check your connection and try again.</p>
+              <details>
+                <summary>Technical details</summary>
+                <p>{error}</p>
+              </details>
+              <button onClick={() => window.location.reload()} className="retry-button">
+                Try Again
+              </button>
+            </div>
+          </section>
+        )}
+
+        {!loading && !error && (
+          <>
+            {Array.isArray(items) && items.length > 0 && (
+              <div className="results-summary" aria-live="polite">
+                <p>
+                  Showing {(currentPage - 1) * itemsPerPage + 1}-
+                  {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} results
+                </p>
+              </div>
+            )}
+
+            <section className="item-list" aria-label="Search results">
+              {Array.isArray(items) && items.length > 0
+                ? items.map((item) => <ItemCard key={item.uid} item={item} />)
+                : null}
+            </section>
+
+            {Array.isArray(items) && items.length === 0 && !loading && (
+              <section className="empty-state-container" role="status" aria-live="polite">
+                <div className="empty-state-icon" aria-hidden="true">
+                  😕
+                </div>
+                <h2 className="empty-state-message">No items found</h2>
+                <p className="empty-state-suggestion">
+                  Try adjusting your search terms or filter criteria. You can also{" "}
+                  <button
+                    onClick={handleResetFilters}
+                    className="inline-reset-button"
+                    aria-label="Reset all filters"
+                  >
+                    reset all filters
+                  </button>{" "}
+                  to see all available content.
+                </p>
+              </section>
+            )}
+
+            {Array.isArray(items) && items.length > 0 && totalPages > 1 && (
+              <nav className="bottom-pagination-wrapper" aria-label="Page navigation">
+                <PaginationControls />
+              </nav>
+            )}
+          </>
+        )}
+
+        {!loading && Array.isArray(items) && items.length > 0 && (
+          <button
+            onClick={scrollToTop}
+            className="scroll-to-top-btn"
+            aria-label="Scroll to top of page"
+            title="Back to top"
+          >
+            ↑
+          </button>
+        )}
+      </main>
     </>
   );
 }
