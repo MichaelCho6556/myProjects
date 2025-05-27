@@ -565,7 +565,7 @@ const HomePage: React.FC = () => {
 
         {/* Loading States */}
         {loading && items.length === 0 && (
-          <section className="skeleton-container" aria-label="Loading content">
+          <section className="skeleton-container" aria-label="Loading content" data-testid="skeleton-loading">
             <div className="item-list">
               {Array.from({ length: itemsPerPage }).map((_, index) => (
                 <SkeletonCard key={`skeleton-${index}`} />
@@ -575,7 +575,7 @@ const HomePage: React.FC = () => {
         )}
 
         {loading && items.length > 0 && (
-          <div className="partial-loading-overlay" aria-live="polite">
+          <div className="partial-loading-overlay" aria-live="polite" data-testid="loading-overlay">
             <div className="partial-loading-content">
               <Spinner size="40px" />
               <span>Updating results...</span>

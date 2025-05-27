@@ -16,8 +16,16 @@ const useDocumentTitle: UseDocumentTitle = (title: string): void => {
     // Store the original title to restore if needed
     const originalTitle = document.title;
 
+    // Create the full title
+    let fullTitle: string;
+    if (!title || title.trim() === "" || title === "null" || title === "undefined") {
+      fullTitle = "AniManga Recommender";
+    } else {
+      fullTitle = `${title} | AniManga Recommender`;
+    }
+
     // Update the document title
-    document.title = title;
+    document.title = fullTitle;
 
     // Cleanup function to restore original title if component unmounts
     return () => {

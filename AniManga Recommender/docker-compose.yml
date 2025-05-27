@@ -10,9 +10,19 @@ services:
         environment:
             - FLASK_ENV=development
             - PYTHONUNBUFFERED=1
+        networks:
+            - app-network
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
 
     frontend:
-        build: ./frontend
+        build:
+            context: ./frontend
+            target: development  # Use development stage by default
         ports:
             - "3000:3000"
         volumes:
@@ -20,5 +30,18 @@ services:
             - /app/node_modules
         environment:
             - REACT_APP_API_BASE_URL=http://localhost:5000
+            - CHOKIDAR_USEPOLLING=true  # For hot reload in Docker
         depends_on:
             - backend
+        networks:
+            - app-network
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:3000"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
+
+networks:
+    app-network:
+        driver: bridge
