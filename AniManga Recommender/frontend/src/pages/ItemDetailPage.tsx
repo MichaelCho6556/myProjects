@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import ItemCard from "../components/ItemCard";
 import "./ItemDetail.css";
@@ -53,184 +53,131 @@ const renderSimpleList = (
 };
 
 /**
- * ItemDetailPage Component - Display detailed information about an anime/manga item
+ * ItemDetailPage Component
+ * Displays detailed information about an anime or manga item
  */
 const ItemDetailPage: React.FC = () => {
-  const { uid } = useParams<{ uid: string }>();
-
-  // Item state
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [item, setItem] = useState<AnimeItem | null>(null);
-  const [loadingItem, setLoadingItem] = useState<boolean>(true);
-  const [itemError, setItemError] = useState<string | null>(null);
-
-  // Recommendations state
   const [recommendations, setRecommendations] = useState<AnimeItem[]>([]);
-  const [loadingRecs, setLoadingRecs] = useState<boolean>(false);
-  const [recsError, setRecsError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Dynamic document title
   useDocumentTitle(
     item
       ? `${item.title} - ${item.media_type?.toUpperCase() || "Details"} | AniManga Recommender`
-      : loadingItem
+      : loading
       ? "Loading... | AniManga Recommender"
       : "Item Details | AniManga Recommender"
   );
 
-  /**
-   * Fetch item details and recommendations
-   */
   useEffect(() => {
-    const fetchAllData = async (): Promise<void> => {
-      if (!uid) return;
+    if (!id) {
+      setError("Invalid item ID");
+      setLoading(false);
+      return;
+    }
 
-      setLoadingItem(true);
-      setItemError(null);
-      setItem(null);
+    loadItemData();
+  }, [id]);
 
-      setLoadingRecs(true);
-      setRecsError(null);
-      setRecommendations([]);
+  const loadItemData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-      window.scrollTo(0, 0);
+      // Load item details
+      const itemResponse = await axios.get<AnimeItem>(`${API_BASE_URL}/items/${id}`);
+      setItem(itemResponse.data);
 
+      // Load recommendations (don't fail if this fails)
       try {
-        console.log(`Fetching details for UID: ${uid}`);
-
-        // Fetch item details
-        const itemResponse = await axios.get<AnimeItem>(`${API_BASE_URL}/items/${uid}`);
-        let itemData = itemResponse.data;
-
-        // Handle potential string response
-        if (typeof itemData === "string") {
-          try {
-            itemData = JSON.parse(itemData);
-          } catch (e) {
-            throw new Error("Item detail data is not valid JSON");
-          }
-        }
-
-        setItem(itemData);
-        setLoadingItem(false);
-
-        // Fetch recommendations
-        console.log(`Fetching recommendations for UID: ${uid}`);
-        const recsResponse = await axios.get(`${API_BASE_URL}/recommendations/${uid}?n=10`);
-        let recsData = recsResponse.data;
-
-        // Handle potential string response
-        if (typeof recsData === "string") {
-          try {
-            recsData = JSON.parse(recsData);
-          } catch (e) {
-            throw new Error("Recommendations data is not valid JSON");
-          }
-        }
-
-        if (recsData && Array.isArray(recsData.recommendations)) {
-          setRecommendations(recsData.recommendations);
-        } else {
-          console.error("Unexpected recommendations structure:", recsData);
-          setRecommendations([]);
-        }
-      } catch (err) {
-        console.error(`Failed to fetch item ${uid}:`, err);
-        const errorMessage = err instanceof Error ? err.message : `Failed to fetch item ${uid}.`;
-
-        // If item is still null, it means the item fetch failed
-        if (item === null) {
-          setItemError(errorMessage);
-          setLoadingItem(false);
-        }
-        setRecsError(errorMessage);
-      } finally {
-        setLoadingItem(false);
-        setLoadingRecs(false);
+        const recommendationsResponse = await axios.get<AnimeItem[]>(
+          `${API_BASE_URL}/recommendations/${id}?n=10`
+        );
+        setRecommendations(recommendationsResponse.data || []);
+      } catch (recError) {
+        console.warn("Failed to load recommendations:", recError);
+        setRecommendations([]);
       }
-    };
-
-    fetchAllData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid]);
-
-  /**
-   * Render clickable tags that link to filtered search
-   */
-  const renderClickableTags = (
-    tagArray: string[] | undefined,
-    filterType: string,
-    label: string
-  ): React.JSX.Element | null => {
-    if (!tagArray || !Array.isArray(tagArray) || tagArray.length === 0) return null;
-
-    const validTags = tagArray.filter((tag) => typeof tag === "string" && tag.trim() !== "");
-    if (validTags.length === 0) return null;
-
-    return (
-      <div className="tag-list-container">
-        <strong>{label}: </strong>
-        {validTags.map((tag, index) => (
-          <Link
-            key={`${filterType}-${tag.trim()}-${index}`}
-            to={`/?${filterType}=${encodeURIComponent(tag.trim())}`}
-            className="tag-link"
-          >
-            {tag.trim()}
-          </Link>
-        ))}
-      </div>
-    );
+    } catch (err: any) {
+      console.error("Error loading item:", err);
+      if (err.response?.status === 404) {
+        setError("Item not found");
+      } else {
+        setError("Failed to load item details");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Loading state
-  if (loadingItem && !item) {
+  const handleGenreClick = (genre: string) => {
+    navigate(`/search?genre=${encodeURIComponent(genre)}`);
+  };
+
+  const handleMediaTypeClick = (mediaType: string) => {
+    navigate(`/search?media_type=${encodeURIComponent(mediaType)}`);
+  };
+
+  const handleBackClick = () => {
+    navigate(-1);
+  };
+
+  const formatScore = (score: number | null, scoredBy: number | null) => {
+    if (score === null || score === undefined) return "N/A";
+    return score.toFixed(2);
+  };
+
+  const formatScoredBy = (scoredBy: number | null) => {
+    if (scoredBy === null || scoredBy === undefined) return "";
+    return scoredBy.toLocaleString();
+  };
+
+  const getDefaultImage = () => DEFAULT_PLACEHOLDER_IMAGE;
+
+  if (loading) {
     return (
       <main className="loading-container" role="main" aria-live="polite">
         <div className="loading-content">
-          <Spinner size="80px" />
+          <Spinner aria-label="Loading" />
           <p>Loading item details...</p>
         </div>
       </main>
     );
   }
 
-  // Error state
-  if (itemError) {
+  if (error) {
     return (
       <main className="error-container" role="main">
-        <section className="error-state" role="alert">
-          <div className="error-content">
-            <div className="error-icon" aria-hidden="true">
-              ⚠️
-            </div>
-            <h1>Unable to Load Item</h1>
-            <p>We couldn't load the details for this item. Please try again later.</p>
-            <details>
-              <summary>Technical details</summary>
-              <p>{itemError}</p>
-            </details>
-            <div className="error-actions">
-              <Link to="/" className="btn-primary">
-                ← Back to Home
-              </Link>
-              <button onClick={() => window.location.reload()} className="retry-button">
-                Try Again
-              </button>
-            </div>
+        <div className="error-content">
+          <h1>Error</h1>
+          <p>{error}</p>
+          <div className="error-actions">
+            <button onClick={handleBackClick} className="btn btn-secondary">
+              Back
+            </button>
+            <Link to="/" className="btn btn-primary">
+              Go to Homepage
+            </Link>
           </div>
-        </section>
+        </div>
       </main>
     );
   }
 
-  // No item found
   if (!item) {
     return (
-      <main role="main">
-        <p className="info-message">Item not found.</p>
-        <Link to="/" className="btn-primary">
-          ← Back to Home
-        </Link>
+      <main className="error-container" role="main">
+        <div className="error-content">
+          <h1>Item not found</h1>
+          <p>The requested item could not be found.</p>
+          <Link to="/" className="btn btn-primary">
+            Go to Homepage
+          </Link>
+        </div>
       </main>
     );
   }
@@ -239,110 +186,189 @@ const ItemDetailPage: React.FC = () => {
 
   return (
     <main className="item-detail-page" role="main">
-      <nav aria-label="Breadcrumb">
-        <Link to="/" className="back-link" aria-label="Go back to anime and manga list">
-          ← Back to list
-        </Link>
-      </nav>
+      <div className="item-detail-container">
+        {/* Back button */}
+        <button
+          onClick={handleBackClick}
+          className="btn btn-back"
+          aria-label="Go back to previous page"
+          type="button"
+        >
+          Back
+        </button>
 
-      <article className="item-detail-article">
-        <header>
-          <h1>{item.title || "No Title"}</h1>
-        </header>
-
+        {/* Item details */}
         <div className="item-detail-content">
-          <div className="item-detail-image">
+          <div className="item-image-section">
             <img
-              src={item.image_url || (item as any).main_picture || DEFAULT_PLACEHOLDER_IMAGE}
-              alt={`${item.title || "Unknown title"} cover`}
-              loading="lazy"
-              onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                const target = e.target as HTMLImageElement;
-                target.onerror = null;
-                target.src = DEFAULT_PLACEHOLDER_IMAGE;
-              }}
+              src={item.image_url || getDefaultImage()}
+              alt={`Cover for ${item.title}`}
+              className="item-image"
             />
           </div>
 
-          <section className="item-detail-info" aria-label="Item details">
-            <p>
-              <strong>Type:</strong> {item.media_type ? item.media_type.toUpperCase() : "N/A"}
-            </p>
-            <p>
-              <strong>Score:</strong> {item.score ? parseFloat(item.score.toString()).toFixed(2) : "N/A"}
-              {item.scored_by ? ` (by ${item.scored_by.toLocaleString()} users)` : ""}
-            </p>
-            {item.status && (
-              <p>
-                <strong>Status:</strong> {item.status}
-              </p>
+          <div className="item-info-section">
+            <h1>{item.title}</h1>
+
+            {/* Media type */}
+            <button
+              onClick={() => handleMediaTypeClick(item.media_type)}
+              className="btn btn-tag media-type-tag"
+              type="button"
+            >
+              {item.media_type.toUpperCase()}
+            </button>
+
+            {/* Score */}
+            <div className="score-section" aria-label={`Score: ${formatScore(item.score, item.scored_by)}`}>
+              <span className="score">{formatScore(item.score, item.scored_by)}</span>
+              {item.scored_by && <span className="scored-by">({formatScoredBy(item.scored_by)})</span>}
+            </div>
+
+            {/* Status */}
+            <div className="status-section" aria-label={`Status: ${item.status}`}>
+              <span className="label">Status:</span>
+              <span className="value">{item.status}</span>
+            </div>
+
+            {/* Episodes/Chapters */}
+            {item.media_type === "anime" && item.episodes && (
+              <div className="episodes-section">
+                <span className="label">Episodes:</span>
+                <span className="value">{item.episodes}</span>
+              </div>
             )}
-            {item.rating && item.rating !== "Unknown" && (
-              <p>
-                <strong>Rating:</strong> {item.rating.toUpperCase()}
-              </p>
+
+            {item.media_type === "manga" && (
+              <>
+                {item.chapters && (
+                  <div className="chapters-section">
+                    <span className="label">Chapters:</span>
+                    <span className="value">{item.chapters}</span>
+                  </div>
+                )}
+                {item.volumes && (
+                  <div className="volumes-section">
+                    <span className="label">Volumes:</span>
+                    <span className="value">{item.volumes}</span>
+                  </div>
+                )}
+              </>
             )}
-            {item.media_type === "anime" && item.episodes && item.episodes > 0 && (
-              <p>
-                <strong>Episodes:</strong> {item.episodes}
-              </p>
-            )}
-            {item.media_type === "anime" && item.duration && (
-              <p>
-                <strong>Duration:</strong> {item.duration}
-              </p>
-            )}
-            {item.media_type === "manga" && item.chapters && item.chapters > 0 && (
-              <p>
-                <strong>Chapters:</strong> {item.chapters}
-              </p>
-            )}
-            {item.media_type === "manga" && item.volumes && item.volumes > 0 && (
-              <p>
-                <strong>Volumes:</strong> {item.volumes}
-              </p>
-            )}
+
+            {/* Start date */}
             {item.start_date && (
-              <p>
-                <strong>Start Date:</strong> {new Date(item.start_date).toLocaleDateString()}
-              </p>
-            )}
-            {item.end_date && (
-              <p>
-                <strong>End Date:</strong> {new Date(item.end_date).toLocaleDateString()}
-              </p>
-            )}
-            {renderClickableTags(item.genres, "genre", "Genres")}
-            {renderClickableTags(item.themes, "theme", "Themes")}
-            {renderClickableTags(item.demographics, "demographic", "Demographics")}
-            {item.media_type === "anime" && renderClickableTags(item.studios, "studio", "Studios")}
-            {renderSimpleList(item.producers, "Producers")}
-            {renderSimpleList(item.licensors, "Licensors")}
-            {item.media_type === "manga" && renderClickableTags(item.authors, "author", "Authors")}
-            {renderSimpleList(item.serializations, "Serializations")}
-            {renderSimpleList(item.title_synonyms, "Other Titles")}
-            {item.synopsis && (
-              <div className="synopsis-section">
-                <strong>Synopsis:</strong>
-                <p>{item.synopsis}</p>
+              <div className="start-date-section">
+                <span className="label">Start Date:</span>
+                <span className="value">{item.start_date}</span>
               </div>
             )}
-            {item.background && (
-              <div className="background-section">
-                <strong>Background:</strong>
-                <p>{item.background}</p>
+
+            {/* Rating */}
+            {item.rating && (
+              <div className="rating-section">
+                <span className="label">Rating:</span>
+                <span className="value">{item.rating}</span>
               </div>
             )}
-            {item.url && (
-              <p>
-                <a href={item.url} target="_blank" rel="noopener noreferrer" className="external-link">
-                  View on MyAnimeList
-                </a>
-              </p>
+
+            {/* Synopsis */}
+            <div className="synopsis-section">
+              <h2>Synopsis</h2>
+              <p>{item.synopsis || "No synopsis available."}</p>
+            </div>
+
+            {/* Genres */}
+            <div className="genres-section">
+              <h3>Genres</h3>
+              {item.genres && item.genres.length > 0 ? (
+                <div className="tags-container">
+                  {item.genres.map((genre, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleGenreClick(genre)}
+                      className="btn btn-tag genre-tag"
+                      type="button"
+                    >
+                      {genre}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p>No genres available.</p>
+              )}
+            </div>
+
+            {/* Themes */}
+            {item.themes && item.themes.length > 0 && (
+              <div className="themes-section">
+                <h3>Themes</h3>
+                <div className="tags-container">
+                  {item.themes.map((theme, index) => (
+                    <span key={index} className="tag theme-tag">
+                      {theme}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
-          </section>
+
+            {/* Demographics */}
+            {item.demographics && item.demographics.length > 0 && (
+              <div className="demographics-section">
+                <h3>Demographics</h3>
+                <div className="tags-container">
+                  {item.demographics.map((demographic, index) => (
+                    <span key={index} className="tag demographic-tag">
+                      {demographic}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Producers */}
+            {item.producers && item.producers.length > 0 && (
+              <div className="producers-section">
+                <h3>Producers</h3>
+                <div className="list-container">
+                  {item.producers.map((producer, index) => (
+                    <span key={index} className="list-item">
+                      {producer}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Studios */}
+            {item.studios && item.studios.length > 0 && (
+              <div className="studios-section">
+                <h3>Studios</h3>
+                <div className="list-container">
+                  {item.studios.map((studio, index) => (
+                    <span key={index} className="list-item">
+                      {studio}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </article>
+
+        {/* Recommendations section */}
+        {recommendations.length > 0 && (
+          <div className="recommendations-section">
+            <h2>Recommendations</h2>
+            <div className="recommendations-grid">
+              {recommendations.map((recItem) => (
+                <ItemCard key={recItem.uid} item={recItem} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Trailer Section */}
       {youtubeID && item.media_type === "anime" && (
@@ -359,37 +385,6 @@ const ItemDetailPage: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Recommendations Section */}
-      <div className="recommendations-section">
-        <h3>Recommended for you:</h3>
-        {loadingRecs && (
-          <div
-            className="loading-container"
-            style={{ display: "flex", justifyContent: "center", padding: "30px" }}
-          >
-            <Spinner size="50px" />
-          </div>
-        )}
-        {recsError && (
-          <p style={{ color: "red" }} className="error-message">
-            Error loading recommendations: {recsError}
-          </p>
-        )}
-        {!loadingRecs && !recsError && recommendations.length > 0 && (
-          <div className="item-list recommendations-list">
-            {recommendations.map((recItem) => (
-              <ItemCard key={recItem.uid} item={recItem} />
-            ))}
-          </div>
-        )}
-        {!loadingRecs && !recsError && recommendations.length === 0 && (
-          <div className="empty-state-container">
-            <div className="empty-state-icon">🤷</div>
-            <p className="empty-state-message">No specific recommendations found for this item.</p>
-          </div>
-        )}
-      </div>
     </main>
   );
 };

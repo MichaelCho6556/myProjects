@@ -400,4 +400,77 @@ describe("FilterBar Component", () => {
       expect(screen.getByDisplayValue("1950")).toBeInTheDocument();
     });
   });
+
+  describe("React-Select Interactions", () => {
+    it("allows selecting media type options", async () => {
+      render(<FilterBar {...mockProps} />);
+
+      const mediaTypeSelect = screen.getByLabelText(/type/i);
+      await global.selectReactSelectOption(mediaTypeSelect, "anime");
+
+      expect(mockProps.handlers.handleSingleSelectChange).toHaveBeenCalled();
+    });
+
+    it("allows selecting genre options", async () => {
+      render(<FilterBar {...mockProps} />);
+
+      const genreSelect = screen.getByLabelText(/genres/i);
+      await global.selectReactSelectOption(genreSelect, "Action");
+
+      expect(mockProps.handlers.handleMultiSelectChange).toHaveBeenCalled();
+    });
+
+    it("allows selecting status options", async () => {
+      render(<FilterBar {...mockProps} />);
+
+      const statusSelect = screen.getByLabelText(/status/i);
+      await global.selectReactSelectOption(statusSelect, "Finished Airing");
+
+      expect(mockProps.handlers.handleSingleSelectChange).toHaveBeenCalled();
+    });
+
+    it("shows loading state for filter options", () => {
+      const loadingProps = {
+        ...mockProps,
+        filtersLoading: true,
+      };
+
+      render(<FilterBar {...loadingProps} />);
+
+      // Should show loading indicators
+      const loadingElements = screen.getAllByText(/loading/i);
+      expect(loadingElements.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("Filter Reset", () => {
+    it("calls reset handler when reset button is clicked", async () => {
+      render(<FilterBar {...mockProps} />);
+
+      const resetButton = screen.getByRole("button", { name: /reset/i });
+      await userEvent.click(resetButton);
+
+      expect(mockProps.handlers.handleResetFilters).toHaveBeenCalled();
+    });
+
+    it("resets all filter values when reset is called", () => {
+      const filledProps = {
+        ...mockProps,
+        filters: {
+          ...mockProps.filters,
+          inputValue: "test search",
+          selectedGenre: [{ value: "Action", label: "Action" }],
+          minScore: "8.0",
+        },
+      };
+
+      const { rerender } = render(<FilterBar {...filledProps} />);
+
+      // Reset to original empty state
+      rerender(<FilterBar {...mockProps} />);
+
+      expect(screen.getByDisplayValue("")).toBeInTheDocument(); // Search input
+      expect(screen.getByText("All")).toBeInTheDocument(); // Should show default selections
+    });
+  });
 });

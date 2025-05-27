@@ -1,84 +1,98 @@
-import React from "react";
-import { PaginationControlsProps } from "../types";
-
 /**
- * PaginationControls Component - Handles pagination navigation with full TypeScript support
- *
- * @param props - Component props with complete type safety
- * @returns JSX.Element
+ * PaginationControls Component
+ * Handles pagination navigation with accessibility support
  */
+
+import React from "react";
+
+interface PaginationControlsProps {
+  currentPage: number;
+  totalPages: number;
+  itemsPerPage: number;
+  totalItems: number;
+  onPrevPage: () => void;
+  onNextPage: () => void;
+  loading?: boolean;
+  items?: any[];
+  className?: string;
+}
+
 const PaginationControls: React.FC<PaginationControlsProps> = ({
   currentPage,
   totalPages,
-  totalItems,
   itemsPerPage,
-  items = [],
-  loading = false,
+  totalItems,
   onPrevPage,
   onNextPage,
+  loading = false,
+  items,
   className = "",
 }) => {
-  /**
-   * Calculate the range of items being displayed
-   * @returns Object containing start and end item numbers
-   */
-  const getDisplayRange = (): { start: number; end: number } => {
-    const start = (currentPage - 1) * itemsPerPage + 1;
-    const end = Math.min(currentPage * itemsPerPage, totalItems);
-    return { start, end };
+  const isFirstPage = currentPage <= 1;
+  const isLastPage = currentPage >= totalPages;
+  const isDisabled = loading || !onPrevPage || !onNextPage;
+
+  // Calculate item range for display
+  const getItemRange = () => {
+    if (!items || items.length === 0 || loading) return null;
+
+    const startItem = (currentPage - 1) * itemsPerPage + 1;
+    const endItem = Math.min(startItem + items.length - 1, totalItems);
+
+    return `Showing ${startItem}-${endItem} of ${totalItems}`;
   };
 
-  const { start, end } = getDisplayRange();
-  const hasItems = items.length > 0;
-  const canGoPrevious = currentPage > 1 && !loading;
-  const canGoNext = currentPage < totalPages && !loading;
-
-  /**
-   * Handle previous page navigation with validation
-   */
-  const handlePrevious = (): void => {
-    if (canGoPrevious && onPrevPage) {
+  const handlePrevClick = () => {
+    if (!isDisabled && !isFirstPage && onPrevPage) {
       onPrevPage();
     }
   };
 
-  /**
-   * Handle next page navigation with validation
-   */
-  const handleNext = (): void => {
-    if (canGoNext && onNextPage) {
+  const handleNextClick = () => {
+    if (!isDisabled && !isLastPage && onNextPage) {
       onNextPage();
     }
   };
 
   return (
-    <div className={`pagination-controls ${className}`} role="navigation" aria-label="Pagination">
-      <button
-        onClick={handlePrevious}
-        disabled={!canGoPrevious}
-        aria-label={`Go to previous page (currently on page ${currentPage})`}
-        title="Previous page"
-        type="button"
-      >
-        Previous
-      </button>
+    <nav
+      className={`pagination-controls ${className}`.trim()}
+      role="navigation"
+      aria-label="Pagination navigation"
+    >
+      <div className="pagination-info">
+        <span aria-live="polite">
+          Page {currentPage} of {totalPages}
+        </span>
 
-      <span className="pagination-info" aria-live="polite">
-        Page {currentPage} of {totalPages}
-        {hasItems && !loading && ` (Showing ${start}-${end} of ${totalItems})`}
-      </span>
+        {getItemRange() && <span className="item-range">{getItemRange()}</span>}
+      </div>
 
-      <button
-        onClick={handleNext}
-        disabled={!canGoNext}
-        aria-label={`Go to next page (currently on page ${currentPage} of ${totalPages})`}
-        title="Next page"
-        type="button"
-      >
-        Next
-      </button>
-    </div>
+      <div className="pagination-buttons">
+        <button
+          type="button"
+          onClick={handlePrevClick}
+          disabled={isDisabled || isFirstPage}
+          className="btn btn-pagination btn-prev"
+          aria-label="Go to previous page"
+          title="Previous page"
+        >
+          Previous
+        </button>
+
+        <button
+          type="button"
+          onClick={handleNextClick}
+          disabled={isDisabled || isLastPage}
+          className="btn btn-pagination btn-next"
+          aria-label="Go to next page"
+          title="Next page"
+        >
+          Next
+        </button>
+      </div>
+    </nav>
   );
 };
 
-export default React.memo(PaginationControls);
+export default PaginationControls;

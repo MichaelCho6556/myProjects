@@ -1,43 +1,42 @@
-import React from "react";
-import Skeleton, { SkeletonTheme } from "react-loading-skeleton";
-import "react-loading-skeleton/dist/skeleton.css";
-import { SkeletonCardProps } from "../types";
-
 /**
- * SkeletonCard Component - Loading placeholder for ItemCard with TypeScript support
- *
- * @param props - Component props with type safety
- * @returns JSX.Element
+ * SkeletonCard Component
+ * Loading skeleton placeholder for ItemCard components
  */
+
+import React from "react";
+
+interface SkeletonCardProps {
+  className?: string;
+}
+
 const SkeletonCard: React.FC<SkeletonCardProps> = ({ className = "" }) => {
   return (
-    <SkeletonTheme baseColor="var(--bg-overlay)" highlightColor="var(--bg-light)">
-      <div className={`item-card ${className}`}>
-        <Skeleton height={300} width="100%" style={{ aspectRatio: "3/4" }} />
-        <div className="item-card-content-wrapper">
-          <h3>
-            <Skeleton height={24} width="80%" />
-          </h3>
-          <div className="details">
-            <p>
-              <Skeleton height={16} width="60%" style={{ marginBottom: "8px" }} />
-            </p>
-            <p>
-              <Skeleton height={16} width="40%" style={{ marginBottom: "8px" }} />
-            </p>
-          </div>
-          <div className="genres-themes-wrapper">
-            <p className="genres">
-              <Skeleton height={16} width="90%" style={{ marginBottom: "6px" }} />
-            </p>
-            <p className="themes">
-              <Skeleton height={16} width="70%" style={{ marginBottom: "6px" }} />
-            </p>
-          </div>
-        </div>
+    <div
+      className={`skeleton-card card-layout skeleton-pulse ${className}`.trim()}
+      data-testid="skeleton-card"
+      role="status"
+      aria-label="Loading"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      {/* Image placeholder */}
+      <div className="skeleton-image skeleton-shimmer aspect-ratio-preserved" data-testid="skeleton-image" />
+
+      {/* Content area */}
+      <div className="skeleton-content content-spacing" data-testid="skeleton-content">
+        {/* Title placeholder */}
+        <div className="skeleton-title skeleton-shimmer" data-testid="skeleton-title" />
+
+        {/* Text lines */}
+        <div className="skeleton-text skeleton-shimmer" data-testid="skeleton-text-1" />
+        <div className="skeleton-text skeleton-shimmer" data-testid="skeleton-text-2" />
+        <div className="skeleton-text skeleton-shimmer" data-testid="skeleton-text-3" />
+
+        {/* Score placeholder */}
+        <div className="skeleton-score skeleton-shimmer" data-testid="skeleton-score" />
       </div>
-    </SkeletonTheme>
+    </div>
   );
 };
 
-export default React.memo(SkeletonCard);
+export default SkeletonCard;
