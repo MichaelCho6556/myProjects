@@ -14,6 +14,7 @@ import {
   mockItemsResponse,
   mockItemDetailResponse,
   mockRecommendationsResponse,
+  setMockResponse,
 } from "../../__mocks__/axios";
 
 const App = () => (
@@ -42,7 +43,7 @@ describe("Navigation Flow Tests", () => {
 
       // Mock HomePage API calls
       mockItemsResponse([testItem], 1);
-      mockAxios.setMockResponse("/api/distinct-values", {
+      setMockResponse("/api/distinct-values", {
         data: createMockDistinctValues(),
         status: 200,
         statusText: "OK",
@@ -91,7 +92,7 @@ describe("Navigation Flow Tests", () => {
 
       // Mock HomePage API calls for return navigation
       mockItemsResponse([testItem], 1);
-      mockAxios.setMockResponse("/api/distinct-values", {
+      setMockResponse("/api/distinct-values", {
         data: createMockDistinctValues(),
         status: 200,
         statusText: "OK",
@@ -133,7 +134,7 @@ describe("Navigation Flow Tests", () => {
       mockItemDetailResponse(testItem);
       mockRecommendationsResponse([]);
       mockItemsResponse([testItem], 1);
-      mockAxios.setMockResponse("/api/distinct-values", {
+      setMockResponse("/api/distinct-values", {
         data: createMockDistinctValues(),
         status: 200,
         statusText: "OK",
@@ -164,7 +165,7 @@ describe("Navigation Flow Tests", () => {
 
       // Setup mocks
       mockItemsResponse([testItem], 1);
-      mockAxios.setMockResponse("/api/distinct-values", {
+      setMockResponse("/api/distinct-values", {
         data: createMockDistinctValues(),
         status: 200,
         statusText: "OK",
@@ -223,7 +224,7 @@ describe("Navigation Flow Tests", () => {
 
     it("loads homepage with filters when accessing filtered URL directly", async () => {
       mockItemsResponse([], 1);
-      mockAxios.setMockResponse("/api/distinct-values", {
+      setMockResponse("/api/distinct-values", {
         data: createMockDistinctValues(),
         status: 200,
         statusText: "OK",

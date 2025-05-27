@@ -148,11 +148,61 @@ global.createMockDistinctValues = (overrides = {}) => ({
   ...overrides,
 });
 
+// React-Select test utilities
+global.findReactSelectOption = async (container: HTMLElement, optionText: string) => {
+  const { findByText } = await import("@testing-library/react");
+
+  // Look for the option in React-Select menu that might be rendered in a portal
+  const option = await findByText(container, optionText);
+  return option;
+};
+
+global.openReactSelectDropdown = async (selectElement: HTMLElement) => {
+  const userEvent = (await import("@testing-library/user-event")).default;
+
+  // Click the select control to open dropdown
+  const control = selectElement.querySelector(".react-select__control") || selectElement;
+  await userEvent.click(control);
+
+  // Wait a bit for the dropdown to open
+  await new Promise((resolve) => setTimeout(resolve, 200));
+};
+
+global.selectReactSelectOption = async (selectElement: HTMLElement, optionText: string) => {
+  const userEvent = (await import("@testing-library/user-event")).default;
+  const { screen, waitFor } = await import("@testing-library/react");
+
+  // Open dropdown first
+  await global.openReactSelectDropdown(selectElement);
+
+  try {
+    // Try to find the option with more specific timeout
+    const option = await waitFor(() => screen.getByText(optionText), { timeout: 2000 });
+    await userEvent.click(option);
+  } catch (error) {
+    // If exact text not found, try with regex
+    try {
+      const optionRegex = new RegExp(optionText, "i");
+      const option = await waitFor(() => screen.getByText(optionRegex), { timeout: 1000 });
+      await userEvent.click(option);
+    } catch (fallbackError) {
+      console.warn(`Could not find option "${optionText}" in React-Select dropdown`);
+      throw error;
+    }
+  }
+
+  // Wait for selection to complete
+  await new Promise((resolve) => setTimeout(resolve, 100));
+};
+
 // Add TypeScript declaration for global utilities
 declare global {
   function createMockItem(overrides?: any): any;
   function createMockApiResponse(items?: any[], overrides?: any): any;
   function createMockDistinctValues(overrides?: any): any;
+  function findReactSelectOption(container: HTMLElement, optionText: string): Promise<HTMLElement>;
+  function openReactSelectDropdown(selectElement: HTMLElement): Promise<void>;
+  function selectReactSelectOption(selectElement: HTMLElement, optionText: string): Promise<void>;
 
   namespace jest {
     interface Matchers<R> {
@@ -169,6 +219,11 @@ Object.defineProperty(window, "location", {
     search: "",
     hash: "",
     href: "http://localhost/",
+    origin: "http://localhost",
+    hostname: "localhost",
+    port: "",
+    protocol: "http:",
+    host: "localhost",
   },
 });
 
@@ -181,5 +236,7 @@ Object.defineProperty(window, "history", {
     go: jest.fn(),
     pushState: jest.fn(),
     replaceState: jest.fn(),
+    length: 1,
+    state: null,
   },
 });
