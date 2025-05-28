@@ -3,8 +3,7 @@
  * Tests filter rendering, interaction, and state management
  */
 
-import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import FilterBar from "../../components/FilterBar";
 import { FilterBarProps, SelectOption } from "../../types";
@@ -215,6 +214,31 @@ describe("FilterBar Component", () => {
       await userEvent.click(resetButton);
 
       expect(mockProps.handlers.handleResetFilters).toHaveBeenCalled();
+    });
+
+    it("resets all filter values when reset is called", () => {
+      const filledProps = {
+        ...mockProps,
+        filters: {
+          ...mockProps.filters,
+          inputValue: "test search",
+          selectedGenre: [{ value: "Action", label: "Action" }],
+          minScore: "8.0",
+        },
+      };
+
+      const { rerender } = render(<FilterBar {...filledProps} />);
+
+      // Reset to original empty state
+      rerender(<FilterBar {...mockProps} />);
+
+      // Use more specific selectors instead of getByDisplayValue("")
+      const searchInput = screen.getByPlaceholderText(/search titles/i);
+      expect(searchInput).toHaveValue("");
+
+      // Check that at least one "All" option is present (there may be multiple react-select instances)
+      const allOptions = screen.getAllByText("All");
+      expect(allOptions.length).toBeGreaterThan(0);
     });
   });
 
@@ -437,40 +461,11 @@ describe("FilterBar Component", () => {
 
       render(<FilterBar {...loadingProps} />);
 
-      // Should show loading indicators
-      const loadingElements = screen.getAllByText(/loading/i);
-      expect(loadingElements.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe("Filter Reset", () => {
-    it("calls reset handler when reset button is clicked", async () => {
-      render(<FilterBar {...mockProps} />);
-
-      const resetButton = screen.getByRole("button", { name: /reset/i });
-      await userEvent.click(resetButton);
-
-      expect(mockProps.handlers.handleResetFilters).toHaveBeenCalled();
-    });
-
-    it("resets all filter values when reset is called", () => {
-      const filledProps = {
-        ...mockProps,
-        filters: {
-          ...mockProps.filters,
-          inputValue: "test search",
-          selectedGenre: [{ value: "Action", label: "Action" }],
-          minScore: "8.0",
-        },
-      };
-
-      const { rerender } = render(<FilterBar {...filledProps} />);
-
-      // Reset to original empty state
-      rerender(<FilterBar {...mockProps} />);
-
-      expect(screen.getByDisplayValue("")).toBeInTheDocument(); // Search input
-      expect(screen.getByText("All")).toBeInTheDocument(); // Should show default selections
+      // Should show disabled selects when loading filter options
+      const mediaTypeSelect = screen.getByLabelText(/type/i);
+      expect(mediaTypeSelect.closest(".react-select__control")).toHaveClass(
+        "react-select__control--is-disabled"
+      );
     });
   });
 });

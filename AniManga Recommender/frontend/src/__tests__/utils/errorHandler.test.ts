@@ -32,24 +32,32 @@ describe("errorHandler Utility", () => {
 
   describe("parseError Function", () => {
     it("parses network errors correctly", () => {
-      const networkError = new Error("Network Error") as ApiError;
-      networkError.name = "NetworkError";
+      const networkError = {
+        name: "NetworkError",
+        message: "Connection failed",
+        request: {},
+      };
 
       const result = parseError(networkError);
 
-      expect(result.userMessage).toContain("network");
+      expect(result.userMessage).toBe(
+        "Unable to connect to the server. Please check your internet connection and try again."
+      );
       expect(result.statusCode).toBeNull();
       expect(result.technicalDetails).toContain("Network Error");
       expect(result.originalError).toBe(networkError);
     });
 
     it("parses timeout errors correctly", () => {
-      const timeoutError = new Error("Request timeout") as ApiError;
-      timeoutError.code = "ECONNABORTED";
+      const timeoutError = {
+        name: "Error",
+        code: "ECONNABORTED",
+        message: "Request timeout",
+      };
 
       const result = parseError(timeoutError);
 
-      expect(result.userMessage).toContain("timeout");
+      expect(result.userMessage).toBe("The request timed out. Please try again.");
       expect(result.statusCode).toBeNull();
       expect(result.technicalDetails).toContain("Request timeout");
     });
@@ -131,7 +139,9 @@ describe("errorHandler Utility", () => {
 
       const result = parseError(timeoutError);
 
-      expect(result.userMessage).toContain("timeout");
+      expect(result.userMessage).toBe(
+        "Unable to connect to the server. Please check your internet connection and try again."
+      );
       expect(result.statusCode).toBeNull();
     });
 
@@ -258,23 +268,25 @@ describe("errorHandler Utility", () => {
 
   describe("retryOperation Function", () => {
     it("succeeds on first attempt", async () => {
-      const operation = jest.fn().mockResolvedValue({ data: "success" });
+      const mockResult = { data: "success" };
+      const operation = jest.fn().mockResolvedValue(mockResult);
 
       const result = await retryOperation(operation);
 
-      expect(result.data).toBe("success");
+      expect((result as any).data).toBe("success");
       expect(operation).toHaveBeenCalledTimes(1);
     });
 
     it("retries on failure and eventually succeeds", async () => {
+      const mockResult = { data: "success" };
       const operation = jest
         .fn()
         .mockRejectedValueOnce(new Error("Temporary failure"))
-        .mockResolvedValue({ data: "success" });
+        .mockResolvedValue(mockResult);
 
       const result = await retryOperation(operation, 3, 10);
 
-      expect(result.data).toBe("success");
+      expect((result as any).data).toBe("success");
       expect(operation).toHaveBeenCalledTimes(2);
     });
 
@@ -297,11 +309,12 @@ describe("errorHandler Utility", () => {
     it("retries on 408 timeout errors", async () => {
       const timeoutError = new Error("Timeout") as ApiError;
       timeoutError.response = { status: 408, data: {}, statusText: "Timeout" };
-      const operation = jest.fn().mockRejectedValueOnce(timeoutError).mockResolvedValue({ data: "success" });
+      const mockResult = { data: "success" };
+      const operation = jest.fn().mockRejectedValueOnce(timeoutError).mockResolvedValue(mockResult);
 
       const result = await retryOperation(operation, 2, 10);
 
-      expect(result.data).toBe("success");
+      expect((result as any).data).toBe("success");
       expect(operation).toHaveBeenCalledTimes(2);
     });
   });

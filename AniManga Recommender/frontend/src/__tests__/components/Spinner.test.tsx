@@ -3,7 +3,6 @@
  * Tests rendering, props handling, styling, accessibility, and edge cases
  */
 
-import React from "react";
 import { render, screen } from "@testing-library/react";
 import Spinner from "../../components/Spinner";
 

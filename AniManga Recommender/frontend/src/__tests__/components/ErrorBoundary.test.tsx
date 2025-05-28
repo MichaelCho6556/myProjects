@@ -188,7 +188,7 @@ describe("ErrorBoundary Component", () => {
       );
 
       expect(screen.getByRole("alert")).toBeInTheDocument();
-      expect(screen.getByLabelText(/error occurred/i)).toBeInTheDocument();
+      expect(screen.getByLabelText("Something went wrong")).toBeInTheDocument();
     });
 
     it("has proper heading hierarchy", () => {

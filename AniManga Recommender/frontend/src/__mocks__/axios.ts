@@ -3,11 +3,25 @@
  * Manual mock for axios that Jest will use automatically
  */
 
+// Store responses for specific endpoints
+const endpointResponses = new Map<string, any>();
+
 // Simple mock that mimics axios behavior
 const mockAxios = {
   get: jest.fn((url: string): Promise<any> => {
-    // Handle different API endpoints
-    if (url.includes("/api/distinct-values")) {
+    // Normalize URL by removing base URL if present
+    const normalizedUrl = url.replace(/^https?:\/\/[^\/]+/, "").replace(/^\/api/, "");
+
+    // Check for specific endpoint responses first
+    const endpoints = Array.from(endpointResponses.entries());
+    for (const [endpoint, response] of endpoints) {
+      if (normalizedUrl.includes(endpoint)) {
+        return Promise.resolve(response);
+      }
+    }
+
+    // Handle different API endpoints with normalized URLs
+    if (normalizedUrl.includes("/distinct-values")) {
       return Promise.resolve({
         data: {
           media_types: ["anime", "manga"],
@@ -23,16 +37,59 @@ const mockAxios = {
       });
     }
 
-    // Default response for /api/items
-    return Promise.resolve({
-      data: {
-        items: [],
-        total_items: 0,
-        total_pages: 1,
-        current_page: 1,
-        items_per_page: 30,
-      },
-    });
+    // Handle item detail endpoints (e.g., /items/123)
+    if (normalizedUrl.match(/\/items\/[^\/\?]+(?:\?|$)/)) {
+      return Promise.resolve({
+        data: {
+          uid: "test-uid-1",
+          title: "Test Anime Title",
+          media_type: "anime",
+          genres: ["Action", "Adventure"],
+          themes: ["School", "Military"],
+          demographics: ["Shounen"],
+          score: 8.5,
+          scored_by: 10000,
+          status: "Finished Airing",
+          episodes: 24,
+          start_date: "2020-01-01",
+          rating: "PG-13",
+          popularity: 100,
+          members: 50000,
+          favorites: 5000,
+          synopsis: "Test synopsis for anime",
+          producers: ["Test Producer"],
+          licensors: ["Test Licensor"],
+          studios: ["Test Studio"],
+          authors: [],
+          serializations: [],
+          image_url: "https://example.com/test-image.jpg",
+          title_synonyms: ["Alt Title"],
+        },
+      });
+    }
+
+    // Handle recommendations endpoints
+    if (normalizedUrl.includes("/recommendations/")) {
+      return Promise.resolve({
+        data: [],
+      });
+    }
+
+    // Default response for /items endpoint (list)
+    if (normalizedUrl.includes("/items") && !normalizedUrl.match(/\/items\/[^\/\?]+/)) {
+      return Promise.resolve({
+        data: {
+          items: [],
+          total_items: 0,
+          total_pages: 1,
+          current_page: 1,
+          items_per_page: 30,
+        },
+      });
+    }
+
+    // Fallback for unknown endpoints
+    return Promise.resolve({ data: {} });
   }),
   post: jest.fn((): Promise<any> => Promise.resolve({ data: {} })),
   put: jest.fn((): Promise<any> => Promise.resolve({ data: {} })),
@@ -68,6 +125,20 @@ const mockAxios = {
     })),
   },
   isCancel: jest.fn(() => false),
+  isAxiosError: jest.fn((error: any) => {
+    // Always return a boolean
+    if (!error) return false;
+
+    // Check if it has axios-like properties
+    const hasAxiosProperties = !!(
+      error.response ||
+      error.request ||
+      error.config ||
+      error.isAxiosError === true
+    );
+
+    return hasAxiosProperties;
+  }),
 
   // Methods that tests expect
   mockResolvedValue: jest.fn(function (this: any, value: any) {
@@ -101,9 +172,21 @@ const mockAxios = {
     this.post.mockReset();
     this.put.mockReset();
     this.delete.mockReset();
+    endpointResponses.clear();
+
     // Re-apply default implementation after reset
     this.get.mockImplementation((url: string): Promise<any> => {
-      if (url.includes("/api/distinct-values")) {
+      const normalizedUrl = url.replace(/^https?:\/\/[^\/]+/, "").replace(/^\/api/, "");
+
+      // Check for specific endpoint responses first
+      const endpoints = Array.from(endpointResponses.entries());
+      for (const [endpoint, response] of endpoints) {
+        if (normalizedUrl.includes(endpoint)) {
+          return Promise.resolve(response);
+        }
+      }
+
+      if (normalizedUrl.includes("/distinct-values")) {
         return Promise.resolve({
           data: {
             media_types: ["anime", "manga"],
@@ -118,15 +201,20 @@ const mockAxios = {
           },
         });
       }
-      return Promise.resolve({
-        data: {
-          items: [],
-          total_items: 0,
-          total_pages: 1,
-          current_page: 1,
-          items_per_page: 30,
-        },
-      });
+
+      if (normalizedUrl.includes("/items") && !normalizedUrl.match(/\/items\/[^\/\?]+/)) {
+        return Promise.resolve({
+          data: {
+            items: [],
+            total_items: 0,
+            total_pages: 1,
+            current_page: 1,
+            items_per_page: 30,
+          },
+        });
+      }
+
+      return Promise.resolve({ data: {} });
     });
     return this;
   }),
@@ -143,18 +231,35 @@ const mockAxios = {
 // Helper functions for test setup with better implementation
 export const mockItemsResponse = (items: any[] = [], totalPages: number = 1, totalItems?: number) => {
   const response = {
-    items,
-    total_items: totalItems ?? items.length,
-    total_pages: totalPages,
-    current_page: 1,
-    items_per_page: 30,
+    data: {
+      items,
+      total_items: totalItems ?? items.length,
+      total_pages: totalPages,
+      current_page: 1,
+      items_per_page: 30,
+    },
   };
 
+  endpointResponses.set("/items", response);
+
   mockAxios.get.mockImplementation((url: string): Promise<any> => {
-    if (url.includes("/api/items")) {
-      return Promise.resolve({ data: response });
+    const normalizedUrl = url.replace(/^https?:\/\/[^\/]+/, "").replace(/^\/api/, "");
+
+    // Check for specific endpoint responses first
+    const endpoints = Array.from(endpointResponses.entries());
+    for (const [endpoint, endpointResponse] of endpoints) {
+      if (
+        normalizedUrl.includes(endpoint) &&
+        (!endpoint.includes("/items/") || normalizedUrl.match(/\/items\/[^\/\?]+/))
+      ) {
+        return Promise.resolve(endpointResponse);
+      }
     }
-    if (url.includes("/api/distinct-values")) {
+
+    if (normalizedUrl.includes("/items") && !normalizedUrl.match(/\/items\/[^\/\?]+/)) {
+      return Promise.resolve(response);
+    }
+    if (normalizedUrl.includes("/distinct-values")) {
       return Promise.resolve({
         data: {
           media_types: ["anime", "manga"],
@@ -187,24 +292,7 @@ export const mockDistinctValuesResponse = (values: any = {}) => {
     ...values,
   };
 
-  // Store current items implementation
-  const currentItemsImplementation =
-    mockAxios.get.getMockImplementation() ||
-    (() =>
-      Promise.resolve({
-        data: { items: [], total_items: 0, total_pages: 1, current_page: 1, items_per_page: 30 },
-      }));
-
-  mockAxios.get.mockImplementation((url: string): Promise<any> => {
-    if (url.includes("/api/distinct-values")) {
-      return Promise.resolve({ data: defaultValues });
-    }
-    if (url.includes("/api/items")) {
-      // Use current items implementation or default
-      return currentItemsImplementation(url);
-    }
-    return Promise.resolve({ data: {} });
-  });
+  endpointResponses.set("/distinct-values", { data: defaultValues });
 };
 
 // Helper to mock error responses
@@ -223,16 +311,48 @@ export const mockErrorResponse = (error: any = {}) => {
 
 // Helper for item detail responses
 export const mockItemDetailResponse = (item: any) => {
+  endpointResponses.set(`/items/${item.uid}`, { data: item });
+
   mockAxios.get.mockImplementation((url: string): Promise<any> => {
-    // Handle item detail requests (includes full URL with base)
-    if (url.includes("/items/") && !url.includes("/recommendations")) {
+    const normalizedUrl = url.replace(/^https?:\/\/[^\/]+/, "").replace(/^\/api/, "");
+
+    // Check for specific endpoint responses first
+    const endpoints = Array.from(endpointResponses.entries());
+    for (const [endpoint, response] of endpoints) {
+      if (normalizedUrl.includes(endpoint)) {
+        return Promise.resolve(response);
+      }
+    }
+
+    // Handle item detail requests - check for specific UID pattern
+    const itemDetailMatch = normalizedUrl.match(/\/items\/([^\/\?]+)/);
+    if (itemDetailMatch && !normalizedUrl.includes("/recommendations")) {
+      const itemUid = itemDetailMatch[1];
+
+      // Check if we have a specific response for this item
+      const specificResponse = endpointResponses.get(`/items/${itemUid}`);
+      if (specificResponse) {
+        return Promise.resolve(specificResponse);
+      }
+
+      // Return the item passed to this function as fallback
       return Promise.resolve({ data: item });
     }
+
     // Handle recommendations requests
-    if (url.includes("/recommendations/")) {
+    if (normalizedUrl.includes("/recommendations/")) {
+      const recMatch = normalizedUrl.match(/\/recommendations\/([^\/\?]+)/);
+      if (recMatch) {
+        const itemUid = recMatch[1];
+        const recResponse = endpointResponses.get(`/recommendations/${itemUid}`);
+        if (recResponse) {
+          return Promise.resolve(recResponse);
+        }
+      }
       return Promise.resolve({ data: [] });
     }
-    if (url.includes("/distinct-values") || url.includes("distinct-values")) {
+
+    if (normalizedUrl.includes("/distinct-values")) {
       return Promise.resolve({
         data: {
           media_types: ["anime", "manga"],
@@ -247,7 +367,8 @@ export const mockItemDetailResponse = (item: any) => {
         },
       });
     }
-    if (url.includes("/items") && !url.includes("/items/")) {
+
+    if (normalizedUrl.includes("/items") && !normalizedUrl.match(/\/items\/[^\/\?]+/)) {
       return Promise.resolve({
         data: {
           items: [],
@@ -258,30 +379,37 @@ export const mockItemDetailResponse = (item: any) => {
         },
       });
     }
+
     return Promise.resolve({ data: {} });
   });
 };
 
 // Helper for recommendations responses
 export const mockRecommendationsResponse = (recommendations: any[] = []) => {
-  // Get current implementation or create one
-  const currentImplementation = mockAxios.get.getMockImplementation();
+  // Store recommendations in our endpoint map
+  endpointResponses.set("/recommendations/", { data: recommendations });
+};
 
+// Helper to set specific mock responses
+export const setMockResponse = (endpoint: string, response: any) => {
+  // Normalize endpoint
+  const normalizedEndpoint = endpoint.replace(/^https?:\/\/[^\/]+/, "").replace(/^\/api/, "");
+  endpointResponses.set(normalizedEndpoint, response);
+
+  // Update the mock implementation to handle the new responses
   mockAxios.get.mockImplementation((url: string): Promise<any> => {
-    // Handle recommendations requests first
-    if (url.includes("/recommendations/")) {
-      return Promise.resolve({ data: recommendations });
-    }
-    // Handle item detail requests
-    if (url.includes("/items/") && !url.includes("/recommendations")) {
-      // If we have a current implementation, use it, otherwise return empty item
-      if (currentImplementation) {
-        return currentImplementation(url);
+    const normalizedUrl = url.replace(/^https?:\/\/[^\/]+/, "").replace(/^\/api/, "");
+
+    // Check for specific endpoint responses first
+    const endpoints = Array.from(endpointResponses.entries());
+    for (const [endpoint, endpointResponse] of endpoints) {
+      if (normalizedUrl.includes(endpoint)) {
+        return Promise.resolve(endpointResponse);
       }
-      return Promise.resolve({ data: {} });
     }
-    // Handle other endpoints
-    if (url.includes("/distinct-values") || url.includes("distinct-values")) {
+
+    // Default handlers
+    if (normalizedUrl.includes("/distinct-values")) {
       return Promise.resolve({
         data: {
           media_types: ["anime", "manga"],
@@ -296,7 +424,44 @@ export const mockRecommendationsResponse = (recommendations: any[] = []) => {
         },
       });
     }
-    if (url.includes("/items") && !url.includes("/items/")) {
+
+    // Handle item detail requests
+    if (normalizedUrl.match(/\/items\/[^\/\?]+/) && !normalizedUrl.includes("/recommendations")) {
+      return Promise.resolve({
+        data: {
+          uid: "test-uid-1",
+          title: "Test Anime Title",
+          media_type: "anime",
+          genres: ["Action", "Adventure"],
+          themes: ["School", "Military"],
+          demographics: ["Shounen"],
+          score: 8.5,
+          scored_by: 10000,
+          status: "Finished Airing",
+          episodes: 24,
+          start_date: "2020-01-01",
+          rating: "PG-13",
+          popularity: 100,
+          members: 50000,
+          favorites: 5000,
+          synopsis: "Test synopsis for anime",
+          producers: ["Test Producer"],
+          licensors: ["Test Licensor"],
+          studios: ["Test Studio"],
+          authors: [],
+          serializations: [],
+          image_url: "https://example.com/test-image.jpg",
+          title_synonyms: ["Alt Title"],
+        },
+      });
+    }
+
+    // Handle recommendations requests
+    if (normalizedUrl.includes("/recommendations/")) {
+      return Promise.resolve({ data: [] });
+    }
+
+    if (normalizedUrl.includes("/items") && !normalizedUrl.match(/\/items\/[^\/\?]+/)) {
       return Promise.resolve({
         data: {
           items: [],
@@ -307,26 +472,7 @@ export const mockRecommendationsResponse = (recommendations: any[] = []) => {
         },
       });
     }
-    // Fall back to current implementation if available
-    if (currentImplementation) {
-      return currentImplementation(url);
-    }
-    return Promise.resolve({ data: {} });
-  });
-};
 
-// Helper to set specific mock responses
-export const setMockResponse = (endpoint: string, response: any) => {
-  const currentImplementation = mockAxios.get.getMockImplementation();
-
-  mockAxios.get.mockImplementation((url: string): Promise<any> => {
-    if (url.includes(endpoint)) {
-      return Promise.resolve(response);
-    }
-    // Fall back to current implementation
-    if (currentImplementation) {
-      return currentImplementation(url);
-    }
     return Promise.resolve({ data: {} });
   });
 };

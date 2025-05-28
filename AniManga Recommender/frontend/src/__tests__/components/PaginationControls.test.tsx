@@ -3,8 +3,7 @@
  * Tests pagination navigation, page display, and edge cases
  */
 
-import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import PaginationControls from "../../components/PaginationControls";
 

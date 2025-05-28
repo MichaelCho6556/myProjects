@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import ItemCard from "../components/ItemCard";
@@ -21,43 +21,11 @@ const getYouTubeID = (url?: string): string | null => {
 };
 
 /**
- * Render simple list data as a paragraph
- */
-const renderSimpleList = (
-  listData: string[] | string | undefined,
-  label: string
-): React.JSX.Element | null => {
-  if (!listData || (Array.isArray(listData) && listData.length === 0)) {
-    return null;
-  }
-
-  if (typeof listData === "string" && listData.trim() !== "") {
-    return (
-      <p>
-        <strong>{label}:</strong> {listData}
-      </p>
-    );
-  }
-
-  if (Array.isArray(listData)) {
-    const filteredList = listData.filter((item) => typeof item === "string" && item.trim() !== "");
-    if (filteredList.length === 0) return null;
-    return (
-      <p>
-        <strong>{label}:</strong> {filteredList.join(", ")}
-      </p>
-    );
-  }
-
-  return null;
-};
-
-/**
  * ItemDetailPage Component
  * Displays detailed information about an anime or manga item
  */
 const ItemDetailPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { uid } = useParams<{ uid: string }>();
   const navigate = useNavigate();
   const [item, setItem] = useState<AnimeItem | null>(null);
   const [recommendations, setRecommendations] = useState<AnimeItem[]>([]);
@@ -73,46 +41,59 @@ const ItemDetailPage: React.FC = () => {
       : "Item Details | AniManga Recommender"
   );
 
-  useEffect(() => {
-    if (!id) {
+  const loadItemData = useCallback(async () => {
+    if (!uid) {
       setError("Invalid item ID");
       setLoading(false);
       return;
     }
 
-    loadItemData();
-  }, [id]);
-
-  const loadItemData = async () => {
     try {
       setLoading(true);
-      setError(null);
+      setError("");
 
-      // Load item details
-      const itemResponse = await axios.get<AnimeItem>(`${API_BASE_URL}/items/${id}`);
-      setItem(itemResponse.data);
+      // Fetch item details
+      const response = await axios.get(`${API_BASE_URL}/items/${uid}`);
+      const itemData = response.data;
 
-      // Load recommendations (don't fail if this fails)
-      try {
-        const recommendationsResponse = await axios.get<AnimeItem[]>(
-          `${API_BASE_URL}/recommendations/${id}?n=10`
-        );
-        setRecommendations(recommendationsResponse.data || []);
-      } catch (recError) {
-        console.warn("Failed to load recommendations:", recError);
-        setRecommendations([]);
-      }
-    } catch (err: any) {
-      console.error("Error loading item:", err);
-      if (err.response?.status === 404) {
+      if (!itemData || !itemData.uid) {
         setError("Item not found");
+        setLoading(false);
+        return;
+      }
+
+      setItem(itemData);
+
+      // Fetch recommendations in parallel
+      try {
+        const recommendationsResponse = await axios.get(`${API_BASE_URL}/recommendations/${uid}?n=10`);
+        if (recommendationsResponse.data && Array.isArray(recommendationsResponse.data)) {
+          setRecommendations(recommendationsResponse.data);
+        }
+      } catch (error) {
+        console.warn("Failed to load recommendations:", error);
+        // Don't show error to user for recommendations failure
+      }
+    } catch (error) {
+      // Check if it's an axios-like error by looking at the error structure
+      const errorObj = error as any;
+      if (errorObj?.response?.status) {
+        if (errorObj.response.status === 404) {
+          setError("Item not found. Please check the URL and try again.");
+        } else {
+          setError("Failed to load item details. Please try again.");
+        }
       } else {
-        setError("Failed to load item details");
+        setError("An unexpected error occurred. Please try again.");
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [uid]);
+
+  useEffect(() => {
+    loadItemData();
+  }, [uid, loadItemData]);
 
   const handleGenreClick = (genre: string) => {
     navigate(`/search?genre=${encodeURIComponent(genre)}`);
@@ -126,8 +107,8 @@ const ItemDetailPage: React.FC = () => {
     navigate(-1);
   };
 
-  const formatScore = (score: number | null, scoredBy: number | null) => {
-    if (score === null || score === undefined) return "N/A";
+  const formatScore = (score: number | null) => {
+    if (!score || score === 0) return "N/A";
     return score.toFixed(2);
   };
 
@@ -220,8 +201,8 @@ const ItemDetailPage: React.FC = () => {
             </button>
 
             {/* Score */}
-            <div className="score-section" aria-label={`Score: ${formatScore(item.score, item.scored_by)}`}>
-              <span className="score">{formatScore(item.score, item.scored_by)}</span>
+            <div className="score-section" aria-label={`Score: ${formatScore(item.score)}`}>
+              <span className="score">{formatScore(item.score)}</span>
               {item.scored_by && <span className="scored-by">({formatScoredBy(item.scored_by)})</span>}
             </div>
 

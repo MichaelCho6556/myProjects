@@ -6,22 +6,40 @@ import "@testing-library/jest-dom";
 
 // Mock console.warn to reduce noise in tests
 const originalWarn = console.warn;
+const originalError = console.error;
+
 beforeAll(() => {
   console.warn = (...args: any[]) => {
     if (
       typeof args[0] === "string" &&
       (args[0].includes("React Router Future Flag Warning") ||
         args[0].includes("componentWillReceiveProps") ||
-        args[0].includes("componentWillUpdate"))
+        args[0].includes("componentWillUpdate") ||
+        args[0].includes("Warning: An update to") ||
+        args[0].includes("act(...)"))
     ) {
       return;
     }
     originalWarn.call(console, ...args);
   };
+
+  // Suppress specific React warnings that are expected in tests
+  console.error = (...args: any[]) => {
+    if (
+      (typeof args[0] === "string" &&
+        args[0].includes("An update to") &&
+        args[0].includes("was not wrapped in act(...)")) ||
+      args[0].includes("Warning: ReactDOM.render is no longer supported")
+    ) {
+      return;
+    }
+    originalError.call(console, ...args);
+  };
 });
 
 afterAll(() => {
   console.warn = originalWarn;
+  console.error = originalError;
 });
 
 // Mock scrollIntoView (not available in JSDOM)
@@ -148,6 +166,37 @@ global.createMockDistinctValues = (overrides = {}) => ({
   ...overrides,
 });
 
+// Mock URL for tests
+Object.defineProperty(window, "location", {
+  writable: true,
+  value: {
+    pathname: "/",
+    search: "",
+    hash: "",
+    href: "http://localhost/",
+    origin: "http://localhost",
+    hostname: "localhost",
+    port: "",
+    protocol: "http:",
+    host: "localhost",
+    reload: jest.fn(),
+  },
+});
+
+// Mock history API
+Object.defineProperty(window, "history", {
+  writable: true,
+  value: {
+    back: jest.fn(),
+    forward: jest.fn(),
+    go: jest.fn(),
+    pushState: jest.fn(),
+    replaceState: jest.fn(),
+    length: 1,
+    state: null,
+  },
+});
+
 // React-Select test utilities
 global.findReactSelectOption = async (container: HTMLElement, optionText: string) => {
   const { findByText } = await import("@testing-library/react");
@@ -165,33 +214,59 @@ global.openReactSelectDropdown = async (selectElement: HTMLElement) => {
   await userEvent.click(control);
 
   // Wait a bit for the dropdown to open
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  await new Promise((resolve) => setTimeout(resolve, 100));
 };
 
 global.selectReactSelectOption = async (selectElement: HTMLElement, optionText: string) => {
   const userEvent = (await import("@testing-library/user-event")).default;
-  const { screen, waitFor } = await import("@testing-library/react");
+  const { screen } = await import("@testing-library/react");
 
   // Open dropdown first
   await global.openReactSelectDropdown(selectElement);
 
+  let optionToClick: HTMLElement | null = null;
+
   try {
-    // Try to find the option with more specific timeout
-    const option = await waitFor(() => screen.getByText(optionText), { timeout: 2000 });
-    await userEvent.click(option);
-  } catch (error) {
-    // If exact text not found, try with regex
-    try {
-      const optionRegex = new RegExp(optionText, "i");
-      const option = await waitFor(() => screen.getByText(optionRegex), { timeout: 1000 });
-      await userEvent.click(option);
-    } catch (fallbackError) {
-      console.warn(`Could not find option "${optionText}" in React-Select dropdown`);
-      throw error;
+    // For React-Select, we need to look for the option by text content
+    // React-Select often renders options as divs with specific role and text
+    const allOptions = screen.getAllByText(optionText);
+
+    // Find the option that's actually clickable (inside the menu)
+    optionToClick =
+      allOptions.find((option) => {
+        const parent = option.closest('[class*="react-select__option"]') || option.closest('[role="option"]');
+        return parent !== null;
+      }) || allOptions[0];
+
+    if (!optionToClick) {
+      // Fallback: try to find by partial text match
+      const partialMatches = screen.getAllByText(new RegExp(optionText, "i"));
+      optionToClick =
+        partialMatches.find((option) => {
+          const parent =
+            option.closest('[class*="react-select__option"]') || option.closest('[role="option"]');
+          return parent !== null;
+        }) || null;
     }
+  } catch (error) {
+    console.warn(
+      `Could not find React-Select option "${optionText}". Available options:`,
+      document.querySelectorAll('[class*="react-select__option"]')
+    );
   }
 
-  // Wait for selection to complete
+  if (optionToClick) {
+    await userEvent.click(optionToClick);
+  } else {
+    // If we still can't find the option, just close the dropdown to avoid hanging
+    const control = selectElement.querySelector(".react-select__control");
+    if (control) {
+      await userEvent.click(control);
+    }
+    throw new Error(`Option "${optionText}" could not be found or clicked in React-Select dropdown.`);
+  }
+
+  // Wait for selection to complete and potential state updates/URL changes
   await new Promise((resolve) => setTimeout(resolve, 100));
 };
 
@@ -210,33 +285,3 @@ declare global {
     }
   }
 }
-
-// Mock URL for tests
-Object.defineProperty(window, "location", {
-  writable: true,
-  value: {
-    pathname: "/",
-    search: "",
-    hash: "",
-    href: "http://localhost/",
-    origin: "http://localhost",
-    hostname: "localhost",
-    port: "",
-    protocol: "http:",
-    host: "localhost",
-  },
-});
-
-// Mock history API
-Object.defineProperty(window, "history", {
-  writable: true,
-  value: {
-    back: jest.fn(),
-    forward: jest.fn(),
-    go: jest.fn(),
-    pushState: jest.fn(),
-    replaceState: jest.fn(),
-    length: 1,
-    state: null,
-  },
-});
