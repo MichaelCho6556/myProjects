@@ -3,17 +3,11 @@
  * Tests item detail display, recommendations, navigation, and error handling
  */
 
-import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import ItemDetailPage from "../../pages/ItemDetailPage";
-import {
-  mockAxios,
-  mockItemDetailResponse,
-  mockRecommendationsResponse,
-  setMockResponse,
-} from "../../__mocks__/axios";
+import { mockAxios, mockItemDetailResponse, mockRecommendationsResponse } from "../../__mocks__/axios";
 
 // Helper function to create mock items
 const createMockItem = (overrides = {}) => {
@@ -43,7 +37,7 @@ const renderWithRouter = (initialEntries = ["/item/test-123"], component = <Item
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <Routes>
-        <Route path="/item/:id" element={component} />
+        <Route path="/item/:uid" element={component} />
         <Route path="/search" element={<div>Search Page</div>} />
         <Route path="/" element={<div>Home Page</div>} />
       </Routes>

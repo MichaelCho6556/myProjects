@@ -116,7 +116,7 @@ export const retryOperation = async <T>(
   maxRetries: number = 3,
   delayMs: number = 1000
 ): Promise<T> => {
-  let lastError: ApiError;
+  let lastError: ApiError = new Error("Operation failed") as ApiError;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -131,12 +131,12 @@ export const retryOperation = async <T>(
         lastError.response.status < 500 &&
         lastError.response.status !== 408
       ) {
-        throw lastError;
+        throw lastError || new Error("Unknown error occurred");
       }
 
       // If this was the last attempt, throw the error
       if (attempt === maxRetries - 1) {
-        throw lastError;
+        throw lastError || new Error("Unknown error occurred");
       }
 
       // Wait before retrying
@@ -144,7 +144,7 @@ export const retryOperation = async <T>(
     }
   }
 
-  throw lastError!;
+  throw lastError || new Error("Unknown error occurred");
 };
 
 /**

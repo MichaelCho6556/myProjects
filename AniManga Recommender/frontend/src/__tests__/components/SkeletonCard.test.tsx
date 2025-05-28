@@ -3,7 +3,6 @@
  * Tests loading skeleton display and accessibility
  */
 
-import React from "react";
 import { render, screen } from "@testing-library/react";
 import SkeletonCard from "../../components/SkeletonCard";
 
@@ -110,8 +109,20 @@ describe("SkeletonCard Component", () => {
     it("has shimmer animation class", () => {
       render(<SkeletonCard />);
 
-      const animatedElements = screen.getAllByTestId(/skeleton-/);
-      animatedElements.forEach((element) => {
+      // Check specific elements that should have shimmer animation
+      const imageElement = screen.getByTestId("skeleton-image");
+      const titleElement = screen.getByTestId("skeleton-title");
+      const textElements = [
+        screen.getByTestId("skeleton-text-1"),
+        screen.getByTestId("skeleton-text-2"),
+        screen.getByTestId("skeleton-text-3"),
+      ];
+      const scoreElement = screen.getByTestId("skeleton-score");
+
+      expect(imageElement).toHaveClass("skeleton-shimmer");
+      expect(titleElement).toHaveClass("skeleton-shimmer");
+      expect(scoreElement).toHaveClass("skeleton-shimmer");
+      textElements.forEach((element) => {
         expect(element).toHaveClass("skeleton-shimmer");
       });
     });
