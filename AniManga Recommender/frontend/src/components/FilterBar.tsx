@@ -43,18 +43,16 @@ const FilterBar: React.FC<FilterBarProps> = ({
     handleInputChange,
     handleSearchSubmit,
     handleSortChange,
-    handleSingleSelectChange,
-    handleMultiSelectChange,
+    handleMediaTypeChange,
+    handleStatusChange,
+    handleGenreChange,
+    handleThemeChange,
+    handleDemographicChange,
+    handleStudioChange,
+    handleAuthorChange,
     handleMinScoreChange,
     handleYearChange,
     handleResetFilters,
-    setSelectedMediaType,
-    setSelectedGenre,
-    setSelectedTheme,
-    setSelectedDemographic,
-    setSelectedStudio,
-    setSelectedAuthor,
-    setSelectedStatus,
   } = handlers;
 
   /**
@@ -155,7 +153,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           name="mediaTypeFilter"
           options={mediaTypeOptions}
           value={mediaTypeOptions.find((opt) => opt.value === selectedMediaType) || mediaTypeOptions[0]}
-          onChange={(selectedOption) => handleSingleSelectChange(setSelectedMediaType, selectedOption!)}
+          onChange={handleMediaTypeChange}
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"
@@ -173,9 +171,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           name="genreFilter"
           options={genreOptions}
           value={selectedGenre}
-          onChange={(selectedOptions) =>
-            handleMultiSelectChange(setSelectedGenre, selectedOptions ? [...selectedOptions] : null)
-          }
+          onChange={handleGenreChange}
           placeholder="Select genres..."
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
@@ -194,9 +190,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           name="themeFilter"
           options={themeOptions}
           value={selectedTheme}
-          onChange={(selectedOptions) =>
-            handleMultiSelectChange(setSelectedTheme, selectedOptions ? [...selectedOptions] : null)
-          }
+          onChange={handleThemeChange}
           placeholder="Select themes..."
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
@@ -214,7 +208,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           id="demographicFilter"
           options={demographicOptions}
           value={selectedDemographic}
-          onChange={(opts) => handleMultiSelectChange(setSelectedDemographic, opts ? [...opts] : null)}
+          onChange={handleDemographicChange}
           placeholder="Select demographics..."
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
@@ -232,7 +226,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           id="studioFilter"
           options={studioOptions}
           value={selectedStudio}
-          onChange={(opts) => handleMultiSelectChange(setSelectedStudio, opts ? [...opts] : null)}
+          onChange={handleStudioChange}
           placeholder="Select studios..."
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
@@ -250,7 +244,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           id="authorFilter"
           options={authorOptions}
           value={selectedAuthor}
-          onChange={(opts) => handleMultiSelectChange(setSelectedAuthor, opts ? [...opts] : null)}
+          onChange={handleAuthorChange}
           placeholder="Select authors..."
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
@@ -267,7 +261,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           name="statusFilter"
           options={statusOptions}
           value={statusOptions.find((opt) => opt.value === selectedStatus) || statusOptions[0]}
-          onChange={(selectedOption) => handleSingleSelectChange(setSelectedStatus, selectedOption!)}
+          onChange={handleStatusChange}
           styles={customSelectStyles}
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"

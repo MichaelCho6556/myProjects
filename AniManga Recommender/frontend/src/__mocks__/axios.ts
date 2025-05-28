@@ -71,7 +71,11 @@ const mockAxios = {
     // Handle recommendations endpoints
     if (normalizedUrl.includes("/recommendations/")) {
       return Promise.resolve({
-        data: [],
+        data: {
+          source_item_uid: "test-uid-1",
+          source_item_title: "Test Anime Title",
+          recommendations: [],
+        },
       });
     }
 
@@ -386,8 +390,14 @@ export const mockItemDetailResponse = (item: any) => {
 
 // Helper for recommendations responses
 export const mockRecommendationsResponse = (recommendations: any[] = []) => {
-  // Store recommendations in our endpoint map
-  endpointResponses.set("/recommendations/", { data: recommendations });
+  // Store recommendations in our endpoint map with correct backend format
+  endpointResponses.set("/recommendations/", {
+    data: {
+      source_item_uid: "test-uid-1",
+      source_item_title: "Test Anime Title",
+      recommendations: recommendations,
+    },
+  });
 };
 
 // Helper to set specific mock responses

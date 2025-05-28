@@ -59,18 +59,16 @@ const createMockProps = (): FilterBarProps => ({
     handleInputChange: jest.fn(),
     handleSearchSubmit: jest.fn(),
     handleSortChange: jest.fn(),
-    handleSingleSelectChange: jest.fn(),
-    handleMultiSelectChange: jest.fn(),
+    handleMediaTypeChange: jest.fn(),
+    handleStatusChange: jest.fn(),
+    handleGenreChange: jest.fn(),
+    handleThemeChange: jest.fn(),
+    handleDemographicChange: jest.fn(),
+    handleStudioChange: jest.fn(),
+    handleAuthorChange: jest.fn(),
     handleMinScoreChange: jest.fn(),
     handleYearChange: jest.fn(),
     handleResetFilters: jest.fn(),
-    setSelectedMediaType: jest.fn(),
-    setSelectedGenre: jest.fn(),
-    setSelectedTheme: jest.fn(),
-    setSelectedDemographic: jest.fn(),
-    setSelectedStudio: jest.fn(),
-    setSelectedAuthor: jest.fn(),
-    setSelectedStatus: jest.fn(),
   },
   loading: false,
   filtersLoading: false,
@@ -432,7 +430,7 @@ describe("FilterBar Component", () => {
       const mediaTypeSelect = screen.getByLabelText(/type/i);
       await global.selectReactSelectOption(mediaTypeSelect, "anime");
 
-      expect(mockProps.handlers.handleSingleSelectChange).toHaveBeenCalled();
+      expect(mockProps.handlers.handleMediaTypeChange).toHaveBeenCalled();
     });
 
     it("allows selecting genre options", async () => {
@@ -441,7 +439,7 @@ describe("FilterBar Component", () => {
       const genreSelect = screen.getByLabelText(/genres/i);
       await global.selectReactSelectOption(genreSelect, "Action");
 
-      expect(mockProps.handlers.handleMultiSelectChange).toHaveBeenCalled();
+      expect(mockProps.handlers.handleGenreChange).toHaveBeenCalled();
     });
 
     it("allows selecting status options", async () => {
@@ -450,7 +448,7 @@ describe("FilterBar Component", () => {
       const statusSelect = screen.getByLabelText(/status/i);
       await global.selectReactSelectOption(statusSelect, "Finished Airing");
 
-      expect(mockProps.handlers.handleSingleSelectChange).toHaveBeenCalled();
+      expect(mockProps.handlers.handleStatusChange).toHaveBeenCalled();
     });
 
     it("shows loading state for filter options", () => {

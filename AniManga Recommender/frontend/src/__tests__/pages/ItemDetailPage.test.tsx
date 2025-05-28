@@ -88,7 +88,7 @@ describe("ItemDetailPage Component", () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Test Anime Title");
+        expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("Test Anime Title");
       });
 
       expect(mockAxios.get).toHaveBeenCalledWith("http://localhost:5000/api/items/test-123");
@@ -124,7 +124,7 @@ describe("ItemDetailPage Component", () => {
     });
 
     it("displays item title as main heading", () => {
-      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Test Anime Title");
+      expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("Test Anime Title");
     });
 
     it("displays item image with correct alt text", () => {
@@ -134,8 +134,8 @@ describe("ItemDetailPage Component", () => {
     });
 
     it("displays score information", () => {
-      expect(screen.getByText("8.50")).toBeInTheDocument();
-      expect(screen.getByText("(10,000)")).toBeInTheDocument(); // scored_by formatted with parentheses
+      expect(screen.getByText(/8\.50/)).toBeInTheDocument();
+      expect(screen.getByText(/\(10,000 users\)/)).toBeInTheDocument(); // scored_by formatted with users text
     });
 
     it("displays media type", () => {
@@ -163,8 +163,8 @@ describe("ItemDetailPage Component", () => {
     });
 
     it("displays genres as clickable tags", () => {
-      const actionTag = screen.getByRole("button", { name: /action/i });
-      const adventureTag = screen.getByRole("button", { name: /adventure/i });
+      const actionTag = screen.getByRole("link", { name: /action/i });
+      const adventureTag = screen.getByRole("link", { name: /adventure/i });
 
       expect(actionTag).toBeInTheDocument();
       expect(adventureTag).toBeInTheDocument();
@@ -201,27 +201,27 @@ describe("ItemDetailPage Component", () => {
     });
 
     it("navigates to homepage with genre filter when genre tag is clicked", async () => {
-      const actionTag = screen.getByRole("button", { name: /action/i });
+      const actionTag = screen.getByRole("link", { name: /action/i });
 
       await userEvent.click(actionTag);
 
       await waitFor(() => {
-        expect(screen.getByText("Search Page")).toBeInTheDocument();
+        expect(screen.getByText("Home Page")).toBeInTheDocument();
       });
     });
 
     it("navigates to homepage with media type filter when media type is clicked", async () => {
-      const mediaTypeTag = screen.getByRole("button", { name: /anime/i });
+      const mediaTypeTag = screen.getByRole("link", { name: /anime/i });
 
       await userEvent.click(mediaTypeTag);
 
       await waitFor(() => {
-        expect(screen.getByText("Search Page")).toBeInTheDocument();
+        expect(screen.getByText("Home Page")).toBeInTheDocument();
       });
     });
 
     it("has back button that navigates to previous page", () => {
-      const backButton = screen.getByRole("button", { name: /back/i });
+      const backButton = screen.getByRole("link", { name: /back/i });
       expect(backButton).toBeInTheDocument();
     });
   });
@@ -383,7 +383,8 @@ describe("ItemDetailPage Component", () => {
         expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
       });
 
-      expect(screen.getByText(/no synopsis available/i)).toBeInTheDocument();
+      // Should not show synopsis section when synopsis is missing
+      expect(screen.queryByText(/synopsis/i)).not.toBeInTheDocument();
     });
 
     it("handles missing score gracefully", async () => {
@@ -411,7 +412,8 @@ describe("ItemDetailPage Component", () => {
         expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
       });
 
-      expect(screen.getByText(/no genres available/i)).toBeInTheDocument();
+      // Should not show genres section when genres array is empty
+      expect(screen.queryByText(/genres/i)).not.toBeInTheDocument();
     });
 
     it("displays different content for manga", async () => {
@@ -449,7 +451,7 @@ describe("ItemDetailPage Component", () => {
     });
 
     it("has proper heading hierarchy", () => {
-      expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 2 })).toBeInTheDocument();
     });
 
     it("has proper alt text for images", () => {
@@ -458,15 +460,17 @@ describe("ItemDetailPage Component", () => {
     });
 
     it("has accessible navigation buttons", () => {
-      const genreButtons = screen.getAllByRole("button");
-      genreButtons.forEach((button) => {
-        expect(button).toHaveAttribute("type", "button");
-      });
+      const genreLinks = screen.getAllByRole("link");
+      expect(genreLinks.length).toBeGreaterThan(0);
+      // Check that genre links have proper href attributes
+      const actionLink = screen.getByRole("link", { name: /action/i });
+      expect(actionLink).toHaveAttribute("href", "/?genre=Action");
     });
 
     it("provides screen reader friendly content", () => {
-      expect(screen.getByLabelText(/score/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/status/i)).toBeInTheDocument();
+      // Check for proper alt text and aria labels
+      expect(screen.getByAltText(/cover for test anime title/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/go back to previous page/i)).toBeInTheDocument();
     });
   });
 

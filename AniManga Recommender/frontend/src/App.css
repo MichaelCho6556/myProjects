@@ -253,107 +253,129 @@ button.btn-primary:disabled,
   color: rgba(18, 24, 35, 0.7);
 }
 
-/* Enhanced Pagination Controls */
+/* Enhanced Pagination Controls - Modern Design */
 .pagination-controls {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 20px;
   flex-wrap: wrap;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, var(--bg-overlay), var(--bg-dark));
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  min-height: 60px;
+}
+
+.pagination-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .pagination-controls button {
-  background-color: var(--bg-dark);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-  padding: 10px 16px;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: white;
+  border: none;
+  padding: 12px 20px;
   border-radius: 8px;
-  font-weight: 500;
-  min-width: 80px;
-  transition: all 0.2s ease;
+  font-weight: 600;
+  font-size: 0.9rem;
+  min-width: 100px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.3);
+}
+
+.pagination-controls button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
 }
 
 .pagination-controls button:not(:disabled):hover {
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
-  background-color: var(--bg-overlay);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(20, 184, 166, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(20, 184, 166, 0.4);
+}
+
+.pagination-controls button:not(:disabled):hover::before {
+  left: 100%;
 }
 
 .pagination-controls button:disabled {
-  background-color: var(--bg-overlay);
+  background: var(--bg-overlay);
   color: var(--text-muted);
-  border-color: var(--border-color);
-  opacity: 0.5;
+  border: 1px solid var(--border-color);
+  opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.pagination-controls button:disabled::before {
+  display: none;
 }
 
 .pagination-info {
-  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-primary);
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   text-align: center;
-  padding: 0 8px;
-  line-height: 1.4;
+  flex: 1;
+  min-width: 200px;
 }
 
-/* Bottom pagination wrapper styling */
+.pagination-info .item-range {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+/* Bottom pagination wrapper styling - Updated */
 .bottom-pagination-wrapper {
-  margin-top: 40px;
-  margin-bottom: 30px;
-  padding: 20px;
-  background-color: var(--bg-overlay);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin: 40px 0 30px 0;
 }
 
 /* Enhanced pagination for mobile */
 @media (max-width: 768px) {
-  .item-list {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 25px;
-    padding: 25px 10px; /* Maintain some horizontal padding */
-  }
-  .item-card img {
-    height: 280px;
-  }
-  .controls-bar .items-per-page-selector {
-    min-width: 120px;
-    font-size: 0.85rem;
-  }
-
-  /* Stack pagination controls on smaller screens */
   .pagination-controls {
     flex-direction: column;
-    gap: 12px;
-  }
-
-  .pagination-controls button {
-    width: auto;
-    min-width: 60px;
+    gap: 16px;
+    padding: 20px;
+    justify-content: center;
   }
 
   .pagination-info {
-    order: 1; /* Put page info at top */
+    order: -1;
     margin-bottom: 8px;
+    flex: none;
   }
 
-  /* Update filter bar for mobile */
-  .filter-bar > .search-form,
-  .filter-bar > .filter-group {
-    margin-bottom: 15px;
-  }
-
-  .filter-bar > .reset-filters-btn {
-    margin-left: 0; /* Reset margin-left auto */
+  .pagination-buttons {
     width: 100%;
-    margin-top: 10px; /* Add space if it wraps to a new line */
+    justify-content: center;
+  }
+
+  .pagination-controls button {
+    flex: 1;
+    max-width: 140px;
+    min-width: 90px;
+    padding: 14px 16px;
   }
 
   .bottom-pagination-wrapper {
-    padding: 25px 15px; /* Consistent padding with containers */
+    margin: 30px -10px 20px -10px;
   }
 }
 
