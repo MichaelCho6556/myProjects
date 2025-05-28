@@ -131,6 +131,7 @@ const HomePage: React.FC = () => {
   const topOfPageRef = useRef<HTMLDivElement>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMounted = useRef<boolean>(false);
+  const isInternalUrlUpdate = useRef<boolean>(false);
 
   // Create error handler for this component
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -198,41 +199,52 @@ const HomePage: React.FC = () => {
   }, [handleError]);
 
   /**
-   * Effect 2: Synchronize component state with URL parameters
-   * This ensures the UI reflects the current URL state when navigating
+   * Effect 2: Synchronize component state with URL parameters on mount
+   * This ensures the UI reflects the current URL state when navigating from external links
    */
   useEffect(() => {
     if (filtersLoading) return; // Wait for filter options to load
 
-    setCurrentPage(parseInt(searchParams.get("page") || "1"));
-    setItemsPerPage(parseInt(searchParams.get("per_page") || "") || DEFAULT_ITEMS_PER_PAGE);
+    // Parse URL parameters once on mount or when filter options become available
+    const urlParams = new URLSearchParams(window.location.search);
 
-    const query = searchParams.get("q") || "";
+    setCurrentPage(parseInt(urlParams.get("page") || "1"));
+    setItemsPerPage(parseInt(urlParams.get("per_page") || "") || DEFAULT_ITEMS_PER_PAGE);
+
+    const query = urlParams.get("q") || "";
     setInputValue(query);
     setSearchTerm(query);
 
-    setSelectedMediaType((searchParams.get("media_type") as MediaType) || "All");
-    setSelectedStatus((searchParams.get("status") as StatusType) || "All");
-    setMinScore(searchParams.get("min_score") || "");
-    setSelectedYear(searchParams.get("year") || "");
-    setSortBy((searchParams.get("sort_by") as SortOption) || "score_desc");
+    setSelectedMediaType((urlParams.get("media_type") as MediaType) || "All");
+    setSelectedStatus((urlParams.get("status") as StatusType) || "All");
+    setMinScore(urlParams.get("min_score") || "");
+    setSelectedYear(urlParams.get("year") || "");
+    setSortBy((urlParams.get("sort_by") as SortOption) || "score_desc");
 
-    // Set multi-select values from URL parameters
-    setSelectedGenre(getMultiSelectValuesFromParam(searchParams.get("genre"), genreOptions));
-    setSelectedTheme(getMultiSelectValuesFromParam(searchParams.get("theme"), themeOptions));
-    setSelectedDemographic(
-      getMultiSelectValuesFromParam(searchParams.get("demographic"), demographicOptions)
-    );
-    setSelectedStudio(getMultiSelectValuesFromParam(searchParams.get("studio"), studioOptions));
-    setSelectedAuthor(getMultiSelectValuesFromParam(searchParams.get("author"), authorOptions));
+    // Set multi-select values from URL parameters only when options are available
+    if (genreOptions.length > 0) {
+      setSelectedGenre(getMultiSelectValuesFromParam(urlParams.get("genre"), genreOptions));
+    }
+    if (themeOptions.length > 0) {
+      setSelectedTheme(getMultiSelectValuesFromParam(urlParams.get("theme"), themeOptions));
+    }
+    if (demographicOptions.length > 0) {
+      setSelectedDemographic(getMultiSelectValuesFromParam(urlParams.get("demographic"), demographicOptions));
+    }
+    if (studioOptions.length > 0) {
+      setSelectedStudio(getMultiSelectValuesFromParam(urlParams.get("studio"), studioOptions));
+    }
+    if (authorOptions.length > 0) {
+      setSelectedAuthor(getMultiSelectValuesFromParam(urlParams.get("author"), authorOptions));
+    }
   }, [
-    searchParams,
     filtersLoading,
-    genreOptions,
-    themeOptions,
-    demographicOptions,
-    studioOptions,
-    authorOptions,
+    // Only depend on options when they first become available
+    genreOptions.length > 0,
+    themeOptions.length > 0,
+    demographicOptions.length > 0,
+    studioOptions.length > 0,
+    authorOptions.length > 0,
   ]);
 
   /**
@@ -252,6 +264,104 @@ const HomePage: React.FC = () => {
       if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
     };
   }, [inputValue, searchTerm]);
+
+  /**
+   * Effect 2.5: Handle URL changes from external navigation (like clicking tags)
+   * This syncs state when the URL changes but doesn't trigger fetchItems unnecessarily
+   */
+  useEffect(() => {
+    if (!isMounted.current || filtersLoading || isInternalUrlUpdate.current) {
+      return;
+    }
+
+    const currentUrlParams = new URLSearchParams(window.location.search);
+
+    // Handle single-select values first (these don't depend on options arrays)
+    const urlMediaType = (currentUrlParams.get("media_type") as MediaType) || "All";
+    if (selectedMediaType !== urlMediaType) {
+      setSelectedMediaType(urlMediaType);
+    }
+
+    // Handle multi-select values - even if options aren't loaded yet, store the raw values
+    const genreParam = currentUrlParams.get("genre");
+    if (genreParam && genreOptions.length > 0) {
+      const urlGenres = getMultiSelectValuesFromParam(genreParam, genreOptions);
+      const currentGenreValues = selectedGenre
+        .map((g) => g.value)
+        .sort()
+        .join(",");
+      const urlGenreValues = urlGenres
+        .map((g) => g.value)
+        .sort()
+        .join(",");
+      if (currentGenreValues !== urlGenreValues) {
+        setSelectedGenre(urlGenres);
+      }
+    } else if (genreParam && genreOptions.length === 0) {
+      // If options aren't loaded yet but we have a genre parameter, force a re-check later
+      setTimeout(() => {
+        if (genreOptions.length > 0) {
+          const urlGenres = getMultiSelectValuesFromParam(genreParam, genreOptions);
+          setSelectedGenre(urlGenres);
+        }
+      }, 100);
+    }
+
+    const themeParam = currentUrlParams.get("theme");
+    if (themeParam && themeOptions.length > 0) {
+      const urlThemes = getMultiSelectValuesFromParam(themeParam, themeOptions);
+      const currentThemeValues = selectedTheme
+        .map((t) => t.value)
+        .sort()
+        .join(",");
+      const urlThemeValues = urlThemes
+        .map((t) => t.value)
+        .sort()
+        .join(",");
+      if (currentThemeValues !== urlThemeValues) {
+        setSelectedTheme(urlThemes);
+      }
+    } else if (themeParam && themeOptions.length === 0) {
+      setTimeout(() => {
+        if (themeOptions.length > 0) {
+          const urlThemes = getMultiSelectValuesFromParam(themeParam, themeOptions);
+          setSelectedTheme(urlThemes);
+        }
+      }, 100);
+    }
+
+    const demographicParam = currentUrlParams.get("demographic");
+    if (demographicParam && demographicOptions.length > 0) {
+      const urlDemographics = getMultiSelectValuesFromParam(demographicParam, demographicOptions);
+      const currentDemographicValues = selectedDemographic
+        .map((d) => d.value)
+        .sort()
+        .join(",");
+      const urlDemographicValues = urlDemographics
+        .map((d) => d.value)
+        .sort()
+        .join(",");
+      if (currentDemographicValues !== urlDemographicValues) {
+        setSelectedDemographic(urlDemographics);
+      }
+    } else if (demographicParam && demographicOptions.length === 0) {
+      setTimeout(() => {
+        if (demographicOptions.length > 0) {
+          const urlDemographics = getMultiSelectValuesFromParam(demographicParam, demographicOptions);
+          setSelectedDemographic(urlDemographics);
+        }
+      }, 100);
+    }
+  }, [
+    searchParams,
+    genreOptions,
+    themeOptions,
+    demographicOptions,
+    selectedGenre,
+    selectedTheme,
+    selectedDemographic,
+    selectedMediaType,
+  ]);
 
   /**
    * Stable function to fetch items from API with current filter state
@@ -283,7 +393,12 @@ const HomePage: React.FC = () => {
     // Update URL if parameters have changed
     const currentParamsString = new URLSearchParams(window.location.search).toString();
     if (currentParamsString !== paramsString) {
+      isInternalUrlUpdate.current = true;
       setSearchParams(newUrlParams, { replace: true });
+      // Reset flag after URL update
+      setTimeout(() => {
+        isInternalUrlUpdate.current = false;
+      }, 0);
     }
 
     // Handle smooth scrolling for filtered results
@@ -377,21 +492,144 @@ const HomePage: React.FC = () => {
     if (currentPage !== 1) setCurrentPage(1);
   };
 
-  const handleMultiSelectChange = (
-    setter: (options: SelectOption[]) => void,
-    selectedOptions: readonly SelectOption[] | null
-  ): void => {
-    setter(selectedOptions ? [...selectedOptions] : []);
+  // Specific handlers for react-select components
+  const handleMediaTypeChange = (selectedOption: SelectOption | null): void => {
+    const newMediaType = (selectedOption?.value as MediaType) || "All";
+    setSelectedMediaType(newMediaType);
+
+    // Immediately update URL to prevent sync effect from overriding
+    isInternalUrlUpdate.current = true;
+    const currentParams = new URLSearchParams(window.location.search);
+    if (newMediaType !== "All") {
+      currentParams.set("media_type", newMediaType);
+    } else {
+      currentParams.delete("media_type");
+    }
+    setSearchParams(currentParams, { replace: true });
+    setTimeout(() => {
+      isInternalUrlUpdate.current = false;
+    }, 50);
+
     if (currentPage !== 1) setCurrentPage(1);
   };
 
-  const handleSingleSelectChange = (
-    setter: React.Dispatch<React.SetStateAction<any>>,
-    selectedOptionOrEvent: SelectOption | React.ChangeEvent<HTMLSelectElement>
-  ): void => {
-    const value =
-      "value" in selectedOptionOrEvent ? selectedOptionOrEvent.value : selectedOptionOrEvent.target.value;
-    setter(value || "All");
+  const handleStatusChange = (selectedOption: SelectOption | null): void => {
+    const newStatus = (selectedOption?.value as StatusType) || "All";
+    setSelectedStatus(newStatus);
+
+    // Immediately update URL to prevent sync effect from overriding
+    isInternalUrlUpdate.current = true;
+    const currentParams = new URLSearchParams(window.location.search);
+    if (newStatus !== "All") {
+      currentParams.set("status", newStatus);
+    } else {
+      currentParams.delete("status");
+    }
+    setSearchParams(currentParams, { replace: true });
+    setTimeout(() => {
+      isInternalUrlUpdate.current = false;
+    }, 50);
+
+    if (currentPage !== 1) setCurrentPage(1);
+  };
+
+  const handleGenreChange = (selectedOptions: readonly SelectOption[] | null): void => {
+    const newGenres = selectedOptions ? [...selectedOptions] : [];
+    setSelectedGenre(newGenres);
+
+    // Immediately update URL to prevent sync effect from overriding
+    isInternalUrlUpdate.current = true;
+    const currentParams = new URLSearchParams(window.location.search);
+    if (newGenres.length > 0) {
+      currentParams.set("genre", newGenres.map((g) => g.value).join(","));
+    } else {
+      currentParams.delete("genre");
+    }
+    setSearchParams(currentParams, { replace: true });
+    setTimeout(() => {
+      isInternalUrlUpdate.current = false;
+    }, 50);
+
+    if (currentPage !== 1) setCurrentPage(1);
+  };
+
+  const handleThemeChange = (selectedOptions: readonly SelectOption[] | null): void => {
+    const newThemes = selectedOptions ? [...selectedOptions] : [];
+    setSelectedTheme(newThemes);
+
+    // Immediately update URL to prevent sync effect from overriding
+    isInternalUrlUpdate.current = true;
+    const currentParams = new URLSearchParams(window.location.search);
+    if (newThemes.length > 0) {
+      currentParams.set("theme", newThemes.map((t) => t.value).join(","));
+    } else {
+      currentParams.delete("theme");
+    }
+    setSearchParams(currentParams, { replace: true });
+    setTimeout(() => {
+      isInternalUrlUpdate.current = false;
+    }, 50);
+
+    if (currentPage !== 1) setCurrentPage(1);
+  };
+
+  const handleDemographicChange = (selectedOptions: readonly SelectOption[] | null): void => {
+    const newDemographics = selectedOptions ? [...selectedOptions] : [];
+    setSelectedDemographic(newDemographics);
+
+    // Immediately update URL to prevent sync effect from overriding
+    isInternalUrlUpdate.current = true;
+    const currentParams = new URLSearchParams(window.location.search);
+    if (newDemographics.length > 0) {
+      currentParams.set("demographic", newDemographics.map((d) => d.value).join(","));
+    } else {
+      currentParams.delete("demographic");
+    }
+    setSearchParams(currentParams, { replace: true });
+    setTimeout(() => {
+      isInternalUrlUpdate.current = false;
+    }, 50);
+
+    if (currentPage !== 1) setCurrentPage(1);
+  };
+
+  const handleStudioChange = (selectedOptions: readonly SelectOption[] | null): void => {
+    const newStudios = selectedOptions ? [...selectedOptions] : [];
+    setSelectedStudio(newStudios);
+
+    // Immediately update URL to prevent sync effect from overriding
+    isInternalUrlUpdate.current = true;
+    const currentParams = new URLSearchParams(window.location.search);
+    if (newStudios.length > 0) {
+      currentParams.set("studio", newStudios.map((s) => s.value).join(","));
+    } else {
+      currentParams.delete("studio");
+    }
+    setSearchParams(currentParams, { replace: true });
+    setTimeout(() => {
+      isInternalUrlUpdate.current = false;
+    }, 50);
+
+    if (currentPage !== 1) setCurrentPage(1);
+  };
+
+  const handleAuthorChange = (selectedOptions: readonly SelectOption[] | null): void => {
+    const newAuthors = selectedOptions ? [...selectedOptions] : [];
+    setSelectedAuthor(newAuthors);
+
+    // Immediately update URL to prevent sync effect from overriding
+    isInternalUrlUpdate.current = true;
+    const currentParams = new URLSearchParams(window.location.search);
+    if (newAuthors.length > 0) {
+      currentParams.set("author", newAuthors.map((a) => a.value).join(","));
+    } else {
+      currentParams.delete("author");
+    }
+    setSearchParams(currentParams, { replace: true });
+    setTimeout(() => {
+      isInternalUrlUpdate.current = false;
+    }, 50);
+
     if (currentPage !== 1) setCurrentPage(1);
   };
 
@@ -411,6 +649,10 @@ const HomePage: React.FC = () => {
   };
 
   const handleResetFilters = (): void => {
+    // Mark this as an internal update to prevent the URL sync effect from triggering
+    isInternalUrlUpdate.current = true;
+
+    // Clear all state
     setInputValue("");
     setSearchTerm("");
     setSelectedMediaType("All");
@@ -424,6 +666,14 @@ const HomePage: React.FC = () => {
     setSelectedYear("");
     setSortBy("score_desc");
     if (currentPage !== 1) setCurrentPage(1);
+
+    // Clear URL parameters
+    setSearchParams({}, { replace: true });
+
+    // Reset the flag after a short delay
+    setTimeout(() => {
+      isInternalUrlUpdate.current = false;
+    }, 100);
   };
 
   // Pagination handlers
@@ -509,18 +759,16 @@ const HomePage: React.FC = () => {
       handleInputChange,
       handleSearchSubmit,
       handleSortChange,
-      handleSingleSelectChange,
-      handleMultiSelectChange,
+      handleMediaTypeChange,
+      handleStatusChange,
+      handleGenreChange,
+      handleThemeChange,
+      handleDemographicChange,
+      handleStudioChange,
+      handleAuthorChange,
       handleMinScoreChange,
       handleYearChange,
       handleResetFilters,
-      setSelectedMediaType,
-      setSelectedGenre,
-      setSelectedTheme,
-      setSelectedDemographic,
-      setSelectedStudio,
-      setSelectedAuthor,
-      setSelectedStatus,
     },
     loading,
     filtersLoading,

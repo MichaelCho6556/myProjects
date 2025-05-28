@@ -67,12 +67,25 @@ const ItemDetailPage: React.FC = () => {
       // Fetch recommendations in parallel
       try {
         const recommendationsResponse = await axios.get(`${API_BASE_URL}/recommendations/${uid}?n=10`);
-        if (recommendationsResponse.data && Array.isArray(recommendationsResponse.data)) {
+
+        // Handle the actual backend response format
+        if (
+          recommendationsResponse.data &&
+          recommendationsResponse.data.recommendations &&
+          Array.isArray(recommendationsResponse.data.recommendations)
+        ) {
+          setRecommendations(recommendationsResponse.data.recommendations);
+        } else if (recommendationsResponse.data && Array.isArray(recommendationsResponse.data)) {
+          // Fallback for direct array response
           setRecommendations(recommendationsResponse.data);
+        } else {
+          console.warn("Unexpected recommendations response format:", recommendationsResponse.data);
+          setRecommendations([]);
         }
       } catch (error) {
         console.warn("Failed to load recommendations:", error);
         // Don't show error to user for recommendations failure
+        setRecommendations([]);
       }
     } catch (error) {
       // Check if it's an axios-like error by looking at the error structure
@@ -94,14 +107,6 @@ const ItemDetailPage: React.FC = () => {
   useEffect(() => {
     loadItemData();
   }, [uid, loadItemData]);
-
-  const handleGenreClick = (genre: string) => {
-    navigate(`/search?genre=${encodeURIComponent(genre)}`);
-  };
-
-  const handleMediaTypeClick = (mediaType: string) => {
-    navigate(`/search?media_type=${encodeURIComponent(mediaType)}`);
-  };
 
   const handleBackClick = () => {
     navigate(-1);
@@ -168,19 +173,18 @@ const ItemDetailPage: React.FC = () => {
   return (
     <main className="item-detail-page" role="main">
       <div className="item-detail-container">
-        {/* Back button */}
-        <button
-          onClick={handleBackClick}
-          className="btn btn-back"
-          aria-label="Go back to previous page"
-          type="button"
-        >
+        {/* Back Link */}
+        <Link to="/" className="back-link" aria-label="Go back to previous page">
           Back
-        </button>
+        </Link>
 
-        {/* Item details */}
+        {/* Item Title */}
+        <h2>{item.title}</h2>
+
+        {/* Item Details Content */}
         <div className="item-detail-content">
-          <div className="item-image-section">
+          {/* Image Section */}
+          <div className="item-detail-image">
             <img
               src={item.image_url || getDefaultImage()}
               alt={`Cover for ${item.title}`}
@@ -188,161 +192,157 @@ const ItemDetailPage: React.FC = () => {
             />
           </div>
 
-          <div className="item-info-section">
-            <h1>{item.title}</h1>
-
-            {/* Media type */}
-            <button
-              onClick={() => handleMediaTypeClick(item.media_type)}
-              className="btn btn-tag media-type-tag"
-              type="button"
-            >
-              {item.media_type.toUpperCase()}
-            </button>
+          {/* Info Section */}
+          <div className="item-detail-info">
+            {/* Media Type */}
+            <p>
+              <strong>Type:</strong>
+              <Link to={`/?media_type=${encodeURIComponent(item.media_type)}`} className="tag-link">
+                {item.media_type.toUpperCase()}
+              </Link>
+            </p>
 
             {/* Score */}
-            <div className="score-section" aria-label={`Score: ${formatScore(item.score)}`}>
-              <span className="score">{formatScore(item.score)}</span>
-              {item.scored_by && <span className="scored-by">({formatScoredBy(item.scored_by)})</span>}
-            </div>
+            <p>
+              <strong>Score:</strong>
+              {formatScore(item.score)}
+              {item.scored_by && ` (${formatScoredBy(item.scored_by)} users)`}
+            </p>
 
             {/* Status */}
-            <div className="status-section" aria-label={`Status: ${item.status}`}>
-              <span className="label">Status:</span>
-              <span className="value">{item.status}</span>
-            </div>
+            <p>
+              <strong>Status:</strong>
+              {item.status}
+            </p>
 
             {/* Episodes/Chapters */}
             {item.media_type === "anime" && item.episodes && (
-              <div className="episodes-section">
-                <span className="label">Episodes:</span>
-                <span className="value">{item.episodes}</span>
-              </div>
+              <p>
+                <strong>Episodes:</strong>
+                {item.episodes}
+              </p>
             )}
 
             {item.media_type === "manga" && (
               <>
                 {item.chapters && (
-                  <div className="chapters-section">
-                    <span className="label">Chapters:</span>
-                    <span className="value">{item.chapters}</span>
-                  </div>
+                  <p>
+                    <strong>Chapters:</strong>
+                    {item.chapters}
+                  </p>
                 )}
                 {item.volumes && (
-                  <div className="volumes-section">
-                    <span className="label">Volumes:</span>
-                    <span className="value">{item.volumes}</span>
-                  </div>
+                  <p>
+                    <strong>Volumes:</strong>
+                    {item.volumes}
+                  </p>
                 )}
               </>
             )}
 
-            {/* Start date */}
+            {/* Start Date */}
             {item.start_date && (
-              <div className="start-date-section">
-                <span className="label">Start Date:</span>
-                <span className="value">{item.start_date}</span>
-              </div>
+              <p>
+                <strong>Start Date:</strong>
+                {item.start_date}
+              </p>
             )}
 
             {/* Rating */}
             {item.rating && (
-              <div className="rating-section">
-                <span className="label">Rating:</span>
-                <span className="value">{item.rating}</span>
+              <p>
+                <strong>Rating:</strong>
+                {item.rating}
+              </p>
+            )}
+
+            {/* Genres */}
+            {item.genres && item.genres.length > 0 && (
+              <div className="tag-list-container">
+                <strong>Genres:</strong>
+                {item.genres.map((genre, index) => (
+                  <Link key={index} to={`/?genre=${encodeURIComponent(genre)}`} className="tag-link">
+                    {genre}
+                  </Link>
+                ))}
               </div>
             )}
 
-            {/* Synopsis */}
-            <div className="synopsis-section">
-              <h2>Synopsis</h2>
-              <p>{item.synopsis || "No synopsis available."}</p>
-            </div>
-
-            {/* Genres */}
-            <div className="genres-section">
-              <h3>Genres</h3>
-              {item.genres && item.genres.length > 0 ? (
-                <div className="tags-container">
-                  {item.genres.map((genre, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleGenreClick(genre)}
-                      className="btn btn-tag genre-tag"
-                      type="button"
-                    >
-                      {genre}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p>No genres available.</p>
-              )}
-            </div>
-
             {/* Themes */}
             {item.themes && item.themes.length > 0 && (
-              <div className="themes-section">
-                <h3>Themes</h3>
-                <div className="tags-container">
-                  {item.themes.map((theme, index) => (
-                    <span key={index} className="tag theme-tag">
-                      {theme}
-                    </span>
-                  ))}
-                </div>
+              <div className="tag-list-container">
+                <strong>Themes:</strong>
+                {item.themes.map((theme, index) => (
+                  <Link key={index} to={`/?theme=${encodeURIComponent(theme)}`} className="tag-link">
+                    {theme}
+                  </Link>
+                ))}
               </div>
             )}
 
             {/* Demographics */}
             {item.demographics && item.demographics.length > 0 && (
-              <div className="demographics-section">
-                <h3>Demographics</h3>
-                <div className="tags-container">
-                  {item.demographics.map((demographic, index) => (
-                    <span key={index} className="tag demographic-tag">
-                      {demographic}
-                    </span>
-                  ))}
-                </div>
+              <div className="tag-list-container">
+                <strong>Demographics:</strong>
+                {item.demographics.map((demographic, index) => (
+                  <Link
+                    key={index}
+                    to={`/?demographic=${encodeURIComponent(demographic)}`}
+                    className="tag-link"
+                  >
+                    {demographic}
+                  </Link>
+                ))}
               </div>
             )}
 
             {/* Producers */}
             {item.producers && item.producers.length > 0 && (
-              <div className="producers-section">
-                <h3>Producers</h3>
-                <div className="list-container">
-                  {item.producers.map((producer, index) => (
-                    <span key={index} className="list-item">
-                      {producer}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <p>
+                <strong>Producers:</strong>
+                {item.producers.join(", ")}
+              </p>
             )}
 
             {/* Studios */}
             {item.studios && item.studios.length > 0 && (
-              <div className="studios-section">
-                <h3>Studios</h3>
-                <div className="list-container">
-                  {item.studios.map((studio, index) => (
-                    <span key={index} className="list-item">
-                      {studio}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <p>
+                <strong>Studios:</strong>
+                {item.studios.join(", ")}
+              </p>
             )}
           </div>
         </div>
 
-        {/* Recommendations section */}
+        {/* Synopsis Section */}
+        {item.synopsis && (
+          <div className="synopsis-section">
+            <strong>Synopsis</strong>
+            <p>{item.synopsis}</p>
+          </div>
+        )}
+
+        {/* Trailer Section */}
+        {youtubeID && item.media_type === "anime" && (
+          <div className="trailer-section">
+            <h3>Trailer</h3>
+            <div className="video-responsive">
+              <iframe
+                src={`https://www.youtube.com/embed/${youtubeID}`}
+                title={`${item.title} Trailer`}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Recommendations Section */}
         {recommendations.length > 0 && (
           <div className="recommendations-section">
-            <h2>Recommendations</h2>
-            <div className="recommendations-grid">
+            <h3>Recommendations</h3>
+            <div className="recommendations-list item-list">
               {recommendations.map((recItem) => (
                 <ItemCard key={recItem.uid} item={recItem} />
               ))}
@@ -350,22 +350,6 @@ const ItemDetailPage: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Trailer Section */}
-      {youtubeID && item.media_type === "anime" && (
-        <div className="trailer-section">
-          <h3>Trailer</h3>
-          <div className="video-responsive">
-            <iframe
-              src={`https://www.youtube.com/embed/${youtubeID}`}
-              title={`${item.title} Trailer`}
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-        </div>
-      )}
     </main>
   );
 };

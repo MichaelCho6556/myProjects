@@ -136,24 +136,16 @@ export interface FilterHandlers {
   handleInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handleSearchSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   handleSortChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
-  handleSingleSelectChange: (
-    setter: React.Dispatch<React.SetStateAction<any>>,
-    selectedOption: SelectOption | React.ChangeEvent<HTMLSelectElement>
-  ) => void;
-  handleMultiSelectChange: (
-    setter: React.Dispatch<React.SetStateAction<SelectOption[]>>,
-    selectedOptions: readonly SelectOption[] | null
-  ) => void;
+  handleMediaTypeChange: (selectedOption: SelectOption | null) => void;
+  handleStatusChange: (selectedOption: SelectOption | null) => void;
+  handleGenreChange: (selectedOptions: readonly SelectOption[] | null) => void;
+  handleThemeChange: (selectedOptions: readonly SelectOption[] | null) => void;
+  handleDemographicChange: (selectedOptions: readonly SelectOption[] | null) => void;
+  handleStudioChange: (selectedOptions: readonly SelectOption[] | null) => void;
+  handleAuthorChange: (selectedOptions: readonly SelectOption[] | null) => void;
   handleMinScoreChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handleYearChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handleResetFilters: () => void;
-  setSelectedMediaType: React.Dispatch<React.SetStateAction<MediaType>>;
-  setSelectedGenre: React.Dispatch<React.SetStateAction<SelectOption[]>>;
-  setSelectedTheme: React.Dispatch<React.SetStateAction<SelectOption[]>>;
-  setSelectedDemographic: React.Dispatch<React.SetStateAction<SelectOption[]>>;
-  setSelectedStudio: React.Dispatch<React.SetStateAction<SelectOption[]>>;
-  setSelectedAuthor: React.Dispatch<React.SetStateAction<SelectOption[]>>;
-  setSelectedStatus: React.Dispatch<React.SetStateAction<StatusType>>;
 }
 
 /**
