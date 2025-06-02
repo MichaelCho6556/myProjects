@@ -4,6 +4,9 @@ import pandas as pd
 from typing import Dict, List, Optional, Any
 from dotenv import load_dotenv
 import time
+import jwt
+from functools import wraps
+from flask import request, jsonify, g
 
 load_dotenv()
 
@@ -526,6 +529,228 @@ class SupabaseClient:
         
         response = self._make_request('GET', table_name, params=params)
         return response.json()
+
+
+# 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
+class SupabaseAuthClient:
+    """
+    Supabase Authentication client for user management
+    """
+    
+    def __init__(self, base_url: str, api_key: str, service_key: str):
+        self.base_url = base_url
+        self.api_key = api_key
+        self.service_key = service_key
+        self.jwt_secret = service_key  # Used to verify JWT tokens
+        
+        self.headers = {
+            "apikey": self.service_key,
+            "Authorization": f"Bearer {self.service_key}",
+            "Content-Type": "application/json"
+        }
+    
+    def verify_jwt_token(self, token: str) -> dict:
+        """
+        Verify JWT token and extract user information
+        """
+        try:
+            # Remove 'Bearer ' prefix if present
+            if token.startswith('Bearer '):
+                token = token[7:]
+            
+            # Decode the JWT token
+            payload = jwt.decode(
+                token, 
+                self.jwt_secret, 
+                algorithms=['HS256'],
+                audience='authenticated'
+            )
+            
+            return {
+                'user_id': payload.get('sub'),
+                'email': payload.get('email'),
+                'role': payload.get('role', 'authenticated')
+            }
+        except jwt.ExpiredSignatureError:
+            raise ValueError("Token has expired")
+        except jwt.InvalidTokenError:
+            raise ValueError("Invalid token")
+    
+    def get_user_profile(self, user_id: str) -> dict:
+        """
+        Get user profile by user ID
+        """
+        try:
+            response = requests.get(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers=self.headers,
+                params={'id': f'eq.{user_id}', 'select': '*'}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data[0] if data else None
+            return None
+        except Exception as e:
+            print(f"Error getting user profile: {e}")
+            return None
+    
+    def create_user_profile(self, user_id: str, username: str, display_name: str = None) -> dict:
+        """
+        Create a new user profile
+        """
+        try:
+            data = {
+                'id': user_id,
+                'username': username,
+                'display_name': display_name or username
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers=self.headers,
+                json=data
+            )
+            
+            if response.status_code in [200, 201]:
+                return response.json()
+            return None
+        except Exception as e:
+            print(f"Error creating user profile: {e}")
+            return None
+    
+    def update_user_profile(self, user_id: str, updates: dict) -> dict:
+        """
+        Update user profile
+        """
+        try:
+            response = requests.patch(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers=self.headers,
+                params={'id': f'eq.{user_id}'},
+                json=updates
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            print(f"Error updating user profile: {e}")
+            return None
+    
+    def get_user_items(self, user_id: str, status: str = None) -> list:
+        """
+        Get user's anime/manga list
+        """
+        try:
+            params = {'user_id': f'eq.{user_id}', 'select': '*'}
+            if status:
+                params['status'] = f'eq.{status}'
+            
+            response = requests.get(
+                f"{self.base_url}/rest/v1/user_items",
+                headers=self.headers,
+                params=params
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            return []
+        except Exception as e:
+            print(f"Error getting user items: {e}")
+            return []
+    
+    def update_user_item_status(self, user_id: str, item_uid: str, status: str, rating: int = None, episodes_watched: int = None) -> dict:
+        """
+        Update user's status for an anime/manga item
+        """
+        try:
+            # First, check if record exists
+            existing = requests.get(
+                f"{self.base_url}/rest/v1/user_items",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'item_uid': f'eq.{item_uid}',
+                    'select': 'id'
+                }
+            )
+            
+            data = {
+                'user_id': user_id,
+                'item_uid': item_uid,
+                'status': status,
+                'updated_at': 'now()'
+            }
+            
+            if rating is not None:
+                data['rating'] = rating
+            if episodes_watched is not None:
+                data['episodes_watched'] = episodes_watched
+            if status == 'completed':
+                data['completed_at'] = 'now()'
+            elif status == 'watching' and existing.json() == []:
+                data['started_at'] = 'now()'
+            
+            if existing.json():
+                # Update existing record
+                response = requests.patch(
+                    f"{self.base_url}/rest/v1/user_items",
+                    headers=self.headers,
+                    params={
+                        'user_id': f'eq.{user_id}',
+                        'item_uid': f'eq.{item_uid}'
+                    },
+                    json=data
+                )
+            else:
+                # Create new record
+                if status == 'watching':
+                    data['started_at'] = 'now()'
+                response = requests.post(
+                    f"{self.base_url}/rest/v1/user_items",
+                    headers=self.headers,
+                    json=data
+                )
+            
+            if response.status_code in [200, 201]:
+                return response.json()
+            return None
+        except Exception as e:
+            print(f"Error updating user item status: {e}")
+            return None
+
+# 🆕 AUTHENTICATION DECORATOR - ADD THIS TOO:
+def require_auth(f):
+    """
+    Decorator to require authentication for API routes
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        
+        if not auth_header:
+            return jsonify({'error': 'No authorization header'}), 401
+        
+        try:
+            # Initialize auth client (you'll need to pass the config)
+            auth_client = SupabaseAuthClient(
+                os.getenv('SUPABASE_URL'),
+                os.getenv('SUPABASE_KEY'),
+                os.getenv('SUPABASE_SERVICE_KEY')
+            )
+            
+            user_info = auth_client.verify_jwt_token(auth_header)
+            g.current_user = user_info
+            
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 401
+        except Exception as e:
+            return jsonify({'error': 'Authentication failed'}), 401
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function
 
 
 # Usage example for your existing code:
