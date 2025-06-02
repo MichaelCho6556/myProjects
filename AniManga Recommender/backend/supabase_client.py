@@ -27,8 +27,6 @@ class SupabaseClient:
             "Authorization": f"Bearer {self.service_key or self.api_key}",
             "Content-Type": "application/json"
         }
-        
-        print(f"✅ Supabase client initialized: {self.base_url}")
     
     def _make_request(self, method: str, endpoint: str, params: Dict = None, data: Dict = None) -> requests.Response:
         """Make HTTP request to Supabase API with proper error handling and response parsing"""
@@ -87,8 +85,6 @@ class SupabaseClient:
         REST API equivalent of: SELECT * FROM items
         """
         
-        print(f"📊 Fetching items (limit={limit}, offset={offset})")
-        
         params = {
             'limit': limit,
             'offset': offset,
@@ -98,7 +94,6 @@ class SupabaseClient:
         response = self._make_request('GET', 'items', params=params)
         items = response.json()
         
-        print(f"✅ Retrieved {len(items)} items")
         return items
     
     def get_all_items_paginated(self, page_size: int = 1000) -> List[Dict]:
@@ -120,8 +115,6 @@ class SupabaseClient:
             all_items.extend(batch)
             offset += page_size
             
-            print(f"   📄 Page {offset//page_size}: {len(batch)} items (total: {len(all_items)})")
-            
             # If we got less than page_size, we've reached the end
             if len(batch) < page_size:
                 break
@@ -134,8 +127,6 @@ class SupabaseClient:
         Get items with related data (genres, themes, etc.)
         Uses manual relation fetching since embedded queries might not work
         """
-        
-        print(f"📊 Fetching items with relations")
         
         # First, try the embedded approach
         try:
@@ -159,74 +150,64 @@ class SupabaseClient:
             if items and len(items) > 0 and 'media_types' in items[0]:
                 print(f"✅ Retrieved {len(items)} items with embedded relations")
                 return items
-            else:
-                print("⚠️  Embedded relations failed, falling back to manual approach")
                 
         except Exception as e:
-            print(f"⚠️  Embedded query failed: {e}, using manual approach")
+            pass
         
         # Fallback: Manual relation fetching
-        return self._get_items_with_manual_relations(limit)
+        return self._get_items_with_manual_relations(limit, offset=0)
     
-    def _get_items_with_manual_relations(self, limit: int) -> List[Dict]:
+    def _get_items_with_manual_relations(self, limit: int, offset: int = 0) -> List[Dict]:
         """
-        Manually fetch items and their relations
+        Manually fetch items and their relations with pagination support
         """
-        print("🔧 Fetching items and relations manually...")
         
-        # Get basic items
-        items = self.get_all_items(limit=limit)
+        # Get basic items with pagination
+        items = self.get_all_items(limit=limit, offset=offset)
         if not items:
             return []
         
-        # Create lookup dictionaries for performance
-        print("📖 Loading reference data...")
-        media_types = self._get_lookup_dict('media_types')
-        genres = self._get_lookup_dict('genres')  
-        themes = self._get_lookup_dict('themes')
-        demographics = self._get_lookup_dict('demographics')
-        studios = self._get_lookup_dict('studios')
-        authors = self._get_lookup_dict('authors')
+        # Create lookup dictionaries for performance (only load once)
+        if not hasattr(self, '_lookup_cache'):
+            self._lookup_cache = {
+                'media_types': self._get_lookup_dict('media_types'),
+                'genres': self._get_lookup_dict('genres'),
+                'themes': self._get_lookup_dict('themes'),
+                'demographics': self._get_lookup_dict('demographics'),
+                'studios': self._get_lookup_dict('studios'),
+                'authors': self._get_lookup_dict('authors'),
+            }
         
-        # Get all relation mappings
-        print("🔗 Loading relation mappings...")
-        item_genres = self._get_relations('item_genres')
-        item_themes = self._get_relations('item_themes') 
-        item_demographics = self._get_relations('item_demographics')
-        item_studios = self._get_relations('item_studios')
-        item_authors = self._get_relations('item_authors')
+        # Get relation mappings for this batch of items
+        item_ids = [item['id'] for item in items]
+        
+        item_relations = {
+            'item_genres': self._get_relations_for_items('item_genres', item_ids),
+            'item_themes': self._get_relations_for_items('item_themes', item_ids),
+            'item_demographics': self._get_relations_for_items('item_demographics', item_ids),
+            'item_studios': self._get_relations_for_items('item_studios', item_ids),
+            'item_authors': self._get_relations_for_items('item_authors', item_ids),
+        }
         
         # Enhance items with relations
-        print("🔧 Building relations for items...")
         for item in items:
             item_id = item['id']
             
             # Add media type name
-            media_type_id = item.get('media_type_id')
-            if media_type_id and media_type_id in media_types:
-                item['media_types'] = {'name': media_types[media_type_id]}
+            item['media_types'] = {'name': self._lookup_cache['media_types'].get(item['media_type_id'], 'Unknown')}
             
-            # Add genres
-            item_genre_ids = [rel['genre_id'] for rel in item_genres if rel['item_id'] == item_id]
-            item['item_genres'] = [{'genres': {'name': genres[gid]}} for gid in item_genre_ids if gid in genres]
-            
-            # Add themes  
-            item_theme_ids = [rel['theme_id'] for rel in item_themes if rel['item_id'] == item_id]
-            item['item_themes'] = [{'themes': {'name': themes[tid]}} for tid in item_theme_ids if tid in themes]
-            
-            # Add demographics
-            item_demo_ids = [rel['demographic_id'] for rel in item_demographics if rel['item_id'] == item_id]
-            item['item_demographics'] = [{'demographics': {'name': demographics[did]}} for did in item_demo_ids if did in demographics]
-            
-            # Add studios
-            item_studio_ids = [rel['studio_id'] for rel in item_studios if rel['item_id'] == item_id]
-            item['item_studios'] = [{'studios': {'name': studios[sid]}} for sid in item_studio_ids if sid in studios]
-            
-            # Add authors
-            item_author_ids = [rel['author_id'] for rel in item_authors if rel['item_id'] == item_id]
-            item['item_authors'] = [{'authors': {'name': authors[aid]}} for aid in item_author_ids if aid in authors]
+            # Add related data
+            for relation_type, relations in item_relations.items():
+                item[relation_type] = []
+                for rel in relations:
+                    if rel['item_id'] == item_id:
+                        relation_name = relation_type.replace('item_', '').rstrip('s')  # item_genres -> genre
+                        related_id = rel.get(f'{relation_name}_id') or rel.get(f'{relation_name}s_id')
+                        if related_id and related_id in self._lookup_cache[f'{relation_name}s']:
+                            item[relation_type].append({
+                                f'{relation_name}s': {'name': self._lookup_cache[f'{relation_name}s'][related_id]}
+                            })
         
-        print(f"✅ Retrieved {len(items)} items with manual relations")
         return items
     
     def _get_lookup_dict(self, table_name: str) -> Dict[int, str]:
@@ -289,10 +270,9 @@ class SupabaseClient:
         This is the main function to replace your load_data_and_tfidf()
         """
         
-        print(f"🔄 Converting Supabase data to pandas DataFrame")
-        
         if include_relations:
-            items = self.get_items_with_relations(limit=10000)  # Adjust limit as needed
+            # Use pagination to get ALL items, not just 1000
+            items = self._get_all_items_with_relations_paginated()
         else:
             items = self.get_all_items_paginated()
         
@@ -307,78 +287,51 @@ class SupabaseClient:
         if include_relations and len(df) > 0:
             df = self._process_relations(df)
         
-        print(f"✅ DataFrame created: {df.shape}")
+        print(f"✅ DataFrame ready: {len(df):,} items with {df.shape[1]} columns")
         return df
     
     def _process_relations(self, df: pd.DataFrame) -> pd.DataFrame:
         """Process nested relation data into flat lists"""
         
-        print(f"🔍 Processing relations for {len(df)} items")
-        print(f"🔍 Available columns before processing: {list(df.columns)}")
-        
-        # Debug: Show sample of raw data
-        if len(df) > 0:
-            print(f"🔍 Sample raw item: {dict(df.iloc[0])}")
-        
         # Extract media type name
         if 'media_types' in df.columns:
-            print("✅ Processing media_types...")
             df['media_type'] = df['media_types'].apply(
                 lambda x: x['name'] if x and isinstance(x, dict) else None
             )
-        else:
-            print("⚠️  No 'media_types' column found")
         
         # Extract genres
         if 'item_genres' in df.columns:
-            print("✅ Processing genres...")
             df['genres'] = df['item_genres'].apply(
                 lambda x: [item['genres']['name'] for item in x] if x and isinstance(x, list) else []
             )
-        else:
-            print("⚠️  No 'item_genres' column found")
         
         # Extract themes
         if 'item_themes' in df.columns:
-            print("✅ Processing themes...")
             df['themes'] = df['item_themes'].apply(
                 lambda x: [item['themes']['name'] for item in x] if x and isinstance(x, list) else []
             )
-        else:
-            print("⚠️  No 'item_themes' column found")
         
         # Extract demographics
         if 'item_demographics' in df.columns:
-            print("✅ Processing demographics...")
             df['demographics'] = df['item_demographics'].apply(
                 lambda x: [item['demographics']['name'] for item in x] if x and isinstance(x, list) else []
             )
-        else:
-            print("⚠️  No 'item_demographics' column found")
         
         # Extract studios
         if 'item_studios' in df.columns:
-            print("✅ Processing studios...")
             df['studios'] = df['item_studios'].apply(
                 lambda x: [item['studios']['name'] for item in x] if x and isinstance(x, list) else []
             )
-        else:
-            print("⚠️  No 'item_studios' column found")
         
         # Extract authors
         if 'item_authors' in df.columns:
-            print("✅ Processing authors...")
             df['authors'] = df['item_authors'].apply(
                 lambda x: [item['authors']['name'] for item in x] if x and isinstance(x, list) else []
             )
-        else:
-            print("⚠️  No 'item_authors' column found")
         
         # Drop the nested columns
         cols_to_drop = ['media_types', 'item_genres', 'item_themes', 'item_demographics', 'item_studios', 'item_authors']
         df = df.drop(columns=[col for col in cols_to_drop if col in df.columns])
-        
-        print(f"🔍 Final columns after processing: {list(df.columns)}")
         
         return df
     
@@ -424,6 +377,155 @@ class SupabaseClient:
         # Extract unique values
         values = list(set([item[column] for item in data if item.get(column)]))
         return sorted(values)
+
+    def _get_all_items_with_relations_paginated(self, page_size: int = 1000) -> List[Dict]:
+        """
+        Get ALL items with relations using optimized pagination (FASTER VERSION)
+        Uses 1000-item batches (Supabase server limit) but with optimized relation loading
+        """
+        
+        print(f"📊 Fetching ALL items with OPTIMIZED relation loading (batch_size={page_size})")
+        
+        all_items = []
+        offset = 0
+        
+        # Pre-load ALL reference data once (much faster than per-batch)
+        if not hasattr(self, '_lookup_cache'):
+            print("📖 Pre-loading ALL reference data...")
+            self._lookup_cache = {
+                'media_types': self._get_lookup_dict('media_types'),
+                'genres': self._get_lookup_dict('genres'),
+                'themes': self._get_lookup_dict('themes'),
+                'demographics': self._get_lookup_dict('demographics'),
+                'studios': self._get_lookup_dict('studios'),
+                'authors': self._get_lookup_dict('authors'),
+            }
+            print(f"✅ Reference data cached: {sum(len(cache) for cache in self._lookup_cache.values())} total entries")
+        
+        # Pre-load ALL relation mappings once (major performance boost)
+        print("🔗 Loading all relation mappings...")
+        all_relations = {
+            'item_genres': self._get_all_relations('item_genres'),
+            'item_themes': self._get_all_relations('item_themes'),
+            'item_demographics': self._get_all_relations('item_demographics'),
+            'item_studios': self._get_all_relations('item_studios'),
+            'item_authors': self._get_all_relations('item_authors'),
+        }
+        total_relations = sum(len(relations) for relations in all_relations.values())
+        print(f"✅ Cached {total_relations:,} total relations")
+        
+        batch_number = 0
+        while True:
+            batch_number += 1
+            
+            # Get basic items (Supabase limits us to 1000 max per request)
+            items = self.get_all_items(limit=page_size, offset=offset)
+            
+            if not items:  # No more data
+                break
+            
+            # Build relations using pre-loaded data (much faster)
+            self._build_relations_from_cache(items, all_relations)
+                
+            all_items.extend(items)
+            offset += page_size
+            
+            print(f"   ✅ Batch {batch_number}: {len(items)} items (total: {len(all_items)})")
+            
+            # If we got less than page_size, we've reached the end
+            if len(items) < page_size:
+                print(f"   🏁 Reached end of data (last batch had {len(items)} items)")
+                break
+                
+            # Safety check - don't fetch more than 100k items to avoid memory issues
+            if len(all_items) >= 100000:
+                print(f"⚠️  Reached safety limit of 100k items")
+                break
+        
+        print(f"🚀 OPTIMIZED loading complete! Total items: {len(all_items)} (processed {batch_number} batches)")
+        return all_items
+
+    def _get_all_relations(self, table_name: str) -> List[Dict]:
+        """Get ALL relations from a table efficiently with larger batches"""
+        
+        all_relations = []
+        offset = 0
+        batch_size = 10000  # Larger batches for relations
+        
+        while True:
+            try:
+                params = {
+                    'limit': batch_size,
+                    'offset': offset,
+                    'order': 'item_id'  # Ordered for faster lookups
+                }
+                response = self._make_request('GET', table_name, params=params)
+                batch = response.json()
+                
+                if not batch:
+                    break
+                    
+                all_relations.extend(batch)
+                offset += batch_size
+                
+                if len(batch) < batch_size:  # Last batch
+                    break
+                    
+            except Exception as e:
+                print(f"⚠️  Error loading {table_name} at offset {offset}: {e}")
+                break
+        
+        return all_relations
+
+    def _build_relations_from_cache(self, items: List[Dict], all_relations: Dict[str, List[Dict]]) -> None:
+        """Build relations for items using pre-loaded cached data (FAST)"""
+        
+        # Create item ID set for fast lookups
+        item_ids = {item['id'] for item in items}
+        
+        # Pre-filter relations for this batch (much faster than checking each item)
+        batch_relations = {}
+        for relation_type, relations in all_relations.items():
+            batch_relations[relation_type] = [
+                rel for rel in relations if rel['item_id'] in item_ids
+            ]
+        
+        # Build relations for each item
+        for item in items:
+            item_id = item['id']
+            
+            # Add media type name
+            item['media_types'] = {'name': self._lookup_cache['media_types'].get(item['media_type_id'], 'Unknown')}
+            
+            # Add related data efficiently
+            for relation_type, relations in batch_relations.items():
+                item[relation_type] = []
+                
+                # Get relations for this specific item
+                item_relations = [rel for rel in relations if rel['item_id'] == item_id]
+                
+                for rel in item_relations:
+                    relation_name = relation_type.replace('item_', '').rstrip('s')  # item_genres -> genre
+                    related_id = rel.get(f'{relation_name}_id') or rel.get(f'{relation_name}s_id')
+                    
+                    if related_id and related_id in self._lookup_cache[f'{relation_name}s']:
+                        item[relation_type].append({
+                            f'{relation_name}s': {'name': self._lookup_cache[f'{relation_name}s'][related_id]}
+                        })
+
+    def _get_relations_for_items(self, table_name: str, item_ids: List[int]) -> List[Dict]:
+        """Get relations for specific item IDs to avoid loading all relations"""
+        
+        # Convert item IDs to comma-separated string for query
+        ids_str = ','.join(map(str, item_ids))
+        
+        params = {
+            'item_id': f'in.({ids_str})',
+            'limit': len(item_ids) * 10  # Assume max 10 relations per item
+        }
+        
+        response = self._make_request('GET', table_name, params=params)
+        return response.json()
 
 
 # Usage example for your existing code:
