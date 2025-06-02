@@ -1,5 +1,5 @@
 # backend/app.py
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 import os
 import pandas as pd
@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
-from supabase_client import SupabaseClient
+from supabase_client import SupabaseClient, SupabaseAuthClient, require_auth
+import requests
 
 load_dotenv()
 
@@ -20,6 +21,7 @@ tfidf_vectorizer_global = None
 tfidf_matrix_global = None
 uid_to_idx = None
 supabase_client = None
+auth_client = None
 
 def load_data_and_tfidf_from_supabase():
     """Load data from Supabase database instead of CSV files"""
@@ -142,8 +144,22 @@ def map_records_for_frontend(records_list):
     """Map field names for a list of records"""
     return [map_field_names_for_frontend(record) for record in records_list]
 
+def initialize_auth_client():
+    """Initialize the authentication client"""
+    global auth_client
+    if auth_client is None:
+        auth_client = SupabaseAuthClient(
+            os.getenv('SUPABASE_URL'),
+            os.getenv('SUPABASE_KEY'),
+            os.getenv('SUPABASE_SERVICE_KEY')
+        )
+    return auth_client
+
 # Load data on startup
 load_data_and_tfidf_from_supabase()
+
+# Initialize auth client on startup
+initialize_auth_client()
 
 @app.route('/')
 def hello():
@@ -349,6 +365,118 @@ def get_recommendations(item_uid):
         })
     except Exception as e:
         return jsonify({"error": "Could not generate recommendations."}), 500
+
+@app.route('/api/auth/profile', methods=['GET'])
+@require_auth
+def get_user_profile():
+    """Get current user's profile"""
+    try:
+        user_id = g.current_user['user_id']
+        profile = auth_client.get_user_profile(user_id)
+        
+        if profile:
+            return jsonify(profile)
+        else:
+            return jsonify({'error': 'Profile not found'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/profile', methods=['PUT'])
+@require_auth
+def update_user_profile():
+    """Update current user's profile"""
+    try:
+        user_id = g.current_user['user_id']
+        updates = request.json
+        
+        # Remove fields that shouldn't be updated directly
+        updates.pop('id', None)
+        updates.pop('created_at', None)
+        
+        profile = auth_client.update_user_profile(user_id, updates)
+        
+        if profile:
+            return jsonify(profile)
+        else:
+            return jsonify({'error': 'Failed to update profile'}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/user-items', methods=['GET'])
+@require_auth
+def get_user_items():
+    """Get user's anime/manga list"""
+    try:
+        user_id = g.current_user['user_id']
+        status = request.args.get('status')  # Optional filter by status
+        
+        items = auth_client.get_user_items(user_id, status)
+        return jsonify(items)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/user-items/<item_uid>', methods=['POST', 'PUT'])
+@require_auth
+def update_user_item_status(item_uid):
+    """Update user's status for an anime/manga item"""
+    try:
+        user_id = g.current_user['user_id']
+        data = request.json
+        
+        status = data.get('status')
+        rating = data.get('rating')
+        episodes_watched = data.get('episodes_watched')
+        
+        if not status:
+            return jsonify({'error': 'Status is required'}), 400
+        
+        result = auth_client.update_user_item_status(
+            user_id, item_uid, status, rating, episodes_watched
+        )
+        
+        if result:
+            return jsonify(result)
+        else:
+            return jsonify({'error': 'Failed to update item status'}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/user-items/<item_uid>', methods=['DELETE'])
+@require_auth
+def remove_user_item(item_uid):
+    """Remove item from user's list"""
+    try:
+        user_id = g.current_user['user_id']
+        
+        response = requests.delete(
+            f"{os.getenv('SUPABASE_URL')}/rest/v1/user_items",
+            headers=auth_client.headers,
+            params={
+                'user_id': f'eq.{user_id}',
+                'item_uid': f'eq.{item_uid}'
+            }
+        )
+        
+        if response.status_code == 204:
+            return jsonify({'message': 'Item removed successfully'})
+        else:
+            return jsonify({'error': 'Failed to remove item'}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/verify-token', methods=['GET'])
+@require_auth
+def verify_token():
+    """Verify if the current token is valid"""
+    return jsonify({
+        'valid': True,
+        'user': g.current_user
+    })
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
