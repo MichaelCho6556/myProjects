@@ -16,18 +16,20 @@
 .auth-modal {
   background: white;
   padding: 2.5rem;
-  border-radius: 12px;
+  border-radius: 16px;
   width: 100%;
-  max-width: 420px;
+  max-width: 400px;
+  max-height: 80vh;
   position: relative;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  animation: modalSlideIn 0.3s ease-out;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  animation: modalSlideIn 0.4s ease-out;
+  overflow-y: auto;
 }
 
 @keyframes modalSlideIn {
   from {
     opacity: 0;
-    transform: scale(0.9) translateY(-10px);
+    transform: scale(0.9) translateY(-20px);
   }
   to {
     opacity: 1;
@@ -78,22 +80,24 @@
   width: 100%;
   padding: 0.875rem;
   border: 2px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 1rem;
   box-sizing: border-box;
-  transition: all 0.2s ease;
+  transition: all 0.4s ease;
   background-color: #fafafa;
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #4299e1;
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
   background-color: white;
+  transition: all 0.4s ease;
 }
 
 .form-group input:hover {
   border-color: #cbd5e0;
+  transition: all 0.4s ease;
 }
 
 /* Better styling for display name field */
@@ -109,28 +113,31 @@
 
 .auth-submit-btn {
   width: 100%;
-  padding: 0.875rem;
-  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  padding: 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   margin-bottom: 1.5rem;
-  transition: all 0.2s ease;
+  transition: all 0.5s ease;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .auth-submit-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.2);
+  transition: all 0.5s ease;
 }
 
 .auth-submit-btn:active:not(:disabled) {
   transform: translateY(0);
+  transition: all 0.2s ease;
 }
 
 .auth-submit-btn:disabled {
@@ -186,14 +193,60 @@
   text-decoration: underline;
 }
 
+@media (max-width: 600px) {
+  .auth-modal-overlay {
+    padding: 1rem;
+  }
+
+  .auth-modal {
+    margin: 0;
+    padding: 2rem 1.5rem;
+    max-width: 100%;
+    width: 100%;
+    max-height: calc(100vh-2rem);
+  }
+}
+
 /* Responsive improvements */
 @media (max-width: 480px) {
   .auth-modal {
     margin: 1rem;
     padding: 2rem;
+    max-width: calc(100vw-2rem);
+    max-height: calc(100vh-2rem);
   }
 
   .auth-modal h2 {
     font-size: 1.6rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .form-group {
+    margin-bottom: 1.2rem;
+  }
+
+  .form-group label {
+    font-size: 0.9rem;
+  }
+
+  .form-group input {
+    padding: 0.8rem;
+    font-size: 0.95rem;
+  }
+
+  .auth-submit-btn {
+    padding: 0.9rem;
+    font-size: 0.95rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .auth-submit-btn .auth-switch-btn .auth-modal-close {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .form-group input {
+    min-height: 44px;
   }
 }

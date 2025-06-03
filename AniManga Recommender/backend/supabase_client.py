@@ -4,7 +4,13 @@ import pandas as pd
 from typing import Dict, List, Optional, Any
 from dotenv import load_dotenv
 import time
-import jwt
+try:
+    import jwt
+except ImportError:
+    try:
+        import PyJWT as jwt
+    except ImportError:
+        raise ImportError("Neither 'jwt' nor 'PyJWT' could be imported. Please install PyJWT: pip install PyJWT")
 from functools import wraps
 from flask import request, jsonify, g
 
