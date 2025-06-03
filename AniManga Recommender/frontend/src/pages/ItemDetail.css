@@ -479,3 +479,38 @@
     transform: none;
   }
 }
+
+/* User List Actions container */
+.user-list-actions-container {
+  flex: 0 0 300px;
+  max-width: 350px;
+  align-self: flex-start;
+}
+
+@media (max-width: 1200px) {
+  .user-list-actions-container {
+    flex: 0 0 280px;
+    max-width: 320px;
+  }
+}
+
+@media (max-width: 768px) {
+  .item-detail-content {
+    flex-direction: column;
+  }
+
+  .user-list-actions-container {
+    flex: none;
+    max-width: 100%;
+    width: 100%;
+    order: 2; /* Place after image on mobile */
+  }
+
+  .item-detail-info {
+    order: 3; /* Place info section last on mobile */
+  }
+
+  .item-detail-image {
+    order: 1; /* Image first on mobile */
+  }
+}

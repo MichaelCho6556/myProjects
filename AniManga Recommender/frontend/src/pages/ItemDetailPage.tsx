@@ -6,6 +6,8 @@ import "./ItemDetail.css";
 import Spinner from "../components/Spinner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { AnimeItem } from "../types";
+import { useAuth } from "../context/AuthContext";
+import UserListActions from "../components/UserListActions";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
@@ -31,6 +33,7 @@ const ItemDetailPage: React.FC = () => {
   const [recommendations, setRecommendations] = useState<AnimeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   // Dynamic document title
   useDocumentTitle(
@@ -123,6 +126,10 @@ const ItemDetailPage: React.FC = () => {
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement, Event>): void => {
     const target = event.target as HTMLImageElement;
     target.src = DEFAULT_PLACEHOLDER_IMAGE;
+  };
+
+  const handleStatusUpdate = () => {
+    console.log("Status updated successfully!");
   };
 
   if (loading) {
@@ -390,6 +397,13 @@ const ItemDetailPage: React.FC = () => {
                     </a>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* User List Actions - Only show when user is signed in */}
+            {user && (
+              <div className="user-list-actions-container">
+                <UserListActions item={item} onStatusUpdate={handleStatusUpdate} />
               </div>
             )}
           </div>
