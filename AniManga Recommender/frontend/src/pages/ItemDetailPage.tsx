@@ -7,7 +7,7 @@ import Spinner from "../components/Spinner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { AnimeItem } from "../types";
 
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
 
 /**
@@ -35,10 +35,10 @@ const ItemDetailPage: React.FC = () => {
   // Dynamic document title
   useDocumentTitle(
     item
-      ? `${item.title} - ${item.media_type?.toUpperCase() || "Details"} | AniManga Recommender`
+      ? `${item.title} - ${item.media_type?.toUpperCase() || "Details"}`
       : loading
-      ? "Loading... | AniManga Recommender"
-      : "Item Details | AniManga Recommender"
+      ? "Loading..."
+      : "Item Details"
   );
 
   const loadItemData = useCallback(async () => {
@@ -52,8 +52,8 @@ const ItemDetailPage: React.FC = () => {
       setLoading(true);
       setError("");
 
-      // Fetch item details
-      const response = await axios.get(`${API_BASE_URL}/items/${uid}`);
+      // Fetch item details - Using correct API endpoint
+      const response = await axios.get(`${API_BASE_URL}/api/items/${uid}`);
       const itemData = response.data;
 
       if (!itemData || !itemData.uid) {
@@ -66,9 +66,8 @@ const ItemDetailPage: React.FC = () => {
 
       // Fetch recommendations in parallel
       try {
-        const recommendationsResponse = await axios.get(`${API_BASE_URL}/recommendations/${uid}?n=10`);
+        const recommendationsResponse = await axios.get(`${API_BASE_URL}/api/recommendations/${uid}?n=10`);
 
-        // Handle the actual backend response format
         if (
           recommendationsResponse.data &&
           recommendationsResponse.data.recommendations &&
@@ -76,7 +75,6 @@ const ItemDetailPage: React.FC = () => {
         ) {
           setRecommendations(recommendationsResponse.data.recommendations);
         } else if (recommendationsResponse.data && Array.isArray(recommendationsResponse.data)) {
-          // Fallback for direct array response
           setRecommendations(recommendationsResponse.data);
         } else {
           console.warn("Unexpected recommendations response format:", recommendationsResponse.data);
@@ -84,11 +82,9 @@ const ItemDetailPage: React.FC = () => {
         }
       } catch (error) {
         console.warn("Failed to load recommendations:", error);
-        // Don't show error to user for recommendations failure
         setRecommendations([]);
       }
     } catch (error) {
-      // Check if it's an axios-like error by looking at the error structure
       const errorObj = error as any;
       if (errorObj?.response?.status) {
         if (errorObj.response.status === 404) {
@@ -123,6 +119,11 @@ const ItemDetailPage: React.FC = () => {
   };
 
   const getDefaultImage = () => DEFAULT_PLACEHOLDER_IMAGE;
+
+  const handleImageError = (event: React.SyntheticEvent<HTMLImageElement, Event>): void => {
+    const target = event.target as HTMLImageElement;
+    target.src = DEFAULT_PLACEHOLDER_IMAGE;
+  };
 
   if (loading) {
     return (
@@ -175,7 +176,7 @@ const ItemDetailPage: React.FC = () => {
       <div className="item-detail-container">
         {/* Back Link */}
         <Link to="/" className="back-link" aria-label="Go back to previous page">
-          Back
+          ← Back
         </Link>
 
         {/* Item Title */}
@@ -189,6 +190,7 @@ const ItemDetailPage: React.FC = () => {
               src={item.image_url || getDefaultImage()}
               alt={`Cover for ${item.title}`}
               className="item-image"
+              onError={handleImageError}
             />
           </div>
 
@@ -197,7 +199,11 @@ const ItemDetailPage: React.FC = () => {
             {/* Media Type */}
             <p>
               <strong>Type:</strong>
-              <Link to={`/?media_type=${encodeURIComponent(item.media_type)}`} className="tag-link">
+              <Link
+                to={`/?media_type=${encodeURIComponent(item.media_type)}`}
+                className="tag-link"
+                title={`View all ${item.media_type}`}
+              >
                 {item.media_type.toUpperCase()}
               </Link>
             </p>
@@ -210,10 +216,18 @@ const ItemDetailPage: React.FC = () => {
             </p>
 
             {/* Status */}
-            <p>
-              <strong>Status:</strong>
-              {item.status}
-            </p>
+            {item.status && (
+              <p>
+                <strong>Status:</strong>
+                <Link
+                  to={`/?status=${encodeURIComponent(item.status)}`}
+                  className="tag-link"
+                  title={`View all ${item.status} items`}
+                >
+                  {item.status}
+                </Link>
+              </p>
+            )}
 
             {/* Episodes/Chapters */}
             {item.media_type === "anime" && item.episodes && (
@@ -260,11 +274,18 @@ const ItemDetailPage: React.FC = () => {
             {item.genres && item.genres.length > 0 && (
               <div className="tag-list-container">
                 <strong>Genres:</strong>
-                {item.genres.map((genre, index) => (
-                  <Link key={index} to={`/?genre=${encodeURIComponent(genre)}`} className="tag-link">
-                    {genre}
-                  </Link>
-                ))}
+                <div className="tags-wrapper">
+                  {item.genres.map((genre, index) => (
+                    <Link
+                      key={`genre-${index}`}
+                      to={`/?genre=${encodeURIComponent(genre)}`}
+                      className="tag-link"
+                      title={`View all ${genre} items`}
+                    >
+                      {genre}
+                    </Link>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -272,11 +293,18 @@ const ItemDetailPage: React.FC = () => {
             {item.themes && item.themes.length > 0 && (
               <div className="tag-list-container">
                 <strong>Themes:</strong>
-                {item.themes.map((theme, index) => (
-                  <Link key={index} to={`/?theme=${encodeURIComponent(theme)}`} className="tag-link">
-                    {theme}
-                  </Link>
-                ))}
+                <div className="tags-wrapper">
+                  {item.themes.map((theme, index) => (
+                    <Link
+                      key={`theme-${index}`}
+                      to={`/?theme=${encodeURIComponent(theme)}`}
+                      className="tag-link"
+                      title={`View all ${theme} themed items`}
+                    >
+                      {theme}
+                    </Link>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -284,19 +312,60 @@ const ItemDetailPage: React.FC = () => {
             {item.demographics && item.demographics.length > 0 && (
               <div className="tag-list-container">
                 <strong>Demographics:</strong>
-                {item.demographics.map((demographic, index) => (
-                  <Link
-                    key={index}
-                    to={`/?demographic=${encodeURIComponent(demographic)}`}
-                    className="tag-link"
-                  >
-                    {demographic}
-                  </Link>
-                ))}
+                <div className="tags-wrapper">
+                  {item.demographics.map((demographic, index) => (
+                    <Link
+                      key={`demographic-${index}`}
+                      to={`/?demographic=${encodeURIComponent(demographic)}`}
+                      className="tag-link"
+                      title={`View all ${demographic} items`}
+                    >
+                      {demographic}
+                    </Link>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Producers */}
+            {/* Studios */}
+            {item.studios && item.studios.length > 0 && (
+              <div className="tag-list-container">
+                <strong>Studios:</strong>
+                <div className="tags-wrapper">
+                  {item.studios.map((studio, index) => (
+                    <Link
+                      key={`studio-${index}`}
+                      to={`/?studio=${encodeURIComponent(studio)}`}
+                      className="tag-link"
+                      title={`View all items by ${studio}`}
+                    >
+                      {studio}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Authors */}
+            {item.authors && item.authors.length > 0 && (
+              <div className="tag-list-container">
+                <strong>Authors:</strong>
+                <div className="tags-wrapper">
+                  {item.authors.map((author, index) => (
+                    <Link
+                      key={`author-${index}`}
+                      to={`/?author=${encodeURIComponent(author)}`}
+                      className="tag-link"
+                      title={`View all items by ${author}`}
+                    >
+                      {author}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Producers (non-clickable for now) */}
             {item.producers && item.producers.length > 0 && (
               <p>
                 <strong>Producers:</strong>
@@ -304,12 +373,24 @@ const ItemDetailPage: React.FC = () => {
               </p>
             )}
 
-            {/* Studios */}
-            {item.studios && item.studios.length > 0 && (
-              <p>
-                <strong>Studios:</strong>
-                {item.studios.join(", ")}
-              </p>
+            {/* External Links */}
+            {item.external_links && item.external_links.length > 0 && (
+              <div className="tag-list-container">
+                <strong>External Links:</strong>
+                <div className="tags-wrapper">
+                  {item.external_links.map((link, index) => (
+                    <a
+                      key={`link-${index}`}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="external-link"
+                    >
+                      {link.name}
+                    </a>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -319,6 +400,14 @@ const ItemDetailPage: React.FC = () => {
           <div className="synopsis-section">
             <strong>Synopsis</strong>
             <p>{item.synopsis}</p>
+          </div>
+        )}
+
+        {/* Background Section */}
+        {item.background && (
+          <div className="background-section">
+            <strong>Background</strong>
+            <p>{item.background}</p>
           </div>
         )}
 
