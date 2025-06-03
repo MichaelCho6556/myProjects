@@ -558,28 +558,47 @@ class SupabaseAuthClient:
     def verify_jwt_token(self, token: str) -> dict:
         """
         Verify JWT token and extract user information
+        For Supabase, we validate tokens by making an API call instead of decoding locally
         """
         try:
             # Remove 'Bearer ' prefix if present
             if token.startswith('Bearer '):
                 token = token[7:]
             
-            # Decode the JWT token
-            payload = jwt.decode(
-                token, 
-                self.jwt_secret, 
-                algorithms=['HS256'],
-                audience='authenticated'
+            # For Supabase, verify the token by making a request to the auth endpoint
+            headers = {
+                "apikey": self.api_key,
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            
+            # Make a request to Supabase auth user endpoint to validate token
+            response = requests.get(
+                f"{self.base_url}/auth/v1/user",
+                headers=headers,
+                timeout=10
             )
             
-            return {
-                'user_id': payload.get('sub'),
-                'email': payload.get('email'),
-                'role': payload.get('role', 'authenticated')
-            }
-        except jwt.ExpiredSignatureError:
-            raise ValueError("Token has expired")
-        except jwt.InvalidTokenError:
+            if response.status_code == 200:
+                user_data = response.json()
+                return {
+                    'sub': user_data.get('id'),  # Use 'sub' for consistency
+                    'user_id': user_data.get('id'),
+                    'email': user_data.get('email'),
+                    'role': user_data.get('role', 'authenticated'),
+                    'user_metadata': user_data.get('user_metadata', {})
+                }
+            elif response.status_code == 401:
+                raise ValueError("Token has expired or is invalid")
+            else:
+                raise ValueError("Invalid token")
+            
+        except requests.exceptions.Timeout:
+            raise ValueError("Authentication service timeout")
+        except requests.exceptions.RequestException:
+            raise ValueError("Authentication service unavailable")
+        except Exception as e:
+            print(f"JWT verification error: {e}")
             raise ValueError("Invalid token")
     
     def get_user_profile(self, user_id: str) -> dict:

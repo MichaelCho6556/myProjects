@@ -44,10 +44,19 @@ const Navbar: React.FC = () => {
           </Link>
           <ul className="nav-menu" role="menubar">
             <li className="nav-item" role="none">
-              <Link to="/" className="nav-links" role="menuitem" aria-current="page">
+              <Link to="/" className="nav-links" role="menuitem">
                 Home
               </Link>
             </li>
+
+            {/* Dashboard link - only show when user is signed in */}
+            {user && (
+              <li className="nav-item" role="none">
+                <Link to="/dashboard" className="nav-links" role="menuitem">
+                  Dashboard
+                </Link>
+              </li>
+            )}
 
             {/* Authentication Section */}
             <li className="nav-item" role="none">
