@@ -81,10 +81,31 @@
 .form-group label {
   display: block;
   margin-bottom: 0.6rem;
-  font-weight: 600;
-  color: #374151;
-  font-size: 0.95rem;
+  font-weight: 700 !important;
+  color: #1e40af !important;
+  font-size: 1rem;
   letter-spacing: 0.025em;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.form-group label[for="display-name"],
+.form-group label[for="email"],
+.form-group label[for="password"] {
+  color: #1d4ed8 !important;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+}
+
+.form-group label::before {
+  content: "● ";
+  color: #3b82f6;
+  margin-right: 0.3rem;
+  font-weight: bold;
 }
 
 .form-group input {
@@ -95,14 +116,15 @@
   font-size: 1rem;
   box-sizing: border-box;
   transition: all 0.3s ease;
-  background-color: #ffffff;
-  color: #111827; /* Dark text for contrast */
-  font-weight: 500;
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  font-weight: 600 !important;
 }
 
 .form-group input::placeholder {
-  color: #9ca3af;
-  font-weight: 400;
+  color: #4b5563 !important;
+  font-weight: 500;
+  opacity: 1;
 }
 
 .form-group input:focus {
@@ -121,10 +143,9 @@
 
 /* Better styling for display name field */
 .form-group input[type="text"] {
-  background: linear-gradient(145deg, #ffffff 0%, #f9fafb 100%);
-  border: 2px solid #e5e7eb;
-  color: #111827; /* Strong contrast */
-  font-weight: 600;
+  background: #ffffff !important;
+  color: #111827 !important;
+  font-weight: 700; /* Extra bold for display name */
 }
 
 .form-group input[type="text"]:focus {
@@ -140,9 +161,9 @@
 }
 
 .form-group input[type="email"] {
-  background: #ffffff;
-  color: #111827;
-  font-weight: 500;
+  background: #ffffff !important;
+  color: #111827 !important;
+  font-weight: 600;
 }
 
 .form-group input[type="email"]:focus {
@@ -151,15 +172,24 @@
 }
 
 .form-group input[type="password"] {
-  background: #ffffff;
-  color: #111827;
-  font-weight: 500;
-  font-family: "Courier New", monospace;
+  background: #ffffff !important;
+  color: #111827 !important;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
 }
 
 .form-group input[type="password"]:focus {
   border-color: #ef4444;
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1), 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure autofill doesn't override colors */
+.form-group input:-webkit-autofill,
+.form-group input:-webkit-autofill:hover,
+.form-group input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 30px white inset !important;
+  -webkit-text-fill-color: #111827 !important;
+  background-color: white !important;
 }
 
 .auth-submit-btn {

@@ -75,9 +75,18 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
       setLoading(true);
       setError(null);
 
+      let finalProgress = progress;
+
+      if (selectedStatus === "completed") {
+        const maxProgress = getMaxProgress();
+        finalProgress = maxProgress;
+        setProgress(maxProgress);
+        console.log(`Auto-setting progress to ${maxProgress} for completed anime/manga`);
+      }
+
       const updateData: any = {
         status: selectedStatus,
-        progress: progress,
+        progress: finalProgress,
       };
 
       if (rating !== undefined && rating > 0) {
@@ -90,25 +99,46 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
 
       if (selectedStatus === "completed") {
         updateData.completion_date = new Date().toISOString();
-        // Auto-set progress to max for completed items
-        if (item.episodes) {
-          updateData.progress = item.episodes;
-        } else if (item.chapters) {
-          updateData.progress = item.chapters;
-        }
       }
 
-      await updateUserItemStatus(item.uid, updateData);
-      await loadUserItem(); // Reload to get fresh data
-      setIsEditing(false);
+      console.log("Sending update data:", updateData);
 
-      if (onStatusUpdate) {
-        onStatusUpdate();
+      const result = await updateUserItemStatus(item.uid, updateData);
+
+      if (result && (result.success === true || result.data)) {
+        await loadUserItem();
+        setIsEditing(false);
+
+        // 🆕 TRIGGER DASHBOARD REFRESH
+        localStorage.setItem("animanga_list_updated", Date.now().toString());
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: "animanga_list_updated",
+            newValue: Date.now().toString(),
+          })
+        );
+
+        if (onStatusUpdate) {
+          onStatusUpdate();
+        }
+      } else {
+        throw new Error("Update failed - no success confirmation received");
       }
     } catch (err: any) {
+      console.error("Status update error:", err);
       setError(err.message || "Failed to update status");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStatusChange = (newStatus: string) => {
+    setSelectedStatus(newStatus);
+
+    if (newStatus === "completed") {
+      const maxProgress = getMaxProgress();
+      setProgress(maxProgress);
+      console.log(`Auto-setting progress to ${maxProgress} for completed status`);
     }
   };
 
@@ -140,9 +170,13 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
 
   const getMaxProgress = () => {
     if (item.media_type === "anime") {
-      return item.episodes || 1;
+      const episodes = item.episodes || 0;
+      console.log(`Anime episodes available: ${episodes}`);
+      return Math.max(episodes, 1);
     } else {
-      return item.chapters || 1;
+      const chapters = item.chapters || 0;
+      console.log(`Manga chapters available: ${chapters}`);
+      return Math.max(chapters, 1);
     }
   };
 
@@ -226,7 +260,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
             <select
               id="status-select"
               value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
+              onChange={(e) => handleStatusChange(e.target.value)}
               disabled={loading}
             >
               {statusOptions.map((option) => (

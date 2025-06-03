@@ -138,12 +138,19 @@ const FilterBar: React.FC<FilterBarProps> = ({
           <option value="start_date_desc">Release Date (Newest)</option>
           <option value="start_date_asc">Release Date (Oldest)</option>
         </select>
-        {filtersLoading && (
-          <span className="filter-loading-indicator" aria-hidden="true">
-            ⟳
-          </span>
-        )}
       </div>
+
+      {/* ✅ NEW: Professional Loading Banner */}
+      {(loading || filtersLoading) && (
+        <div className="loading-banner" role="status" aria-live="polite">
+          <div className="loading-content">
+            <div className="loading-spinner"></div>
+            <span className="loading-text">
+              {filtersLoading ? "Loading filters..." : "Loading content..."}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Media Type Filter */}
       <div className="filter-group">

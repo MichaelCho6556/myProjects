@@ -25,6 +25,9 @@ uid_to_idx = None
 supabase_client = None
 auth_client = None
 
+# ADD a simple in-memory cache for media types
+_media_type_cache = {}
+
 def load_data_and_tfidf_from_supabase():
     """Load data from Supabase database instead of CSV files"""
     global df_processed, tfidf_vectorizer_global, tfidf_matrix_global, uid_to_idx, supabase_client
@@ -411,7 +414,9 @@ def update_user_profile():
 @require_auth
 def get_user_dashboard():
     """Get user's complete dashboard data"""
-    user_id = g.current_user['sub']
+    user_id = g.current_user['user_id'] if 'user_id' in g.current_user else g.current_user['sub']
+    
+    print(f"🎯 Dashboard request for user_id: {user_id}")  # Debug log
     
     try:
         dashboard_data = {
@@ -423,9 +428,14 @@ def get_user_dashboard():
             'on_hold': get_user_items_by_status(user_id, 'on_hold'),
             'quick_stats': get_quick_stats(user_id)
         }
+        
+        print(f"🎯 Dashboard data summary: {dashboard_data.get('quick_stats', {}).get('completed', 0)} completed items")
+        
         return jsonify(dashboard_data)
     except Exception as e:
         print(f"Error getting dashboard data: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Failed to load dashboard data'}), 500
 
 @app.route('/api/auth/user-items', methods=['GET'])
@@ -445,28 +455,81 @@ def get_user_items():
 @app.route('/api/auth/user-items/<item_uid>', methods=['POST', 'PUT'])
 @require_auth
 def update_user_item_status(item_uid):
-    """Update user's status for an anime/manga item"""
+    """Update user's status for an anime/manga item - WITH COMPLETION DATE SUPPORT"""
     try:
-        user_id = g.current_user['user_id']
+        user_id = g.current_user['user_id'] if 'user_id' in g.current_user else g.current_user['sub']
         data = request.json
         
-        status = data.get('status')
-        rating = data.get('rating')
-        episodes_watched = data.get('episodes_watched')
+        print(f"🎯 Updating item {item_uid} for user {user_id}")
+        print(f"📝 Received data: {data}")
         
+        # Extract required data
+        status = data.get('status')
         if not status:
             return jsonify({'error': 'Status is required'}), 400
         
-        result = auth_client.update_user_item_status(
-            user_id, item_uid, status, rating, episodes_watched
-        )
+        rating = data.get('rating')
+        progress = data.get('progress', 0)
+        notes = data.get('notes', '')
+        completion_date = data.get('completion_date')  # ✅ NEW: Get completion_date from frontend
         
-        if result:
-            return jsonify(result)
+        # AUTO-COMPLETION LOGIC: Set progress to max when completed
+        if status == 'completed' and progress == 0:
+            # Get item details to determine max progress
+            if item_uid in uid_to_idx.index:
+                idx = uid_to_idx[item_uid]
+                item_details = df_processed.loc[idx]
+                
+                if item_details['media_type'] == 'anime':
+                    max_progress = int(item_details.get('episodes', 1) or 1)
+                else:  # manga
+                    max_progress = int(item_details.get('chapters', 1) or 1)
+                
+                progress = max_progress
+                print(f"🎯 Auto-setting progress to {max_progress} for completed {item_details['media_type']}")
+            else:
+                progress = 1  # Fallback
+        
+        # Create comprehensive status data
+        status_data = {
+            'status': status,
+            'progress': progress,
+            'notes': notes
+        }
+        
+        if rating is not None and rating > 0:
+            status_data['rating'] = rating
+        
+        # ✅ NEW: Add completion_date if provided
+        if completion_date:
+            status_data['completion_date'] = completion_date
+        
+        print(f"📤 Sending to Supabase: {status_data}")
+        
+        # Call the enhanced update method
+        result = auth_client.update_user_item_status_comprehensive(user_id, item_uid, status_data)
+        
+        if result and result.get('success'):
+            print(f"✅ Update successful!")
+            
+            # ✅ INVALIDATE CACHE so next dashboard load will be fresh
+            invalidate_user_statistics_cache(user_id)
+            
+            # Log activity for dashboard updates
+            log_user_activity(user_id, 'status_changed', item_uid, {
+                'new_status': status,
+                'progress': progress
+            })
+            
+            return jsonify({'success': True, 'data': result.get('data', {})})
         else:
+            print(f"❌ Update failed: {result}")
             return jsonify({'error': 'Failed to update item status'}), 400
             
     except Exception as e:
+        print(f"❌ Error in update_user_item_status: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/user-items/<item_uid>', methods=['DELETE'])
@@ -493,45 +556,11 @@ def remove_user_item(item_uid):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/auth/user-items/<item_uid>/status', methods=['POST', 'PUT'])
-@require_auth
-def update_item_status(item_uid):
-    """Update user's status for a specific item"""
-    user_id = g.current_user['sub']
-    data = request.get_json()
-    
-    try:
-        status_data = {
-            'status': data['status'],
-            'progress': data.get('progress', 0),
-            'start_date': data.get('start_date'),
-            'completion_date': data.get('completion_date'),
-            'notes': data.get('notes', '')
-        }
-        
-        # Update item status
-        result = auth_client.update_user_item_status(user_id, item_uid, status_data)
-        
-        # Log activity
-        log_user_activity(user_id, 'status_changed', item_uid, {
-            'old_status': data.get('old_status'),
-            'new_status': data['status'],
-            'progress': data.get('progress', 0)
-        })
-        
-        # Update user statistics in background
-        update_user_statistics_sync(user_id)
-        
-        return jsonify(result)
-    except Exception as e:
-        print(f"Error updating item status: {e}")
-        return jsonify({'error': 'Failed to update item status'}), 500
-    
 @app.route('/api/auth/user-items/by-status/<status>', methods=['GET'])
 @require_auth
 def get_user_items_by_status_route(status):
     """Get user's items filtered by status"""
-    user_id = g.current_user['sub']
+    user_id = g.current_user['user_id'] if 'user_id' in g.current_user else g.current_user['sub']
     
     try:
         items = get_user_items_by_status(user_id, status)
@@ -549,9 +578,85 @@ def verify_token():
         'user': g.current_user
     })
 
+@app.route('/api/auth/force-refresh-stats', methods=['POST'])
+@require_auth
+def force_refresh_statistics():
+    """Force recalculation of user statistics"""
+    try:
+        user_id = g.current_user['user_id'] if 'user_id' in g.current_user else g.current_user['sub']
+        
+        print(f"🔄 Force refreshing statistics for user {user_id}")
+        
+        # Calculate fresh statistics
+        fresh_stats = calculate_user_statistics_realtime(user_id)
+        
+        if not fresh_stats:
+            return jsonify({'error': 'Failed to calculate statistics'}), 500
+        
+        print(f"📊 Fresh stats: {fresh_stats}")
+        
+        # Delete existing statistics first
+        delete_response = requests.delete(
+            f"{auth_client.base_url}/rest/v1/user_statistics",
+            headers=auth_client.headers,
+            params={'user_id': f'eq.{user_id}'}
+        )
+        
+        # Insert new statistics
+        insert_response = requests.post(
+            f"{auth_client.base_url}/rest/v1/user_statistics",
+            headers=auth_client.headers,
+            json=fresh_stats
+        )
+        
+        if insert_response.status_code in [200, 201]:
+            return jsonify({'success': True, 'statistics': fresh_stats})
+        else:
+            return jsonify({'error': 'Failed to update statistics'}), 500
+            
+    except Exception as e:
+        print(f"Error force refreshing statistics: {e}")
+        return jsonify({'error': str(e)}), 500
+
 #helper functions
 def get_user_statistics(user_id: str) -> dict:
-    """Get cached user statistics"""
+    """Get user statistics - SMART CACHING with auto-invalidation"""
+    try:
+        print(f"📊 Getting statistics for user {user_id}")
+        
+        # Try to get cached statistics first
+        cached_stats = get_cached_user_statistics(user_id)
+        
+        if cached_stats and is_cache_fresh(cached_stats):
+            print(f"⚡ Using cached statistics (fresh)")
+            return cached_stats
+        
+        print(f"🔄 Cache miss or stale, calculating fresh statistics")
+        
+        # Calculate fresh statistics
+        fresh_stats = calculate_user_statistics_realtime(user_id)
+        
+        if fresh_stats:
+            # Update cache with fresh data
+            update_user_statistics_cache(user_id, fresh_stats)
+            print(f"✅ Cache updated with fresh stats: anime={fresh_stats.get('total_anime_watched')}, manga={fresh_stats.get('total_manga_read')}")
+            return fresh_stats
+        
+        # Fallback to cached data even if stale
+        if cached_stats:
+            print(f"⚠️ Using stale cached data as fallback")
+            return cached_stats
+        
+        # Final fallback to defaults
+        print("⚠️ No data available, returning defaults")
+        return get_default_user_statistics()
+        
+    except Exception as e:
+        print(f"Error getting user statistics: {e}")
+        return get_default_user_statistics()
+
+def get_cached_user_statistics(user_id: str) -> dict:
+    """Get cached user statistics from database"""
     try:
         response = requests.get(
             f"{auth_client.base_url}/rest/v1/user_statistics",
@@ -563,21 +668,143 @@ def get_user_statistics(user_id: str) -> dict:
             data = response.json()
             if data:
                 return data[0]
-        
-        # Return default stats if none exist
-        return {
-            'total_anime_watched': 0,
-            'total_manga_read': 0,
-            'total_hours_watched': 0.0,
-            'total_chapters_read': 0,
-            'average_score': 0.0,
-            'favorite_genres': [],
-            'current_streak_days': 0,
-            'longest_streak_days': 0,
-            'completion_rate': 0.0
-        }
+        return None
     except Exception as e:
-        print(f"Error getting user statistics: {e}")
+        print(f"Error getting cached statistics: {e}")
+        return None
+
+def is_cache_fresh(cached_stats: dict, max_age_minutes: int = 5) -> bool:
+    """Check if cached statistics are fresh enough"""
+    try:
+        if not cached_stats.get('updated_at'):
+            return False
+        
+        from datetime import datetime, timedelta
+        updated_at = datetime.fromisoformat(cached_stats['updated_at'].replace('Z', '+00:00'))
+        now = datetime.now().replace(tzinfo=updated_at.tzinfo)
+        age = now - updated_at
+        
+        is_fresh = age < timedelta(minutes=max_age_minutes)
+        print(f"🕒 Cache age: {age}, fresh: {is_fresh}")
+        return is_fresh
+    except Exception as e:
+        print(f"Error checking cache freshness: {e}")
+        return False
+
+def update_user_statistics_cache(user_id: str, stats: dict):
+    """Update user statistics cache with upsert"""
+    try:
+        # Add timestamp and user_id
+        cache_data = {
+            **stats,
+            'user_id': str(user_id),
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        # Use UPSERT to update existing or insert new
+        response = requests.post(
+            f"{auth_client.base_url}/rest/v1/user_statistics",
+            headers={
+                **auth_client.headers,
+                'Prefer': 'resolution=merge-duplicates'  # Enable upsert
+            },
+            json=cache_data
+        )
+        
+        if response.status_code in [200, 201]:
+            print(f"✅ Statistics cache updated successfully")
+            return True
+        else:
+            print(f"❌ Failed to update cache: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"Error updating statistics cache: {e}")
+        return False
+
+def invalidate_user_statistics_cache(user_id: str):
+    """Invalidate user statistics cache by deleting it"""
+    try:
+        print(f"🗑️ Invalidating statistics cache for user {user_id}")
+        
+        response = requests.delete(
+            f"{auth_client.base_url}/rest/v1/user_statistics",
+            headers=auth_client.headers,
+            params={'user_id': f'eq.{user_id}'}
+        )
+        
+        return response.status_code in [200, 204]
+    except Exception as e:
+        print(f"Error invalidating cache: {e}")
+        return False
+
+def get_default_user_statistics() -> dict:
+    """Get default user statistics"""
+    return {
+        'total_anime_watched': 0,
+        'total_manga_read': 0,
+        'total_hours_watched': 0.0,
+        'total_chapters_read': 0,
+        'average_score': 0.0,
+        'favorite_genres': [],
+        'current_streak_days': 0,
+        'longest_streak_days': 0,
+        'completion_rate': 0.0
+    }
+
+def calculate_user_statistics_realtime(user_id: str) -> dict:
+    """Calculate user statistics in real-time - NO CACHING"""
+    try:
+        # Get all user items directly
+        response = requests.get(
+            f"{auth_client.base_url}/rest/v1/user_items",
+            headers=auth_client.headers,
+            params={'user_id': f'eq.{user_id}'}
+        )
+        
+        if response.status_code != 200:
+            print(f"❌ Failed to get user items: {response.status_code}")
+            return {}
+        
+        user_items = response.json()
+        print(f"📝 Found {len(user_items)} total user items")
+        
+        completed_items = [item for item in user_items if item['status'] == 'completed']
+        print(f"✅ Found {len(completed_items)} completed items")
+        
+        # Count anime vs manga in completed items
+        anime_count = 0
+        manga_count = 0
+        
+        for item in completed_items:
+            media_type = get_item_media_type(item['item_uid'])
+            print(f"🎯 Item {item['item_uid']}: media_type = {media_type}")
+            
+            if media_type == 'anime':
+                anime_count += 1
+            elif media_type == 'manga':
+                manga_count += 1
+        
+        print(f"📊 Final counts: anime={anime_count}, manga={manga_count}")
+        
+        # Calculate enhanced statistics with proper type conversion
+        stats = {
+            'total_anime_watched': int(anime_count),
+            'total_manga_read': int(manga_count),
+            'total_hours_watched': float(calculate_watch_time(completed_items)),
+            'total_chapters_read': int(calculate_chapters_read(completed_items)),
+            'average_score': float(calculate_average_user_score(user_items)),
+            'favorite_genres': list(get_user_favorite_genres(user_items)),
+            'current_streak_days': int(calculate_current_streak(user_id)),
+            'longest_streak_days': int(calculate_longest_streak(user_id)),
+            'completion_rate': float(calculate_completion_rate(user_items))
+        }
+        
+        return stats
+    except Exception as e:
+        print(f"Error calculating real-time statistics: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
 
 def get_recent_user_activity(user_id: str, limit: int = 10) -> list:
@@ -704,24 +931,6 @@ def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_
         return response.status_code in [200, 201]
     except Exception as e:
         print(f"Error logging activity: {e}")
-        return False
-
-def update_user_statistics_sync(user_id: str):
-    """Update user statistics synchronously"""
-    try:
-        # Calculate new statistics
-        stats = calculate_user_statistics(user_id)
-        
-        # Upsert to user_statistics table
-        response = requests.post(
-            f"{auth_client.base_url}/rest/v1/user_statistics",
-            headers=auth_client.headers,
-            json=stats
-        )
-        
-        return response.status_code in [200, 201]
-    except Exception as e:
-        print(f"Error updating user statistics: {e}")
         return False
 
 def calculate_watch_time(completed_items: list) -> float:
@@ -896,21 +1105,23 @@ def calculate_longest_streak(user_id: str) -> int:
         return 0
 
 def get_item_details_for_stats(item_uid: str) -> dict:
-    """Get item details for statistics calculations (optimized)"""
+    """Get item details for statistics calculations (JSON SAFE VERSION)"""
     try:
         if df_processed is not None and not df_processed.empty:
             item_row = df_processed[df_processed['uid'] == item_uid]
             if not item_row.empty:
                 item = item_row.iloc[0]
+                
+                # Convert numpy types to native Python types
                 return {
-                    'uid': item['uid'],
-                    'title': item['title'],
-                    'media_type': item['media_type'],
-                    'episodes': item.get('episodes'),
-                    'chapters': item.get('chapters'),
-                    'duration_minutes': item.get('duration_minutes', 24),  # Default anime episode length
-                    'genres': item.get('genres', []),
-                    'score': item.get('score', 0)
+                    'uid': str(item['uid']),
+                    'title': str(item['title']),
+                    'media_type': str(item['media_type']),
+                    'episodes': int(item.get('episodes', 0)) if pd.notna(item.get('episodes')) else 0,
+                    'chapters': int(item.get('chapters', 0)) if pd.notna(item.get('chapters')) else 0,
+                    'duration_minutes': int(item.get('duration_minutes', 24)) if pd.notna(item.get('duration_minutes')) else 24,
+                    'genres': list(item.get('genres', [])) if isinstance(item.get('genres'), list) else [],
+                    'score': float(item.get('score', 0)) if pd.notna(item.get('score')) else 0.0
                 }
         return {}
     except Exception as e:
@@ -918,7 +1129,7 @@ def get_item_details_for_stats(item_uid: str) -> dict:
         return {}
 
 def calculate_user_statistics(user_id: str) -> dict:
-    """Calculate comprehensive user statistics with enhanced calculations"""
+    """Calculate comprehensive user statistics - JSON SAFE VERSION"""
     try:
         # Get all user items
         response = requests.get(
@@ -933,18 +1144,18 @@ def calculate_user_statistics(user_id: str) -> dict:
         user_items = response.json()
         completed_items = [item for item in user_items if item['status'] == 'completed']
         
-        # Calculate enhanced statistics
+        # Calculate enhanced statistics with proper type conversion
         stats = {
-            'user_id': user_id,
-            'total_anime_watched': len([item for item in completed_items if get_item_media_type(item['item_uid']) == 'anime']),
-            'total_manga_read': len([item for item in completed_items if get_item_media_type(item['item_uid']) == 'manga']),
-            'total_hours_watched': calculate_watch_time(completed_items),
-            'total_chapters_read': calculate_chapters_read(completed_items),
-            'average_score': calculate_average_user_score(user_items),
-            'favorite_genres': get_user_favorite_genres(user_items),
-            'current_streak_days': calculate_current_streak(user_id),
-            'longest_streak_days': calculate_longest_streak(user_id),
-            'completion_rate': calculate_completion_rate(user_items),
+            'user_id': str(user_id),
+            'total_anime_watched': int(len([item for item in completed_items if get_item_media_type(item['item_uid']) == 'anime'])),
+            'total_manga_read': int(len([item for item in completed_items if get_item_media_type(item['item_uid']) == 'manga'])),
+            'total_hours_watched': float(calculate_watch_time(completed_items)),
+            'total_chapters_read': int(calculate_chapters_read(completed_items)),
+            'average_score': float(calculate_average_user_score(user_items)),
+            'favorite_genres': list(get_user_favorite_genres(user_items)),
+            'current_streak_days': int(calculate_current_streak(user_id)),
+            'longest_streak_days': int(calculate_longest_streak(user_id)),
+            'completion_rate': float(calculate_completion_rate(user_items)),
             'updated_at': datetime.now().isoformat()
         }
         
@@ -974,6 +1185,58 @@ def calculate_completion_rate(user_items: list) -> float:
     completed = len([item for item in user_items if item['status'] == 'completed'])
     total = len(user_items)
     return round((completed / total) * 100, 2) if total > 0 else 0.0
+
+# ENHANCE the get_item_media_type function:
+def get_item_media_type(item_uid: str) -> str:
+    """Get item media type (anime/manga) - WITH CACHING"""
+    try:
+        # Check in-memory cache first
+        if item_uid in _media_type_cache:
+            return _media_type_cache[item_uid]
+        
+        if df_processed is not None and not df_processed.empty:
+            item_row = df_processed[df_processed['uid'] == item_uid]
+            if not item_row.empty:
+                media_type = item_row.iloc[0].get('media_type', 'unknown')
+                # Cache the result
+                _media_type_cache[item_uid] = media_type
+                print(f"🔍 Item {item_uid}: media_type = {media_type} (cached)")
+                return media_type
+            else:
+                print(f"⚠️ Item {item_uid} not found in df_processed")
+        else:
+            print(f"⚠️ df_processed is None or empty")
+        
+        # Cache unknown results too
+        _media_type_cache[item_uid] = 'unknown'
+        return 'unknown'
+    except Exception as e:
+        print(f"Error getting item media type for {item_uid}: {e}")
+        return 'unknown'
+
+# Add this to get item details for frontend calculations
+def get_item_details_simple(item_uid: str) -> dict:
+    """Get basic item details for API responses - JSON SAFE VERSION"""
+    try:
+        if df_processed is not None and not df_processed.empty:
+            item_row = df_processed[df_processed['uid'] == item_uid]
+            if not item_row.empty:
+                item = item_row.iloc[0]
+                
+                # Convert numpy types to native Python types for JSON serialization
+                return {
+                    'uid': str(item['uid']),
+                    'title': str(item['title']),
+                    'media_type': str(item['media_type']),
+                    'episodes': int(item.get('episodes', 0)) if pd.notna(item.get('episodes')) else None,
+                    'chapters': int(item.get('chapters', 0)) if pd.notna(item.get('chapters')) else None,
+                    'score': float(item.get('score', 0)) if pd.notna(item.get('score')) else 0.0,
+                    'image_url': str(item.get('image_url', '')) if pd.notna(item.get('image_url')) else None
+                }
+        return {}
+    except Exception as e:
+        print(f"Error getting item details: {e}")
+        return {}
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
