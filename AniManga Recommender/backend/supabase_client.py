@@ -536,6 +536,101 @@ class SupabaseClient:
         response = self._make_request('GET', table_name, params=params)
         return response.json()
 
+    def update_user_item_status_comprehensive(self, user_id: str, item_uid: str, status_data: dict) -> dict:
+        """
+        Comprehensive update method for user item status - WITH COMPLETION DATE SUPPORT
+        """
+        try:
+            print(f"🔄 Supabase update for user {user_id}, item {item_uid}")
+            print(f"📥 Input data: {status_data}")
+            
+            # First, check if record exists
+            existing = requests.get(
+                f"{self.base_url}/rest/v1/user_items",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'item_uid': f'eq.{item_uid}',
+                    'select': 'id,status'
+                }
+            )
+            
+            existing_data = existing.json()
+            print(f"🔍 Existing record: {existing_data}")
+            
+            # Prepare comprehensive data
+            data = {
+                'user_id': user_id,
+                'item_uid': item_uid,
+                'status': status_data['status'],
+                'progress': status_data.get('progress', 0),
+                'updated_at': 'now()'
+            }
+            
+            # Add optional fields if provided
+            if 'rating' in status_data and status_data['rating'] is not None:
+                data['rating'] = status_data['rating']
+            
+            if 'notes' in status_data and status_data['notes']:
+                data['notes'] = status_data['notes']
+            
+            # Handle completion date logic
+            if status_data['status'] == 'completed':
+                # Use provided completion_date or default to now
+                completion_date = status_data.get('completion_date', 'now()')
+                data['completion_date'] = completion_date
+                print(f"🎯 Setting completion_date: {completion_date}")
+            
+            # Handle start date logic for new records
+            if not existing_data and status_data['status'] in ['watching', 'reading']:
+                data['start_date'] = 'now()'
+                print(f"🚀 Setting start_date for new {status_data['status']} record")
+            
+            print(f"📤 Final data to send: {data}")
+            
+            if existing_data:
+                # Update existing record
+                print("🔄 Updating existing record...")
+                response = requests.patch(
+                    f"{self.base_url}/rest/v1/user_items",
+                    headers=self.headers,
+                    params={
+                        'user_id': f'eq.{user_id}',
+                        'item_uid': f'eq.{item_uid}'
+                    },
+                    json=data
+                )
+            else:
+                # Create new record
+                print("➕ Creating new record...")
+                response = requests.post(
+                    f"{self.base_url}/rest/v1/user_items",
+                    headers=self.headers,
+                    json=data
+                )
+            
+            print(f"📨 Response status: {response.status_code}")
+            print(f"📨 Response text: {response.text}")
+            
+            if response.status_code in [200, 201, 204]:
+                print(f"✅ Successfully updated user item!")
+                return {'success': True, 'data': response.json() if response.content else {}}
+            else:
+                print(f"❌ Supabase error: {response.status_code} - {response.text}")
+                # Check if error is about missing column and provide helpful info
+                if "completion_date" in response.text and "not found" in response.text:
+                    print(f"💡 SOLUTION: The completion_date column needs to be added to your Supabase database")
+                    print(f"   Run this SQL in your Supabase SQL editor:")
+                    print(f"   ALTER TABLE user_items ADD COLUMN completion_date TIMESTAMP;")
+                    print(f"   ALTER TABLE user_items ADD COLUMN start_date TIMESTAMP;")
+                return {'success': False, 'error': response.text}
+            
+        except Exception as e:
+            print(f"❌ Error updating user item status: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'success': False, 'error': str(e)}
+
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
 class SupabaseAuthClient:
@@ -741,6 +836,74 @@ class SupabaseAuthClient:
             if response.status_code in [200, 201]:
                 return response.json()
             return None
+        except Exception as e:
+            print(f"Error updating user item status: {e}")
+            return None
+
+    def update_user_item_status_comprehensive(self, user_id: str, item_uid: str, status_data: dict) -> dict:
+        """
+        Comprehensive update method for user item status
+        Handles: status, progress, rating, notes, dates
+        """
+        try:
+            # First, check if record exists
+            existing = requests.get(
+                f"{self.base_url}/rest/v1/user_items",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'item_uid': f'eq.{item_uid}',
+                    'select': 'id,status'
+                }
+            )
+            
+            # Prepare comprehensive data
+            data = {
+                'user_id': user_id,
+                'item_uid': item_uid,
+                'status': status_data['status'],
+                'progress': status_data.get('progress', 0),
+                'notes': status_data.get('notes', ''),
+                'updated_at': 'now()'
+            }
+            
+            if 'rating' in status_data and status_data['rating'] is not None:
+                data['rating'] = status_data['rating']
+                
+            # Handle status-specific logic
+            if status_data['status'] == 'completed':
+                data['completion_date'] = status_data.get('completion_date', 'now()')
+            elif status_data['status'] == 'watching':
+                if not existing.json():  # New record
+                    data['start_date'] = 'now()'
+            
+            if existing.json():
+                # Update existing record
+                response = requests.patch(
+                    f"{self.base_url}/rest/v1/user_items",
+                    headers=self.headers,
+                    params={
+                        'user_id': f'eq.{user_id}',
+                        'item_uid': f'eq.{item_uid}'
+                    },
+                    json=data
+                )
+            else:
+                # Create new record
+                if status_data['status'] == 'watching':
+                    data['start_date'] = 'now()'
+                response = requests.post(
+                    f"{self.base_url}/rest/v1/user_items",
+                    headers=self.headers,
+                    json=data
+                )
+            
+            if response.status_code in [200, 201, 204]:
+                return {'success': True, 'data': response.json() if response.content else {}}
+            else:
+                print(f"Supabase error: {response.status_code} - {response.text}")
+                return None
+            
         except Exception as e:
             print(f"Error updating user item status: {e}")
             return None

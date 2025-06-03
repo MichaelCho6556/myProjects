@@ -8,6 +8,7 @@ import ActivityFeed from "../components/dashboard/ActivityFeed";
 import ItemLists from "../components/dashboard/ItemLists";
 import QuickActions from "../components/dashboard/QuickActions";
 import "./DashboardPage.css";
+import { supabase } from "../lib/supabase";
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuth();
@@ -29,15 +30,60 @@ const DashboardPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const data = await makeAuthenticatedRequest("/api/auth/dashboard");
-      setDashboardData(data);
-    } catch (err: any) {
-      setError(err.message || "Failed to load dashboard data");
-      console.error("Dashboard error:", err);
+      // Get current session and token properly
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        console.error("No valid session found:", sessionError);
+        setError("Authentication required. Please sign in again.");
+        return;
+      }
+
+      console.log("🚀 Making dashboard request...");
+
+      // ✅ FIXED: Use the dedicated getDashboardData method OR makeAuthenticatedRequest correctly
+      const response = await makeAuthenticatedRequest("/api/auth/dashboard");
+
+      console.log("📊 Dashboard API Response:", response);
+
+      // ✅ FIXED: The response IS the dashboard data (not wrapped in .data)
+      if (response && typeof response === "object") {
+        console.log("✅ Setting dashboard data:", response);
+        setDashboardData(response);
+      } else {
+        console.warn("⚠️ Invalid dashboard data format:", response);
+        setError("Invalid dashboard data format received");
+      }
+    } catch (error: any) {
+      console.error("❌ Error fetching dashboard data:", error);
+      setError(`Failed to load dashboard: ${error.message || "Unknown error"}`);
     } finally {
       setLoading(false);
     }
   };
+
+  const refreshDashboard = async () => {
+    console.log("🔄 Refreshing dashboard data...");
+    await fetchDashboardData();
+  };
+
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "animanga_list_updated") {
+        console.log("📱 Detected list update, refreshing dashboard...");
+        refreshDashboard();
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
 
   const handleStatusUpdate = async (itemUid: string, newStatus: string, additionalData?: any) => {
     try {
@@ -46,7 +92,7 @@ const DashboardPage: React.FC = () => {
         ...additionalData,
       };
 
-      await makeAuthenticatedRequest(`/api/auth/user-items/${itemUid}/status`, {
+      await makeAuthenticatedRequest(`/api/auth/user-items/${itemUid}`, {
         method: "POST",
         body: JSON.stringify(updateData),
       });

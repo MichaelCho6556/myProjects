@@ -33,11 +33,28 @@ export const useAuthenticatedApi = () => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: "Network error" }));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch {
+        errorMessage = response.statusText || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
-    return response.json();
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      const result = await response.json();
+
+      if (result.success === false) {
+        throw new Error(result.error || "Operation failed");
+      }
+
+      return result;
+    }
+
+    return { success: true };
   };
 
   // User profile operations
@@ -66,6 +83,9 @@ export const useAuthenticatedApi = () => {
       method: "DELETE",
     });
 
+  // NEW: Dashboard-specific method to ensure consistency
+  const getDashboardData = () => makeAuthenticatedRequest("/api/auth/dashboard");
+
   return {
     makeAuthenticatedRequest,
     getUserProfile,
@@ -73,5 +93,6 @@ export const useAuthenticatedApi = () => {
     getUserItems,
     updateUserItemStatus,
     removeUserItem,
+    getDashboardData,
   };
 };
