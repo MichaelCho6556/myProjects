@@ -61,6 +61,63 @@ export interface AnimeItem {
   external_links?: Array<{ name: string; url: string }>;
 }
 
+export interface UserActivity {
+  id: number;
+  user_id: string;
+  activity_type: string;
+  item_uid: string;
+  activity_data: Record<string, any>;
+  created_at: string;
+  item?: AnimeItem;
+}
+
+export interface UserStatistics {
+  user_id: string;
+  total_anime_watched: number;
+  total_manga_read: number;
+  total_hours_watched: number;
+  total_chapters_read: number;
+  average_score: number;
+  favorite_genres: string[];
+  current_streak_days: number;
+  longest_streak_days: number;
+  completion_rate: number;
+  updated_at: string;
+}
+
+export interface UserItem {
+  id: number;
+  user_id: string;
+  item_uid: string;
+  status: "plan_to_watch" | "watching" | "completed" | "on_hold" | "dropped";
+  progress: number;
+  start_date?: string;
+  completion_date?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  item?: AnimeItem;
+}
+
+export interface QuickStats {
+  total_items: number;
+  watching: number;
+  completed: number;
+  plan_to_watch: number;
+  on_hold: number;
+  dropped: number;
+}
+
+export interface DashboardData {
+  user_stats: UserStatistics;
+  recent_activity: UserActivity[];
+  in_progress: UserItem[];
+  completed_recently: UserItem[];
+  plan_to_watch: UserItem[];
+  on_hold: UserItem[];
+  quick_stats: QuickStats;
+}
+
 /**
  * API response structure for paginated items
  */

@@ -4,6 +4,7 @@ import { AuthProvider } from "./context/AuthContext";
 import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
 import ItemDetailPage from "./pages/ItemDetailPage";
+import DashboardPage from "./pages/DashboardPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./App.css";
 
@@ -21,6 +22,7 @@ const App: React.FC = () => {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/item/:uid" element={<ItemDetailPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
             </Routes>
           </div>
         </Router>
