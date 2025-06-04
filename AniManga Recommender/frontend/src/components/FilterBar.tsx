@@ -16,7 +16,6 @@ const FilterBar: React.FC<FilterBarProps> = ({
   filtersLoading,
 }) => {
   const {
-    inputValue,
     selectedMediaType,
     selectedGenre,
     selectedTheme,
@@ -40,8 +39,6 @@ const FilterBar: React.FC<FilterBarProps> = ({
   } = filterOptions;
 
   const {
-    handleInputChange,
-    handleSearchSubmit,
     handleSortChange,
     handleMediaTypeChange,
     handleStatusChange,
@@ -104,28 +101,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
   };
 
   return (
-    <section className="filter-bar" role="search" aria-label="Filter and search options">
-      {/* Search Form */}
-      <form onSubmit={handleSearchSubmit} className="search-form">
-        <label htmlFor="search-input" className="sr-only">
-          Search anime and manga titles
-        </label>
-        <input
-          id="search-input"
-          type="text"
-          placeholder="Search titles..."
-          value={inputValue}
-          onChange={handleInputChange}
-          aria-describedby="search-help"
-        />
-        <span id="search-help" className="sr-only">
-          Enter keywords to search for anime and manga titles
-        </span>
-        <button type="submit" aria-label="Submit search">
-          Search
-        </button>
-      </form>
-
+    <section className="filter-bar" role="search" aria-label="Filter options">
       {/* Sort By Selector */}
       <div className="filter-group sort-by-selector">
         <label htmlFor="sortBy">Sort by:</label>
@@ -165,6 +141,10 @@ const FilterBar: React.FC<FilterBarProps> = ({
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"
           aria-label="Filter by media type"
+          menuPortalTarget={document.body}
+          menuPlacement="auto"
+          menuShouldScrollIntoView={false}
+          isSearchable={true}
         />
       </div>
 
@@ -184,6 +164,10 @@ const FilterBar: React.FC<FilterBarProps> = ({
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"
           aria-label="Filter by genres"
+          menuPortalTarget={document.body}
+          menuPlacement="auto"
+          menuShouldScrollIntoView={false}
+          isSearchable={true}
         />
       </div>
 
@@ -203,6 +187,10 @@ const FilterBar: React.FC<FilterBarProps> = ({
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"
           aria-label="Filter by themes"
+          menuPortalTarget={document.body}
+          menuPlacement="auto"
+          menuShouldScrollIntoView={false}
+          isSearchable={true}
         />
       </div>
 
@@ -221,6 +209,10 @@ const FilterBar: React.FC<FilterBarProps> = ({
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"
           aria-label="Filter by demographics"
+          menuPortalTarget={document.body}
+          menuPlacement="auto"
+          menuShouldScrollIntoView={false}
+          isSearchable={true}
         />
       </div>
 
@@ -239,6 +231,10 @@ const FilterBar: React.FC<FilterBarProps> = ({
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"
           aria-label="Filter by studios"
+          menuPortalTarget={document.body}
+          menuPlacement="auto"
+          menuShouldScrollIntoView={false}
+          isSearchable={true}
         />
       </div>
 
@@ -257,6 +253,10 @@ const FilterBar: React.FC<FilterBarProps> = ({
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"
           aria-label="Filter by authors"
+          menuPortalTarget={document.body}
+          menuPlacement="auto"
+          menuShouldScrollIntoView={false}
+          isSearchable={true}
         />
       </div>
 
@@ -273,6 +273,10 @@ const FilterBar: React.FC<FilterBarProps> = ({
           isDisabled={filtersLoading || loading}
           classNamePrefix="react-select"
           aria-label="Filter by status"
+          menuPortalTarget={document.body}
+          menuPlacement="auto"
+          menuShouldScrollIntoView={false}
+          isSearchable={true}
         />
       </div>
 
