@@ -32,6 +32,10 @@ const ItemLists: React.FC<ItemListsProps> = ({
     onStatusUpdate(itemUid, newStatus, additionalData);
   };
 
+  const getViewAllLink = () => {
+    return `/lists?status=${activeTab}`;
+  };
+
   const renderItemList = (items: UserItem[], listType: string) => {
     if (!items || items.length === 0) {
       return (
@@ -68,7 +72,6 @@ const ItemLists: React.FC<ItemListsProps> = ({
                 {userItem.item?.score && <span className="item-score">★ {userItem.item.score}</span>}
               </div>
 
-              {/* Progress indicator for watching items */}
               {listType === "watching" && (
                 <div className="progress-info">
                   <span>Progress: {userItem.progress || 0}</span>
@@ -76,7 +79,6 @@ const ItemLists: React.FC<ItemListsProps> = ({
                 </div>
               )}
 
-              {/* Quick status update */}
               <div className="quick-actions">
                 <select
                   value={userItem.status}
@@ -116,12 +118,11 @@ const ItemLists: React.FC<ItemListsProps> = ({
     <div className="item-lists-section">
       <div className="section-header">
         <h3>Your Lists</h3>
-        <Link to="/profile" className="view-all-link">
+        <Link to={getViewAllLink()} className="view-all-link">
           View Full Lists →
         </Link>
       </div>
 
-      {/* Tab Navigation */}
       <div className="list-tabs">
         <button
           className={`tab-button ${activeTab === "watching" ? "active" : ""}`}
@@ -149,7 +150,6 @@ const ItemLists: React.FC<ItemListsProps> = ({
         </button>
       </div>
 
-      {/* List Content */}
       <div className="list-content">{getLists()}</div>
     </div>
   );

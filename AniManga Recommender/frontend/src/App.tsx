@@ -5,6 +5,7 @@ import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
 import ItemDetailPage from "./pages/ItemDetailPage";
 import DashboardPage from "./pages/DashboardPage";
+import UserListsPage from "./pages/lists/UserListsPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./App.css";
 
@@ -23,6 +24,8 @@ const App: React.FC = () => {
               <Route path="/" element={<HomePage />} />
               <Route path="/item/:uid" element={<ItemDetailPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/lists" element={<UserListsPage />} />
+              <Route path="/profile" element={<UserListsPage />} />
             </Routes>
           </div>
         </Router>
