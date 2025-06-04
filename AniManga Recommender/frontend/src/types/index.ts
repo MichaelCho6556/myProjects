@@ -91,6 +91,7 @@ export interface UserItem {
   item_uid: string;
   status: "plan_to_watch" | "watching" | "completed" | "on_hold" | "dropped";
   progress: number;
+  rating?: number;
   start_date?: string;
   completion_date?: string;
   notes?: string;

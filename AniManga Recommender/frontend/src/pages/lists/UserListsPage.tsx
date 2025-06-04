@@ -30,6 +30,7 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
   const sortBy = searchParams.get("sort_by") || "date_added_desc";
   const searchQuery = searchParams.get("q") || "";
   const selectedMediaType = searchParams.get("media_type") || "all";
+  const minUserRating = searchParams.get("min_user_rating") || "";
 
   // State
   const [listData, setListData] = useState<ListData>({
@@ -60,8 +61,10 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
       { value: "date_added_asc", label: "Date Added (Oldest)" },
       { value: "title_asc", label: "Title (A-Z)" },
       { value: "title_desc", label: "Title (Z-A)" },
-      { value: "score_desc", label: "Score (Highest)" },
-      { value: "score_asc", label: "Score (Lowest)" },
+      { value: "my_rating_desc", label: "My Rating (Highest)" },
+      { value: "my_rating_asc", label: "My Rating (Lowest)" },
+      { value: "global_score_desc", label: "Global Score (Highest)" },
+      { value: "global_score_asc", label: "Global Score (Lowest)" },
       { value: "progress_desc", label: "Progress (Most)" },
       { value: "progress_asc", label: "Progress (Least)" },
     ],
@@ -78,9 +81,22 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
     []
   );
 
+  // Add rating filter options
+  const ratingFilterOptions = useMemo(
+    () => [
+      { value: "", label: "Any Rating" },
+      { value: "9", label: "9+ Stars" },
+      { value: "8", label: "8+ Stars" },
+      { value: "7", label: "7+ Stars" },
+      { value: "6", label: "6+ Stars" },
+      { value: "5", label: "5+ Stars" },
+    ],
+    []
+  );
+
   useDocumentTitle(`${statusOptions.find((s) => s.value === currentStatus)?.label || "Lists"} | My Lists`);
 
-  // Fetch user list data with proper error handling and request deduplication
+  // ✅ FIXED: Enhanced fetch function with better error handling and data validation
   const fetchListData = useCallback(async () => {
     if (!user) {
       setListData({
@@ -111,61 +127,51 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
 
       console.log(`🔍 Fetching items for status: ${currentStatus}`);
 
-      // Try the user-items endpoint first
-      let response;
-      try {
-        response = await makeAuthenticatedRequest(`/api/auth/user-items?status=${currentStatus}`);
-      } catch (userItemsError) {
-        console.warn("User-items endpoint failed, trying dashboard endpoint:", userItemsError);
+      // Use the enhanced API endpoint that includes item details
+      const response = await makeAuthenticatedRequest(`/api/auth/user-items?status=${currentStatus}`);
 
-        // Fallback: get data from dashboard endpoint and filter
-        const dashboardResponse = await makeAuthenticatedRequest("/api/auth/dashboard");
+      console.log(`📊 Raw API response:`, response);
 
-        // Map dashboard data to the current status
-        switch (currentStatus) {
-          case "watching":
-            response = dashboardResponse.in_progress || [];
-            break;
-          case "plan_to_watch":
-            response = dashboardResponse.plan_to_watch || [];
-            break;
-          case "completed":
-            response = dashboardResponse.completed_recently || [];
-            break;
-          case "on_hold":
-            response = dashboardResponse.on_hold || [];
-            break;
-          case "dropped":
-            // Dashboard might not have dropped items, return empty
-            response = [];
-            break;
-          default:
-            response = [];
-        }
-      }
-
-      // Ensure response is an array
+      // ✅ FIXED: Better data validation and structure checking
       let items: UserItem[] = [];
       if (Array.isArray(response)) {
-        items = response;
+        items = response.filter((item): item is UserItem => {
+          // More thorough validation
+          const isValid =
+            item &&
+            typeof item === "object" &&
+            typeof item.item_uid === "string" &&
+            item.item_uid.length > 0 &&
+            item.item && // ✅ Ensure item details exist
+            typeof item.item === "object";
+
+          if (!isValid) {
+            console.warn("⚠️ Invalid item structure:", item);
+          }
+          return isValid;
+        });
       } else if (response && Array.isArray(response.items)) {
-        items = response.items;
-      } else if (response && response.data && Array.isArray(response.data)) {
-        items = response.data;
+        items = response.items.filter((item: any): item is UserItem => {
+          const isValid =
+            item &&
+            typeof item === "object" &&
+            typeof item.item_uid === "string" &&
+            item.item_uid.length > 0 &&
+            item.item &&
+            typeof item.item === "object";
+          if (!isValid) {
+            console.warn("⚠️ Invalid item structure:", item);
+          }
+          return isValid;
+        });
       }
 
-      // Filter out invalid items
-      const validItems = items.filter((item): item is UserItem => {
-        return (
-          item && typeof item === "object" && typeof item.item_uid === "string" && item.item_uid.length > 0
-        );
-      });
-
-      console.log(`📊 Fetched ${validItems.length} valid items for ${currentStatus}`);
+      console.log(`✅ Processed ${items.length} valid items for ${currentStatus}`);
+      console.log("📄 Sample item:", items[0]);
 
       setListData({
-        items: validItems,
-        total: validItems.length,
+        items: items,
+        total: items.length,
         loading: false,
         error: null,
       });
@@ -182,27 +188,58 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
     } finally {
       requestInProgress.current = false;
     }
-  }, [user?.id, currentStatus]); // ✅ FIXED: Only depend on user.id and currentStatus
+  }, [user?.id, currentStatus, makeAuthenticatedRequest]);
 
-  // Apply client-side filtering and sorting with memoization
+  // ✅ FIXED: Better filtering logic with debugging
   const filteredItems = useMemo(() => {
+    console.log(`🔍 Filtering ${listData.items.length} items...`);
+    console.log(`📊 Search: "${searchQuery}", Media Type: "${selectedMediaType}"`);
+
     let filtered = [...listData.items];
 
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (userItem) =>
-          userItem.item?.title?.toLowerCase().includes(query) ||
-          userItem.item?.title_english?.toLowerCase().includes(query) ||
-          userItem.item?.genres?.some((genre) => genre.toLowerCase().includes(query)) ||
-          userItem.item?.themes?.some((theme) => theme.toLowerCase().includes(query))
-      );
+      filtered = filtered.filter((userItem) => {
+        const item = userItem.item;
+        if (!item) return false;
+
+        const titleMatch = item.title?.toLowerCase().includes(query) || false;
+        const englishTitleMatch = item.title_english?.toLowerCase().includes(query) || false;
+        const genreMatch = item.genres?.some((genre) => genre.toLowerCase().includes(query)) || false;
+        const themeMatch = item.themes?.some((theme) => theme.toLowerCase().includes(query)) || false;
+
+        return titleMatch || englishTitleMatch || genreMatch || themeMatch;
+      });
     }
 
-    // Filter by media type
+    // ✅ FIXED: More robust media type filtering
     if (selectedMediaType !== "all") {
-      filtered = filtered.filter((userItem) => userItem.item?.media_type === selectedMediaType);
+      console.log(`🔍 Filtering by media type: ${selectedMediaType}`);
+
+      filtered = filtered.filter((userItem) => {
+        const itemMediaType = userItem.item?.media_type;
+        console.log(`📊 Item media type: "${itemMediaType}" vs selected: "${selectedMediaType}"`);
+
+        // Handle variations in media type format
+        if (!itemMediaType) return false;
+
+        const normalizedItemType = itemMediaType.toLowerCase().trim();
+        const normalizedSelectedType = selectedMediaType.toLowerCase().trim();
+
+        return normalizedItemType === normalizedSelectedType;
+      });
+
+      console.log(`📊 After media type filter: ${filtered.length} items`);
+    }
+
+    // Filter by minimum user rating
+    if (minUserRating) {
+      const minRating = parseFloat(minUserRating);
+      filtered = filtered.filter((userItem) => {
+        const userRating = userItem.rating || 0;
+        return userRating >= minRating;
+      });
     }
 
     // Apply sorting
@@ -216,10 +253,31 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
           return (a.item?.title || "").localeCompare(b.item?.title || "");
         case "title_desc":
           return (b.item?.title || "").localeCompare(a.item?.title || "");
-        case "score_desc":
+
+        // ✅ NEW: User's personal rating sorting
+        case "my_rating_desc":
+          const aUserRating = a.rating || 0;
+          const bUserRating = b.rating || 0;
+          // Items with ratings come first, then by rating value
+          if (aUserRating === 0 && bUserRating === 0) return 0;
+          if (aUserRating === 0) return 1; // No rating goes to end
+          if (bUserRating === 0) return -1; // No rating goes to end
+          return bUserRating - aUserRating;
+        case "my_rating_asc":
+          const aUserRatingAsc = a.rating || 0;
+          const bUserRatingAsc = b.rating || 0;
+          // Items with ratings come first, then by rating value
+          if (aUserRatingAsc === 0 && bUserRatingAsc === 0) return 0;
+          if (aUserRatingAsc === 0) return 1; // No rating goes to end
+          if (bUserRatingAsc === 0) return -1; // No rating goes to end
+          return aUserRatingAsc - bUserRatingAsc;
+
+        // ✅ RENAMED: Global score sorting (what was previously "score")
+        case "global_score_desc":
           return (b.item?.score || 0) - (a.item?.score || 0);
-        case "score_asc":
+        case "global_score_asc":
           return (a.item?.score || 0) - (b.item?.score || 0);
+
         case "progress_desc":
           return (b.progress || 0) - (a.progress || 0);
         case "progress_asc":
@@ -229,8 +287,9 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
       }
     });
 
+    console.log(`✅ Final filtered result: ${filtered.length} items`);
     return filtered;
-  }, [listData.items, searchQuery, selectedMediaType, sortBy]);
+  }, [listData.items, searchQuery, selectedMediaType, sortBy, minUserRating]);
 
   // ✅ FIXED: Separate effect for initial load and status changes
   useEffect(() => {
@@ -307,7 +366,7 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
         console.error("Error updating item status:", error);
       }
     },
-    [fetchListData]
+    [fetchListData, makeAuthenticatedRequest]
   );
 
   // Handle item selection for bulk actions
@@ -360,7 +419,7 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
         setIsUpdatingBulk(false);
       }
     },
-    [selectedItems, fetchListData]
+    [selectedItems, fetchListData, makeAuthenticatedRequest]
   );
 
   // Handle bulk remove
@@ -389,7 +448,7 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
     } finally {
       setIsUpdatingBulk(false);
     }
-  }, [selectedItems, fetchListData]);
+  }, [selectedItems, fetchListData, makeAuthenticatedRequest]);
 
   // Authentication check
   if (!user) {
@@ -483,6 +542,19 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
               disabled={listData.loading} // ✅ FIXED: Disable while loading
             >
               {mediaTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={minUserRating}
+              onChange={(e) => updateParams({ min_user_rating: e.target.value })}
+              className="filter-select"
+              disabled={listData.loading}
+            >
+              {ratingFilterOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -603,8 +675,9 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
             {/* Items Grid - Using Dashboard Style */}
             <div className="items-grid">
               {filteredItems.map((userItem) => {
-                // Ensure userItem has required data before rendering
+                // ✅ FIXED: Enhanced validation before rendering
                 if (!userItem || !userItem.item_uid || !userItem.item) {
+                  console.warn("⚠️ Skipping invalid item:", userItem);
                   return null;
                 }
 
@@ -666,6 +739,26 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
                         {userItem.completion_date && (
                           <div className="date-info">
                             <span>Completed: {new Date(userItem.completion_date).toLocaleDateString()}</span>
+                          </div>
+                        )}
+
+                        {/* ✅ ENHANCED: Display user rating with proper decimal formatting */}
+                        {userItem.rating && userItem.rating > 0 && (
+                          <div className="user-rating">
+                            <span className="user-rating-label">My Rating:</span>
+                            <span className="user-rating-value">{userItem.rating.toFixed(1)}/10</span>
+                            <span className="rating-stars">
+                              {"★".repeat(Math.ceil(userItem.rating / 2))}
+                              {"☆".repeat(5 - Math.ceil(userItem.rating / 2))}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* ✅ FIXED: Display user notes if available */}
+                        {userItem.notes && userItem.notes.trim() && (
+                          <div className="user-notes">
+                            <span className="user-notes-label">Notes:</span>
+                            <p className="user-notes-text">{userItem.notes}</p>
                           </div>
                         )}
 

@@ -569,7 +569,15 @@ class SupabaseClient:
             
             # Add optional fields if provided
             if 'rating' in status_data and status_data['rating'] is not None:
-                data['rating'] = status_data['rating']
+                # ✅ ENHANCED: Validate and round rating to 1 decimal place
+                rating = status_data['rating']
+                if not isinstance(rating, (int, float)):
+                    raise ValueError("Rating must be a number")
+                if rating < 0 or rating > 10:
+                    raise ValueError("Rating must be between 0 and 10")
+                
+                # Round to 1 decimal place for consistency
+                data['rating'] = round(float(rating), 1)
             
             if 'notes' in status_data and status_data['notes']:
                 data['notes'] = status_data['notes']
@@ -780,7 +788,7 @@ class SupabaseAuthClient:
             print(f"Error getting user items: {e}")
             return []
     
-    def update_user_item_status(self, user_id: str, item_uid: str, status: str, rating: int = None, episodes_watched: int = None) -> dict:
+    def update_user_item_status(self, user_id: str, item_uid: str, status: str, rating: float = None, episodes_watched: int = None) -> dict:
         """
         Update user's status for an anime/manga item
         """
@@ -804,7 +812,11 @@ class SupabaseAuthClient:
             }
             
             if rating is not None:
-                data['rating'] = rating
+                # ✅ NEW: Validate and round rating to 1 decimal place
+                if not isinstance(rating, (int, float)) or rating < 0 or rating > 10:
+                    raise ValueError("Rating must be a number between 0 and 10")
+                data['rating'] = round(float(rating), 1)
+            
             if episodes_watched is not None:
                 data['episodes_watched'] = episodes_watched
             if status == 'completed':
@@ -868,8 +880,16 @@ class SupabaseAuthClient:
             }
             
             if 'rating' in status_data and status_data['rating'] is not None:
-                data['rating'] = status_data['rating']
+                # ✅ ENHANCED: Validate and round rating to 1 decimal place
+                rating = status_data['rating']
+                if not isinstance(rating, (int, float)):
+                    raise ValueError("Rating must be a number")
+                if rating < 0 or rating > 10:
+                    raise ValueError("Rating must be between 0 and 10")
                 
+                # Round to 1 decimal place for consistency
+                data['rating'] = round(float(rating), 1)
+            
             # Handle status-specific logic
             if status_data['status'] == 'completed':
                 data['completion_date'] = status_data.get('completion_date', 'now()')
