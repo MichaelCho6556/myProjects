@@ -300,8 +300,7 @@
   }
 }
 
-/* Additional styles for ItemLists and QuickActions */
-
+/* ItemLists and QuickActions styles */
 .item-lists-section,
 .quick-actions-section {
   background: var(--bg-dark);
