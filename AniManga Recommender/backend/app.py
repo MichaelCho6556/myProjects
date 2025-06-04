@@ -441,50 +441,78 @@ def get_user_dashboard():
 @app.route('/api/auth/user-items', methods=['GET'])
 @require_auth
 def get_user_items():
-    """Get user's anime/manga list"""
+    """Get user's anime/manga list with full item details"""
     try:
         user_id = g.current_user['user_id']
         status = request.args.get('status')  # Optional filter by status
         
-        items = auth_client.get_user_items(user_id, status)
-        return jsonify(items)
+        # Get base user items from auth client
+        user_items = auth_client.get_user_items(user_id, status)
+        
+        # Enrich each user item with full item details
+        enriched_items = []
+        for user_item in user_items:
+            try:
+                # Get full item details using the helper function
+                item_details = get_item_details_simple(user_item['item_uid'])
+                if item_details:
+                    # Attach item details to user item
+                    user_item['item'] = item_details
+                    enriched_items.append(user_item)
+                else:
+                    # Skip items that don't have details (data integrity issue)
+                    print(f"⚠️ Warning: No details found for item {user_item['item_uid']}")
+            except Exception as e:
+                print(f"❌ Error enriching item {user_item['item_uid']}: {e}")
+                continue
+        
+        print(f"📊 Returning {len(enriched_items)} enriched items for user {user_id}")
+        return jsonify(enriched_items)
         
     except Exception as e:
+        print(f"❌ Error in get_user_items: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/user-items/<item_uid>', methods=['POST', 'PUT'])
 @require_auth
 def update_user_item_status(item_uid):
-    """Update user's status for an anime/manga item - WITH COMPLETION DATE SUPPORT"""
+    """Update user's item status with comprehensive data"""
     try:
         user_id = g.current_user['user_id'] if 'user_id' in g.current_user else g.current_user['sub']
-        data = request.json
         
-        print(f"🎯 Updating item {item_uid} for user {user_id}")
-        print(f"📝 Received data: {data}")
-        
-        # Extract required data
-        status = data.get('status')
-        if not status:
-            return jsonify({'error': 'Status is required'}), 400
-        
-        rating = data.get('rating')
-        progress = data.get('progress', 0)
+        data = request.get_json()
+        status = data.get('status', 'plan_to_watch')
+        progress = int(data.get('progress', 0))
         notes = data.get('notes', '')
-        completion_date = data.get('completion_date')  # ✅ NEW: Get completion_date from frontend
+        completion_date = data.get('completion_date')
         
-        # AUTO-COMPLETION LOGIC: Set progress to max when completed
+        # ✅ ENHANCED: Improved rating validation for decimals
+        rating = data.get('rating')
+        if rating is not None:
+            try:
+                rating = float(rating)
+                if rating < 0 or rating > 10:
+                    return jsonify({'error': 'Rating must be between 0 and 10'}), 400
+                # Round to 1 decimal place for consistency
+                rating = round(rating, 1)
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Rating must be a valid number'}), 400
+        
+        print(f"📝 Update request: user={user_id}, item={item_uid}, status={status}, progress={progress}, rating={rating}")
+        
+        # Get item details for validation
+        item_details = get_item_details_simple(item_uid)
+        if not item_details:
+            return jsonify({'error': 'Item not found'}), 404
+        
+        # Auto-calculate progress for completed items
         if status == 'completed' and progress == 0:
-            # Get item details to determine max progress
-            if item_uid in uid_to_idx.index:
-                idx = uid_to_idx[item_uid]
-                item_details = df_processed.loc[idx]
-                
-                if item_details['media_type'] == 'anime':
-                    max_progress = int(item_details.get('episodes', 1) or 1)
-                else:  # manga
-                    max_progress = int(item_details.get('chapters', 1) or 1)
-                
+            if item_details['media_type'] == 'anime':
+                max_progress = item_details.get('episodes', 1)
+            else:
+                max_progress = item_details.get('chapters', 1)
+            
+            if max_progress and max_progress > 0:
                 progress = max_progress
                 print(f"🎯 Auto-setting progress to {max_progress} for completed {item_details['media_type']}")
             else:
@@ -497,7 +525,8 @@ def update_user_item_status(item_uid):
             'notes': notes
         }
         
-        if rating is not None and rating > 0:
+        # ✅ ENHANCED: Only include rating if it's a valid decimal
+        if rating is not None and rating >= 0:
             status_data['rating'] = rating
         
         # ✅ NEW: Add completion_date if provided
@@ -518,7 +547,8 @@ def update_user_item_status(item_uid):
             # Log activity for dashboard updates
             log_user_activity(user_id, 'status_changed', item_uid, {
                 'new_status': status,
-                'progress': progress
+                'progress': progress,
+                'rating': rating  # Include rating in activity log
             })
             
             return jsonify({'success': True, 'data': result.get('data', {})})

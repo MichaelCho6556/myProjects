@@ -90,7 +90,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
       };
 
       if (rating !== undefined && rating > 0) {
-        updateData.rating = rating;
+        updateData.rating = Math.round(rating * 10) / 10;
       }
 
       if (notes.trim()) {
@@ -139,6 +139,19 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
       const maxProgress = getMaxProgress();
       setProgress(maxProgress);
       console.log(`Auto-setting progress to ${maxProgress} for completed status`);
+    }
+  };
+
+  const handleRatingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value === "") {
+      setRating(undefined);
+      return;
+    }
+
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= 0 && numValue <= 10) {
+      setRating(Math.round(numValue * 10) / 10);
     }
   };
 
@@ -240,7 +253,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
               </span>
             )}
 
-            {userItem.rating && <span className="rating-display">⭐ {userItem.rating}/10</span>}
+            {userItem.rating && <span className="rating-display">⭐ {userItem.rating.toFixed(1)}/10</span>}
           </div>
 
           <div className="action-buttons">
@@ -290,20 +303,22 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
           </div>
 
           <div className="form-group">
-            <label htmlFor="rating-input">Rating (optional):</label>
-            <select
+            <label htmlFor="rating-input">Rating (0.0 - 10.0, optional):</label>
+            <input
               id="rating-input"
-              value={rating || ""}
-              onChange={(e) => setRating(e.target.value ? parseInt(e.target.value) : undefined)}
+              type="number"
+              min="0"
+              max="10"
+              step="0.1"
+              value={rating !== undefined ? rating.toFixed(1) : ""}
+              onChange={handleRatingChange}
+              placeholder="e.g., 9.2, 8.7, 7.5"
               disabled={loading}
-            >
-              <option value="">No rating</option>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                <option key={num} value={num}>
-                  {num}/10
-                </option>
-              ))}
-            </select>
+              className="rating-decimal-input"
+            />
+            <small className="rating-help">
+              Enter a decimal rating like 9.1, 8.7, 6.5, etc. (0.0 to 10.0)
+            </small>
           </div>
 
           <div className="form-group">
