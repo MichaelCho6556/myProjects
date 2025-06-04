@@ -1,17 +1,22 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthModal } from "./Auth/AuthModal";
 import "./Navbar.css";
 
 /**
- * Navbar Component - Application navigation with TypeScript support
+ * Enhanced Navbar Component with integrated search functionality
  *
  * @returns JSX.Element
  */
 const Navbar: React.FC = () => {
   const { user, signOut, loading } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // ✅ NEW: Search state for navbar
+  const [navSearchValue, setNavSearchValue] = useState<string>(searchParams.get("q") || "");
 
   const handleSignOut = async () => {
     try {
@@ -19,6 +24,22 @@ const Navbar: React.FC = () => {
     } catch (error) {
       console.error("Sign out error:", error);
     }
+  };
+
+  // ✅ NEW: Handle search from navbar
+  const handleNavSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (navSearchValue.trim()) {
+      // Navigate to homepage with search term
+      const newParams = new URLSearchParams(searchParams);
+      newParams.set("q", navSearchValue.trim());
+      newParams.set("page", "1"); // Reset to first page
+      navigate(`/?${newParams.toString()}`);
+    }
+  };
+
+  const handleNavSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setNavSearchValue(event.target.value);
   };
 
   // Get display name from user metadata or fallback to email
@@ -39,9 +60,34 @@ const Navbar: React.FC = () => {
     <>
       <nav className="navbar" role="navigation" aria-label="Main navigation">
         <div className="navbar-container">
+          {/* Logo */}
           <Link to="/" className="navbar-logo" aria-label="AniManga Recommender - Go to homepage">
             AniMangaRecommender
           </Link>
+
+          {/* ✅ NEW: Search bar in navbar */}
+          <form onSubmit={handleNavSearchSubmit} className="navbar-search-form">
+            <label htmlFor="navbar-search-input" className="sr-only">
+              Search anime and manga titles from navigation
+            </label>
+            <input
+              id="navbar-search-input"
+              type="text"
+              placeholder="Search titles..."
+              value={navSearchValue}
+              onChange={handleNavSearchChange}
+              className="navbar-search-input"
+              aria-describedby="navbar-search-help"
+            />
+            <span id="navbar-search-help" className="sr-only">
+              Enter keywords to search for anime and manga titles
+            </span>
+            <button type="submit" className="navbar-search-btn" aria-label="Submit search">
+              🔍
+            </button>
+          </form>
+
+          {/* Navigation Menu */}
           <ul className="nav-menu" role="menubar">
             <li className="nav-item" role="none">
               <Link to="/" className="nav-links" role="menuitem">

@@ -127,6 +127,12 @@ const HomePage: React.FC = () => {
   const [studioOptions, setStudioOptions] = useState<SelectOption[]>([]);
   const [authorOptions, setAuthorOptions] = useState<SelectOption[]>([]);
 
+  // ✅ NEW: Add filter visibility state for collapsible functionality
+  const [filterBarVisible, setFilterBarVisible] = useState<boolean>(() => {
+    const saved = localStorage.getItem("aniMangaFilterBarVisible");
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
   // Refs for component lifecycle and debouncing
   const topOfPageRef = useRef<HTMLDivElement>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -676,6 +682,13 @@ const HomePage: React.FC = () => {
     }, 100);
   };
 
+  // ✅ NEW: Handle filter bar toggle
+  const handleFilterBarToggle = (): void => {
+    const newVisibility = !filterBarVisible;
+    setFilterBarVisible(newVisibility);
+    localStorage.setItem("aniMangaFilterBarVisible", JSON.stringify(newVisibility));
+  };
+
   // Pagination handlers
   const handleNextPage = (): void => {
     if (currentPage < totalPages) {
@@ -778,8 +791,23 @@ const HomePage: React.FC = () => {
     <>
       <div ref={topOfPageRef}></div>
       <main>
-        {/* Filter Bar */}
-        <FilterBar {...filterProps} />
+        {/* ✅ UPDATED: Filter Bar with toggle functionality */}
+        <div className="filter-section">
+          <button
+            className="filter-toggle-btn"
+            onClick={handleFilterBarToggle}
+            aria-expanded={filterBarVisible}
+            aria-controls="filter-bar"
+            aria-label={filterBarVisible ? "Hide filters" : "Show filters"}
+          >
+            <span className="filter-toggle-icon">{filterBarVisible ? "▲" : "▼"}</span>
+            <span className="filter-toggle-text">{filterBarVisible ? "Hide Filters" : "Show Filters"}</span>
+          </button>
+
+          <div id="filter-bar" className={`filter-bar-container ${filterBarVisible ? "visible" : "hidden"}`}>
+            <FilterBar {...filterProps} />
+          </div>
+        </div>
 
         {/* Controls Bar with Pagination and Items Per Page */}
         <div className="controls-bar">
@@ -854,16 +882,6 @@ const HomePage: React.FC = () => {
         {/* Content Display */}
         {!loading && !error && (
           <>
-            {/* Results Summary */}
-            {Array.isArray(items) && items.length > 0 && (
-              <div className="results-summary" aria-live="polite">
-                <p>
-                  Showing {(currentPage - 1) * itemsPerPage + 1}-
-                  {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} results
-                </p>
-              </div>
-            )}
-
             {/* Items Grid */}
             <section className="item-list" aria-label="Search results">
               {Array.isArray(items) && items.length > 0
