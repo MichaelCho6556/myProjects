@@ -27,8 +27,8 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from app import app as create_app
-from models import User, UserItem, AnimeItem, create_sample_user, create_sample_anime_item, create_sample_user_item
+from app import app, generate_token
+# from models import User, UserItem, AnimeItem, create_sample_user, create_sample_anime_item, create_sample_user_item
 import os
 import tempfile
 
@@ -259,10 +259,13 @@ class ChaosTestingUtility:
     def simulate_database_failure(app, duration: int = 5):
         """Simulate database connection failure"""
         def chaos_function():
-            # Mock database failure
-            with patch.object(db.session, 'execute') as mock_execute:
-                mock_execute.side_effect = Exception("Database connection failed")
-                time.sleep(duration)
+            # Mock Supabase API failure by disrupting network calls
+            import os
+            original_url = os.getenv('SUPABASE_URL')
+            os.environ['SUPABASE_URL'] = 'https://invalid.supabase.co'
+            time.sleep(duration)
+            if original_url:
+                os.environ['SUPABASE_URL'] = original_url
         
         return chaos_function
     
@@ -294,17 +297,18 @@ class ChaosTestingUtility:
 @pytest.fixture
 def app():
     """Create test Flask application"""
-    app = create_app('testing')
-    with app.app_context():
-        db.create_all()
-        yield app
-        db.drop_all()
+    from app import app as flask_app
+    flask_app.config['TESTING'] = True
+    flask_app.config['WTF_CSRF_ENABLED'] = False
+    with flask_app.app_context():
+        yield flask_app
 
 
 @pytest.fixture
 def client(app):
     """Create test client"""
-    return app.test_client()
+    with app.test_client() as client:
+        yield client
 
 
 @pytest.fixture
@@ -445,26 +449,9 @@ class TestAdvancedScenariosD2:
     def test_data_consistency_across_scenarios(self, app, client, auth_headers):
         """Test data consistency across various scenarios"""
         with app.app_context():
-            # Create test data
-            user = User(
-                id='consistency-test-user',
-                email='consistency@example.com',
-                username='consistencyuser',
-                password_hash='hashed_password'
-            )
-            db.session.add(user)
-            
-            anime_item = AnimeItem(
-                uid='consistency-anime-1',
-                title='Consistency Test Anime',
-                media_type='anime',
-                genres=['Test'],
-                score=9.0,
-                episodes=24,
-                status='Finished Airing'
-            )
-            db.session.add(anime_item)
-            db.session.commit()
+            # Note: Since we're using Supabase, we'll test with existing data
+            # instead of creating test data with SQLAlchemy operations
+            pass
             
             # Test concurrent operations on same data
             def concurrent_update_operation(item_id: str, progress: int):
