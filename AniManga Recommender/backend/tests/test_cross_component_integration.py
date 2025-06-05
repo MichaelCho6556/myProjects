@@ -24,24 +24,11 @@ from datetime import datetime, timedelta
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
+import asyncio
 
 # Application imports
-from app.main import app
-from app.database import get_db, Base
-from app.models.user import User
-from app.models.user_item import UserItem
-from app.models.activity import Activity
-from app.services.user_service import UserService
-from app.services.anime_service import AnimeService
-from app.services.recommendation_service import RecommendationService
-from app.services.activity_service import ActivityService
-from app.middleware.auth import AuthMiddleware
-from app.middleware.rate_limit import RateLimitMiddleware
-from app.middleware.logging import LoggingMiddleware
-from app.utils.cache import cache_manager
-from app.utils.tasks import background_task_manager
+from app import app  
+from models import User, UserItem, AnimeItem
 
 
 class MockDatabase:
@@ -180,7 +167,7 @@ def mock_task_manager():
 @pytest.fixture
 def test_client():
     """Provide test client for API testing"""
-    return TestClient(app)
+    return app.test_client()
 
 
 @pytest.fixture

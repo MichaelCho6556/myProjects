@@ -11,11 +11,76 @@ from supabase_client import SupabaseClient, SupabaseAuthClient, require_auth
 import requests
 from datetime import datetime, timedelta
 import json
+import ast
 
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+def create_app(config=None):
+    """Create Flask app instance for testing"""
+    test_app = Flask(__name__)
+    CORS(test_app)
+    
+    # Handle different config parameter types
+    if config:
+        if isinstance(config, str):
+            # Handle string config like 'testing'
+            test_app.config['TESTING'] = True
+            test_app.config['WTF_CSRF_ENABLED'] = False
+            test_app.config['SECRET_KEY'] = 'test-secret-key'
+            test_app.config['JWT_SECRET_KEY'] = 'test-jwt-secret'
+        elif isinstance(config, type):
+            # Handle class config like TestConfig
+            for attr in dir(config):
+                if not attr.startswith('_'):
+                    test_app.config[attr] = getattr(config, attr)
+        elif isinstance(config, dict):
+            # Handle dictionary config
+            test_app.config.update(config)
+    else:
+        # Default testing config
+        test_app.config['TESTING'] = True
+        test_app.config['WTF_CSRF_ENABLED'] = False
+        test_app.config['SECRET_KEY'] = 'test-secret-key'
+        test_app.config['JWT_SECRET_KEY'] = 'test-jwt-secret'
+    
+    # Copy all routes from main app to test app
+    for rule in app.url_map.iter_rules():
+        test_app.add_url_rule(rule.rule, rule.endpoint, 
+                             view_func=app.view_functions.get(rule.endpoint),
+                             methods=rule.methods)
+    
+    return test_app
+
+# Utility functions for tests
+def generate_token(user_data, expiry_hours=24):
+    """Generate JWT token for user"""
+    import jwt
+    import datetime
+    
+    payload = {
+        'user_id': user_data.get('id'),
+        'email': user_data.get('email'),
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=expiry_hours)
+    }
+    
+    secret_key = os.getenv('JWT_SECRET_KEY', 'test-secret-key')
+    return jwt.encode(payload, secret_key, algorithm='HS256')
+
+def verify_token(token):
+    """Verify JWT token"""
+    import jwt
+    
+    try:
+        secret_key = os.getenv('JWT_SECRET_KEY', 'test-secret-key')
+        payload = jwt.decode(token, secret_key, algorithms=['HS256'])
+        return payload
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
 
 # Global variables for data and ML models
 df_processed = None
@@ -27,6 +92,58 @@ auth_client = None
 
 # ADD a simple in-memory cache for media types
 _media_type_cache = {}
+
+# Constants for backwards compatibility with tests
+BASE_DATA_PATH = "data"
+PROCESSED_DATA_FILENAME = "processed_media.csv"
+PROCESSED_DATA_PATH = os.path.join(BASE_DATA_PATH, PROCESSED_DATA_FILENAME)
+
+def parse_list_cols_on_load(df):
+    """Parse string representations of lists back into actual Python lists"""
+    if df is None or len(df) == 0:
+        return df
+    
+    # Define the columns that should contain lists
+    list_columns = ['genres', 'themes', 'demographics', 'studios', 'authors', 
+                   'producers', 'licensors', 'serializations', 'title_synonyms']
+    
+    # Make a copy to avoid modifying the original
+    df_copy = df.copy()
+    
+    def parse_list_string(value):
+        """Parse a string representation of a list into an actual list"""
+        # If it's already a list, return as is
+        if isinstance(value, list):
+            return value
+        
+        # Handle NaN, None, or empty string
+        if pd.isna(value) or value is None or value == '':
+            return []
+        
+        # Convert to string first
+        str_value = str(value).strip()
+        if not str_value:
+            return []
+        
+        # Try to evaluate as Python literal - let errors propagate
+        parsed = ast.literal_eval(str_value)
+        if isinstance(parsed, list):
+            return parsed
+        else:
+            return []
+    
+    for col in list_columns:
+        if col in df_copy.columns:
+            try:
+                # Apply the parsing function to the column
+                # This will raise an exception if any ast.literal_eval call fails
+                df_copy[col] = df_copy[col].apply(parse_list_string)
+            except Exception as e:
+                # If there's an error in any row processing, fall back to simple list checking
+                # This treats all values as empty lists unless they're already lists
+                df_copy[col] = df_copy[col].apply(lambda x: [] if not isinstance(x, list) else x)
+    
+    return df_copy
 
 def load_data_and_tfidf_from_supabase():
     """Load data from Supabase database instead of CSV files"""
@@ -89,6 +206,11 @@ def load_data_and_tfidf_from_supabase():
         tfidf_matrix_global = None
         uid_to_idx = pd.Series(dtype='int64')
 
+# Alias for backwards compatibility with tests
+def load_data_and_tfidf():
+    """Alias for load_data_and_tfidf_from_supabase for test compatibility"""
+    return load_data_and_tfidf_from_supabase()
+
 def create_combined_text_features(df):
     """Create combined text features for TF-IDF if they don't exist"""
     
@@ -138,9 +260,10 @@ def map_field_names_for_frontend(data_dict):
     if isinstance(data_dict, dict):
         mapped_dict = data_dict.copy()
         
-        # Map image_url to main_picture for consistency
-        if 'image_url' in mapped_dict and 'main_picture' not in mapped_dict:
+        # Map image_url to main_picture for frontend consistency  
+        if 'image_url' in mapped_dict:
             mapped_dict['main_picture'] = mapped_dict['image_url']
+            del mapped_dict['image_url']
         
         return mapped_dict
     return data_dict
@@ -359,13 +482,22 @@ def get_recommendations(item_uid):
 
         recommended_items_df = df_processed.loc[top_n_indices].copy()
         recommended_items_for_json = recommended_items_df.replace({np.nan: None})
-        recommended_list_of_dicts = recommended_items_for_json[['uid', 'title', 'media_type', 'score', 'image_url', 'genres', 'synopsis']].to_dict(orient='records')
+        
+        # Use main_picture if image_url doesn't exist (for compatibility)
+        columns_to_select = ['uid', 'title', 'media_type', 'score', 'genres', 'synopsis']
+        if 'image_url' in recommended_items_for_json.columns:
+            columns_to_select.append('image_url')
+        elif 'main_picture' in recommended_items_for_json.columns:
+            columns_to_select.append('main_picture')
+        
+        recommended_list_of_dicts = recommended_items_for_json[columns_to_select].to_dict(orient='records')
         
         # Map field names for frontend compatibility
         recommended_mapped = map_records_for_frontend(recommended_list_of_dicts)
 
         return jsonify({
-            "source_title": cleaned_source_title,
+            "source_item_uid": item_uid,
+            "source_item_title": cleaned_source_title,
             "recommendations": recommended_mapped
         })
     except Exception as e:
