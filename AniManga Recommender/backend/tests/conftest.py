@@ -7,6 +7,7 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 import sys
 import os
+from unittest.mock import Mock, patch, MagicMock
 
 # Add the parent directory to the Python path so we can import our app
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,6 +24,80 @@ def client():
     with app.test_client() as client:
         with app.app_context():
             yield client
+
+
+@pytest.fixture
+def mock_auth_client():
+    """Mock the Supabase authentication client for testing."""
+    mock = Mock()
+    
+    # Mock verify_jwt_token to return a valid user
+    mock.verify_jwt_token.return_value = {
+        'sub': 'test-user-123',
+        'user_id': 'test-user-123', 
+        'email': 'test@example.com',
+        'role': 'authenticated'
+    }
+    
+    # Mock get_user_items to return empty list by default
+    mock.get_user_items.return_value = []
+    
+    # Mock update_user_item_status_comprehensive to return success
+    mock.update_user_item_status_comprehensive.return_value = {
+        'success': True,
+        'data': {'status': 'watching', 'progress': 0}
+    }
+    
+    # Mock get_user_profile
+    mock.get_user_profile.return_value = {
+        'id': 'test-user-123',
+        'username': 'testuser',
+        'email': 'test@example.com'
+    }
+    
+    # Mock update_user_profile
+    mock.update_user_profile.return_value = {
+        'id': 'test-user-123',
+        'username': 'testuser',
+        'email': 'test@example.com'
+    }
+    
+    return mock
+
+
+@pytest.fixture
+def auth_headers():
+    """Generate test authentication headers."""
+    return {
+        'Authorization': 'Bearer test-jwt-token',
+        'Content-Type': 'application/json'
+    }
+
+
+@pytest.fixture
+def test_app_with_mocks(mock_auth_client, sample_dataframe):
+    """Create test app with all necessary mocks applied."""
+    app.config['TESTING'] = True
+    app.config['WTF_CSRF_ENABLED'] = False
+    
+    with app.test_client() as client:
+        with app.app_context():
+            # Patch global variables with test data
+            with patch('app.df_processed', sample_dataframe), \
+                 patch('app.auth_client', mock_auth_client), \
+                 patch('app.supabase_client', Mock()), \
+                 patch('supabase_client.SupabaseAuthClient.verify_jwt_token', 
+                       return_value={'sub': 'test-user-123', 'user_id': 'test-user-123'}):
+                
+                # Create TF-IDF data for recommendations
+                vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
+                tfidf_matrix = vectorizer.fit_transform(sample_dataframe['combined_text_features'])
+                uid_mapping = pd.Series(sample_dataframe.index, index=sample_dataframe['uid'])
+                
+                with patch('app.tfidf_vectorizer_global', vectorizer), \
+                     patch('app.tfidf_matrix_global', tfidf_matrix), \
+                     patch('app.uid_to_idx', uid_mapping):
+                    yield client
 
 
 @pytest.fixture

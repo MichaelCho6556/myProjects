@@ -407,9 +407,19 @@ def get_items():
 
     # Sorting
     if sort_by == 'score_desc':
-        data_subset = data_subset.sort_values('score', ascending=False, na_position='last')
+        # Check if score column exists before sorting
+        if 'score' in data_subset.columns:
+            data_subset = data_subset.sort_values('score', ascending=False, na_position='last')
+        else:
+            # Fallback to title sorting if score column doesn't exist
+            data_subset = data_subset.sort_values('title', ascending=True, na_position='last')
     elif sort_by == 'score_asc':
-        data_subset = data_subset.sort_values('score', ascending=True, na_position='last')
+        # Check if score column exists before sorting
+        if 'score' in data_subset.columns:
+            data_subset = data_subset.sort_values('score', ascending=True, na_position='last')
+        else:
+            # Fallback to title sorting if score column doesn't exist
+            data_subset = data_subset.sort_values('title', ascending=True, na_position='last')
     elif sort_by == 'title_asc':
         data_subset = data_subset.sort_values('title', ascending=True, na_position='last')
     elif sort_by == 'title_desc':
@@ -550,7 +560,11 @@ def get_recommendations(item_uid):
 def get_user_profile():
     """Get current user's profile"""
     try:
-        user_id = g.current_user['user_id']
+        # Standardized user_id extraction
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+            
         profile = auth_client.get_user_profile(user_id)
         
         if profile:
@@ -566,7 +580,11 @@ def get_user_profile():
 def update_user_profile():
     """Update current user's profile"""
     try:
-        user_id = g.current_user['user_id']
+        # Standardized user_id extraction
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+            
         updates = request.json
         
         # Remove fields that shouldn't be updated directly
@@ -588,7 +606,10 @@ def update_user_profile():
 @require_auth
 def get_user_dashboard():
     """Get user's complete dashboard data"""
-    user_id = g.current_user['user_id'] if 'user_id' in g.current_user else g.current_user['sub']
+    # Standardized user_id extraction
+    user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+    if not user_id:
+        return jsonify({'error': 'User ID not found in token'}), 400
     
     print(f"🎯 Dashboard request for user_id: {user_id}")  # Debug log
     
@@ -617,7 +638,11 @@ def get_user_dashboard():
 def get_user_items():
     """Get user's anime/manga list with full item details"""
     try:
-        user_id = g.current_user['user_id']
+        # Standardized user_id extraction  
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+            
         status = request.args.get('status')  # Optional filter by status
         
         # Get base user items from auth client
@@ -652,7 +677,10 @@ def get_user_items():
 def update_user_item_status(item_uid):
     """Update user's item status with comprehensive data"""
     try:
-        user_id = g.current_user['user_id'] if 'user_id' in g.current_user else g.current_user['sub']
+        # Standardized user_id extraction
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
         
         data = request.get_json()
         status = data.get('status', 'plan_to_watch')
@@ -741,7 +769,10 @@ def update_user_item_status(item_uid):
 def remove_user_item(item_uid):
     """Remove item from user's list"""
     try:
-        user_id = g.current_user['user_id']
+        # Standardized user_id extraction
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
         
         response = requests.delete(
             f"{os.getenv('SUPABASE_URL')}/rest/v1/user_items",
@@ -764,7 +795,10 @@ def remove_user_item(item_uid):
 @require_auth
 def get_user_items_by_status_route(status):
     """Get user's items filtered by status"""
-    user_id = g.current_user['user_id'] if 'user_id' in g.current_user else g.current_user['sub']
+    # Standardized user_id extraction
+    user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+    if not user_id:
+        return jsonify({'error': 'User ID not found in token'}), 400
     
     try:
         items = get_user_items_by_status(user_id, status)
@@ -787,7 +821,10 @@ def verify_token():
 def force_refresh_statistics():
     """Force recalculation of user statistics"""
     try:
-        user_id = g.current_user['user_id'] if 'user_id' in g.current_user else g.current_user['sub']
+        # Standardized user_id extraction
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
         
         print(f"🔄 Force refreshing statistics for user {user_id}")
         
