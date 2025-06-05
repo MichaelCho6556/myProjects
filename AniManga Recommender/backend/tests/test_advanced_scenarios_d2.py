@@ -27,11 +27,10 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from app import create_app
-from app.models import User, UserItem, AnimeItem
-from app.database import db, get_db_connection
-from app.auth.utils import generate_token
-from app.config import Config
+from app import app as create_app
+from models import User, UserItem, AnimeItem, create_sample_user, create_sample_anime_item, create_sample_user_item
+import os
+import tempfile
 
 
 @dataclass

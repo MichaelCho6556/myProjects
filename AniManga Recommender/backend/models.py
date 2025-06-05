@@ -1,100 +1,163 @@
-from flask_sqlalchemy import SQLAlchemy
-from sqlachemy.orm import relationship
-from sqlalchemy import Text, Integer, DECIMAL, TIMESTAMP, VARCHAR, DATE, ARRAY
+"""
+Models for the AniManga Recommender application.
+This module provides data models used by the application and tests.
+Uses dataclasses to match the Supabase client approach.
+"""
+
+from dataclasses import dataclass
+from typing import Optional, List, Dict, Any
 from datetime import datetime
-import uuid
 
-db = SQLAlchemy()
 
-class MediaType(db.Model):
-    __tablename__ = 'media_types'
-
-    id = db.Column(Integer, primary_key=True)
-    name = db.Column(VARCHAR(100), unique=True, nullable=False)
-    media_type_id = db.Column(Integer, db.ForeignKey('media_types.id'))
-    synopsis = db.Column(Text)
-    scored_by = db.Column(Integer)
-    popularity = db.Column(Integer)
-    members = db.Column(Integer)
-    favorites = db.Column(Integer)
-    episodes = db.Column(Integer)
-    chapters = db.Column(Integer)
-    volumes = db.Column(Integer)
-    status = db.Column(VARCHAR(50))
-    rating = db.Column(VARCHAR(50))
-    start_date = db.Column(DATE)
-    end_date = db.Column(DATE)
-    image_url = db.Column(Text)
-    trailer_url = db.Column(Text)
-    title_synonyms = db.Column(ARRAY(Text))
-    licensors = db.Column(ARRAY(Text))
-    created_at = db.Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
-    updated_at = db.Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
-
-    media_type = relationship("MediaType", back_populates="items")
-    genres = relationship("Genre", secondary="item_genres", back_populates="items")
-    themes = relationship("Theme", secondary="item_themes", back_populates="items")
-    demographics = relationship("Demographic", secondary="item_demographics", back_populates="items")
-    studios = relationship("Studio", secondary="item_studios", back_populates="items")
-    authors = relationship("Author", secondary="item_authors", back_populates="items")
-
-class Genre(db.Model):
-    __tablename__ = 'genres'
-
-    id = db.Column(Integer, primary_key=True)
-    name = db.Column(VARCHAR(100), unique=True, nullable=False)
-    created_at = db.Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
-
-    items = relationship("Item", secondary="item_genres", back_populates="genres")
-
-class Theme(db.Model):
-    __tablename__ = 'themes'
+@dataclass
+class User:
+    """User model for the application."""
+    id: str
+    email: str
+    username: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    profile_data: Optional[Dict[str, Any]] = None
     
-    id = db.Column(Integer, primary_key=True)
-    name = db.Column(VARCHAR(100), unique=True, nullable=False)
-    created_at = db.Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert user to dictionary."""
+        return {
+            'id': self.id,
+            'email': self.email,
+            'username': self.username,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'profile_data': self.profile_data or {}
+        }
 
-    items = relationship("Item", secondary="item_themes", back_populates="themes")
 
-class Demographic(db.Model):
-    __tablename__ = 'demographics'
+@dataclass 
+class AnimeItem:
+    """Model for anime/manga items."""
+    uid: str
+    title: str
+    media_type: str
+    score: Optional[float] = None
+    genres: Optional[List[str]] = None
+    synopsis: Optional[str] = None
+    main_picture: Optional[str] = None
+    status: Optional[str] = None
+    episodes: Optional[int] = None
+    chapters: Optional[int] = None
+    volumes: Optional[int] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    sfw: bool = True
+    themes: Optional[List[str]] = None
+    demographics: Optional[List[str]] = None
+    studios: Optional[List[str]] = None
+    authors: Optional[List[str]] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert item to dictionary."""
+        return {
+            'uid': self.uid,
+            'title': self.title,
+            'media_type': self.media_type,
+            'score': self.score,
+            'genres': self.genres or [],
+            'synopsis': self.synopsis,
+            'main_picture': self.main_picture,
+            'status': self.status,
+            'episodes': self.episodes,
+            'chapters': self.chapters,
+            'volumes': self.volumes,
+            'start_date': self.start_date,
+            'end_date': self.end_date,
+            'sfw': self.sfw,
+            'themes': self.themes or [],
+            'demographics': self.demographics or [],
+            'studios': self.studios or [],
+            'authors': self.authors or []
+        }
 
-    id = db.Column(Integer, primary_key=True)
-    name = db.Column(VARCHAR(100), unique=True, nullable=False)
-    created_at = db.Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
 
-    items = relationship("Item", secondary="item_demographics", back_populates="demographics")
+@dataclass
+class UserItem:
+    """Model for user's anime/manga list items."""
+    id: Optional[str] = None
+    user_id: str = ""
+    item_uid: str = ""
+    status: str = "plan_to_watch"
+    progress: int = 0
+    rating: Optional[float] = None
+    notes: Optional[str] = None
+    start_date: Optional[datetime] = None
+    completion_date: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert user item to dictionary."""
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'item_uid': self.item_uid,
+            'status': self.status,
+            'progress': self.progress,
+            'rating': self.rating,
+            'notes': self.notes,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'completion_date': self.completion_date.isoformat() if self.completion_date else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
-class Studio(db.Model):
-    __tablename__ = 'studios'
 
-    id = db.Column(Integer, primary_key=True)
-    name = db.Column(VARCHAR(200), unique=True, nullable=False)
-    created_at = db.Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
+# Additional helper functions for model creation and testing
+def create_sample_user(user_id: str = "test_user", email: str = "test@example.com") -> User:
+    """Create a sample user for testing."""
+    return User(
+        id=user_id,
+        email=email,
+        username=f"user_{user_id}",
+        created_at=datetime.now(),
+        profile_data={}
+    )
 
-    items = relationship("Item", secondary="item_studios", back_populates="studios")
 
-class Author(db.Model):
-    __tablename__ = 'authors'
+def create_sample_anime_item(uid: str = "anime_1", title: str = "Test Anime") -> AnimeItem:
+    """Create a sample anime item for testing."""
+    return AnimeItem(
+        uid=uid,
+        title=title,
+        media_type="anime",
+        score=8.5,
+        genres=["Action", "Adventure"],
+        synopsis="A test anime for testing purposes",
+        main_picture="https://example.com/image.jpg",
+        status="Finished Airing",
+        episodes=24,
+        sfw=True,
+        themes=["Military"],
+        demographics=["Shounen"],
+        studios=["Test Studio"],
+        authors=["Test Author"]
+    )
 
-    id = db.Column(Integer, primary_key=True)
-    name = db.Column(VARCHAR(200), unique=True, nullable=False)
-    created_at = db.Column(TIMESTAMP(timezone=True), default=datetime.utcnow)
 
-    items = relationship("Item", secondary="item_authors", back_populates="authors")
+def create_sample_user_item(user_id: str = "test_user", item_uid: str = "anime_1") -> UserItem:
+    """Create a sample user item for testing."""
+    return UserItem(
+        id=f"{user_id}_{item_uid}",
+        user_id=user_id,
+        item_uid=item_uid,
+        status="watching",
+        progress=12,
+        rating=8.0,
+        created_at=datetime.now()
+    )
 
-item_genres = db.Table('item_genres', db.COlumn('item_id', Integer, db.ForeignKey('items.id', ondelete='CACADE'), primary_key=True),
-                       db.Column('genre_id', Integer, db.ForeignKey('genres.id', ondelete='CASCADE'), primary_key=True))
 
-item_themes = db.Table('item_themes',
-                       db.Column('item_id', Integer, db.ForeignKey('items.id', ondelete='CASCADE'), primary_key=True),
-                                 db.Column('theme_id', Integer, db.ForeingKey('themes.id', ondelete='CASCADE'),primary_key=True))
-item_demographics = db.Table('item_demographics',
-                             db.Column('item_id', Integer, db.ForeignKey('items.id', ondelete='CASCADE'), primary_key=True),
-                             db.Column('demographic_id', Integer, db.ForeignKey('demographic.id', ondelete='CASCADE'), primary_key=True))
-items_studios = db.Table('items_studios',
-                         db.Column('item_id', Integer, db.ForeignKey('items.id', ondelete='CASCADE'), primary_key=True),
-                         db.Column('studio_id', Integer, db.ForeignKey('studios.id', ondelete='CASCADE'), primary_key=True))
-item_authors = db.Table('items_authors',
-                        db.Column('item_id', Integer, db.ForeignKey('items.id', ondelete='CASCADE'), primary_key=True),
-                        db.Column('author_id', Integer, db.ForeignKey('authors.id', ondelete='CASCADE'), primary_key=True))
+# Test configuration class for compatibility
+class TestConfig:
+    """Test configuration class for Flask apps."""
+    TESTING = True
+    WTF_CSRF_ENABLED = False
+    SECRET_KEY = 'test-secret-key'
+    JWT_SECRET_KEY = 'test-jwt-secret'
