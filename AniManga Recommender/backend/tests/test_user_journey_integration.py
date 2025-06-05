@@ -31,8 +31,12 @@ class TestConfig(Config):
 @pytest.fixture
 def app():
     """Create test app"""
-    app = create_app(TestConfig)
-    return app
+    from app import app as flask_app
+    flask_app.config['TESTING'] = True
+    flask_app.config['SUPABASE_URL'] = "https://test.supabase.co"
+    flask_app.config['SUPABASE_ANON_KEY'] = "test_anon_key"
+    flask_app.config['SUPABASE_SERVICE_ROLE_KEY'] = "test_service_role_key"
+    return flask_app
 
 
 @pytest.fixture
@@ -103,7 +107,7 @@ def mock_anime_items():
 @pytest.fixture
 def mock_supabase_client():
     """Mock Supabase client for backend testing"""
-    with patch('app.supabase') as mock:
+    with patch('supabase_client.SupabaseClient') as mock:
         client = Mock()
         mock.return_value = client
         
@@ -129,14 +133,14 @@ class TestCompleteUserJourneyIntegration:
         """Test complete new user onboarding workflow"""
         
         # 1. User accesses dashboard for first time (should be empty)
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/dashboard', headers=auth_headers)
             
         # Should return empty dashboard for new user
         assert response.status_code in [200, 404]
         
         # 2. User searches for anime items
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             with patch('requests.get') as mock_get:
                 mock_get.return_value.status_code = 200
                 mock_get.return_value.json.return_value = {
@@ -152,7 +156,7 @@ class TestCompleteUserJourneyIntegration:
         assert len(data['items']) > 0
         
         # 3. User gets item details
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             with patch('requests.get') as mock_get:
                 mock_get.return_value.status_code = 200
                 mock_get.return_value.json.return_value = mock_anime_items[0]
@@ -173,7 +177,7 @@ class TestCompleteUserJourneyIntegration:
             'created_at': '2024-01-15T10:00:00Z'
         }]
         
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.post('/api/auth/user-items', 
                                  headers=auth_headers,
                                  json={
@@ -196,7 +200,7 @@ class TestCompleteUserJourneyIntegration:
             }
         ]
         
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/dashboard', headers=auth_headers)
             
         assert response.status_code == 200
@@ -209,7 +213,7 @@ class TestCompleteUserJourneyIntegration:
         """Test complex search, filtering, and list management workflow"""
         
         # 1. User gets filter options
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             with patch('requests.get') as mock_get:
                 mock_get.return_value.status_code = 200
                 mock_get.return_value.json.return_value = {
@@ -235,7 +239,7 @@ class TestCompleteUserJourneyIntegration:
             'per_page': '20'
         }
         
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             with patch('requests.get') as mock_get:
                 mock_get.return_value.status_code = 200
                 mock_get.return_value.json.return_value = {
@@ -253,7 +257,7 @@ class TestCompleteUserJourneyIntegration:
         assert filtered_data['items'][0]['title'] == 'Attack on Titan'
         
         # 3. User adds filtered item to different status
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.post('/api/auth/user-items',
                                  headers=auth_headers,
                                  json={
@@ -270,7 +274,7 @@ class TestCompleteUserJourneyIntegration:
             'q': 'Attack'
         }
         
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             with patch('requests.get') as mock_get:
                 mock_get.return_value.status_code = 200
                 mock_get.return_value.json.return_value = {
@@ -301,7 +305,7 @@ class TestCompleteUserJourneyIntegration:
         # 1. User views current item
         mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [mock_user_item]
         
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/user-items', headers=auth_headers)
             
         assert response.status_code == 200
@@ -310,7 +314,7 @@ class TestCompleteUserJourneyIntegration:
         assert user_items[0]['status'] == 'watching'
         
         # 2. User updates progress
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.put('/api/auth/user-items/anime-1',
                                 headers=auth_headers,
                                 json={'progress': 12})
@@ -327,7 +331,7 @@ class TestCompleteUserJourneyIntegration:
             'updated_at': '2024-01-15T10:00:00Z'
         }]
         
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.put('/api/auth/user-items/anime-1',
                                 headers=auth_headers,
                                 json={
@@ -360,7 +364,7 @@ class TestCompleteUserJourneyIntegration:
         }
         
         with patch('app.get_dashboard_data', return_value=mock_dashboard_data):
-            with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
                 response = client.get('/api/auth/dashboard', headers=auth_headers)
                 
         assert response.status_code == 200
@@ -385,9 +389,9 @@ class TestCompleteUserJourneyIntegration:
             }
         ]
         
-        with patch('app.generate_recommendations', return_value=mock_recommendations):
-            with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
-                response = client.get('/api/auth/recommendations', headers=auth_headers)
+        with patch('app.get_recommendations', return_value={'recommendations': mock_recommendations}):
+            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+                response = client.get('/api/recommendations/anime-1', headers=auth_headers)
                 
         assert response.status_code == 200
         recommendations = response.get_json()
@@ -395,13 +399,13 @@ class TestCompleteUserJourneyIntegration:
         assert 'recommendation_score' in recommendations[0]
         
         # 2. User views recommendation details
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/recommendations/anime-1', headers=auth_headers)
             
         assert response.status_code in [200, 404]
         
         # 3. User provides positive feedback
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.post('/api/auth/recommendation-feedback',
                                  headers=auth_headers,
                                  json={
@@ -413,7 +417,7 @@ class TestCompleteUserJourneyIntegration:
         assert response.status_code in [200, 201]
         
         # 4. User adds recommended item to list
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.post('/api/auth/user-items',
                                  headers=auth_headers,
                                  json={
@@ -426,7 +430,7 @@ class TestCompleteUserJourneyIntegration:
         
         # 5. User requests more recommendations
         with patch('app.generate_recommendations', return_value=mock_recommendations):
-            with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
                 response = client.get('/api/auth/recommendations?refresh=true', headers=auth_headers)
                 
         assert response.status_code == 200
@@ -450,7 +454,7 @@ class TestCompleteUserJourneyIntegration:
         mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = mock_user_items
         
         # 1. User gets all their items
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/user-items', headers=auth_headers)
             
         assert response.status_code == 200
@@ -466,7 +470,7 @@ class TestCompleteUserJourneyIntegration:
             }
         }
         
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.put('/api/auth/user-items/bulk',
                                 headers=auth_headers,
                                 json=bulk_update_data)
@@ -474,14 +478,14 @@ class TestCompleteUserJourneyIntegration:
         assert response.status_code == 200
         
         # 3. User exports their list data
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/user-items/export?format=json', headers=auth_headers)
             
         assert response.status_code == 200
         assert response.headers['Content-Type'] == 'application/json'
         
         # 4. Verify dashboard reflects bulk changes
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/dashboard', headers=auth_headers)
             
         assert response.status_code == 200
@@ -493,7 +497,7 @@ class TestCompleteUserJourneyIntegration:
         test_item_uid = 'anime-test-123'
         
         # 1. Add item through user-items endpoint
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.post('/api/auth/user-items',
                                  headers=auth_headers,
                                  json={
@@ -511,7 +515,7 @@ class TestCompleteUserJourneyIntegration:
         }
         
         with patch('app.get_dashboard_data', return_value=mock_dashboard_data):
-            with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
                 response = client.get('/api/auth/dashboard', headers=auth_headers)
                 
         assert response.status_code == 200
@@ -519,7 +523,7 @@ class TestCompleteUserJourneyIntegration:
         assert dashboard['quick_stats']['watching'] == 1
         
         # 3. Update item and verify consistency
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.put(f'/api/auth/user-items/{test_item_uid}',
                                 headers=auth_headers,
                                 json={'progress': 10})
@@ -527,7 +531,7 @@ class TestCompleteUserJourneyIntegration:
         assert response.status_code == 200
         
         # 4. Verify update appears in activity feed
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/user-activity', headers=auth_headers)
             
         assert response.status_code in [200, 404]
@@ -536,7 +540,7 @@ class TestCompleteUserJourneyIntegration:
         """Test error recovery and data integrity during complex workflows"""
         
         # 1. Start with successful operation
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/dashboard', headers=auth_headers)
             
         assert response.status_code == 200
@@ -544,7 +548,7 @@ class TestCompleteUserJourneyIntegration:
         # 2. Simulate database error during item addition
         mock_supabase_client.table.return_value.insert.return_value.execute.side_effect = Exception("Database error")
         
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.post('/api/auth/user-items',
                                  headers=auth_headers,
                                  json={
@@ -558,13 +562,13 @@ class TestCompleteUserJourneyIntegration:
         mock_supabase_client.table.return_value.insert.return_value.execute.side_effect = None
         mock_supabase_client.table.return_value.insert.return_value.execute.return_value.data = [{}]
         
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/dashboard', headers=auth_headers)
             
         assert response.status_code == 200
         
         # 4. Retry the failed operation
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.post('/api/auth/user-items',
                                  headers=auth_headers,
                                  json={
@@ -581,13 +585,13 @@ class TestCompleteUserJourneyIntegration:
         start_time = time.time()
         
         # 1. Dashboard load
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/dashboard', headers=auth_headers)
         assert response.status_code == 200
         
         # 2. Multiple search requests
         for i in range(3):
-            with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
                 with patch('requests.get') as mock_get:
                     mock_get.return_value.status_code = 200
                     mock_get.return_value.json.return_value = {'items': [], 'total_items': 0}
@@ -597,7 +601,7 @@ class TestCompleteUserJourneyIntegration:
         
         # 3. Item detail views
         for i in range(2):
-            with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
                 with patch('requests.get') as mock_get:
                     mock_get.return_value.status_code = 200
                     mock_get.return_value.json.return_value = {'uid': f'item-{i}', 'title': f'Item {i}'}
@@ -606,13 +610,13 @@ class TestCompleteUserJourneyIntegration:
             assert response.status_code == 200
         
         # 4. User list operations
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/user-items', headers=auth_headers)
         assert response.status_code == 200
         
         # 5. Item additions
         for i in range(2):
-            with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
                 response = client.post('/api/auth/user-items',
                                      headers=auth_headers,
                                      json={
@@ -642,7 +646,7 @@ class TestCompleteUserJourneyIntegration:
             }
             session_1_data.append(item_data)
             
-            with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
                 response = client.post('/api/auth/user-items',
                                      headers=auth_headers,
                                      json={
@@ -657,7 +661,7 @@ class TestCompleteUserJourneyIntegration:
         # Session 2: User retrieves and verifies data
         mock_supabase_client.table.return_value.select.return_value.eq.return_value.execute.return_value.data = session_1_data
         
-        with patch('app.verify_jwt_token', return_value={'sub': 'test-user-123'}):
+        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token', return_value={'sub': 'test-user-123'}):
             response = client.get('/api/auth/user-items', headers=auth_headers)
             
         assert response.status_code == 200
