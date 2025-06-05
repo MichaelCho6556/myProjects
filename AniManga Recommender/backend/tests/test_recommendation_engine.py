@@ -94,24 +94,33 @@ class TestDataLoadingAndPreprocessing:
     @pytest.mark.unit
     def test_load_data_from_supabase_empty_dataset(self):
         """Test handling of empty dataset from Supabase"""
-        with patch('supabase_client.SupabaseClient') as mock_client_class:
+        with patch('app.supabase_client') as mock_client:
             # Mock empty DataFrame
-            mock_client = Mock()
             mock_client.items_to_dataframe.return_value = pd.DataFrame()
-            mock_client_class.return_value = mock_client
             
             # Reset global state
             import app
+            original_df = app.df_processed
+            original_tfidf = app.tfidf_matrix_global
+            original_vectorizer = app.tfidf_vectorizer_global
+            
             app.df_processed = None
             app.tfidf_matrix_global = None
+            app.tfidf_vectorizer_global = None
             
-            # Test data loading
-            load_data_and_tfidf_from_supabase()
-            
-            # Verify empty state handling
-            assert len(app.df_processed) == 0
-            assert app.tfidf_matrix_global is None
-            assert app.tfidf_vectorizer_global is None
+            try:
+                # Test data loading
+                load_data_and_tfidf_from_supabase()
+                
+                # Verify empty state handling
+                assert len(app.df_processed) == 0
+                assert app.tfidf_matrix_global is None
+                assert app.tfidf_vectorizer_global is None
+            finally:
+                # Restore original state
+                app.df_processed = original_df
+                app.tfidf_matrix_global = original_tfidf
+                app.tfidf_vectorizer_global = original_vectorizer
     
     @pytest.mark.unit
     def test_load_data_already_loaded(self):
@@ -256,7 +265,7 @@ class TestTFIDFComputation:
         
         # Verify similarity properties
         assert similarities.shape == (1, 4)
-        assert similarities[0][0] == 1.0  # Self-similarity is 1
+        assert abs(similarities[0][0] - 1.0) < 1e-10  # Self-similarity is 1 (with tolerance)
         assert 0 <= similarities[0][1] <= 1  # Valid similarity range
         assert 0 <= similarities[0][2] <= 1
         assert 0 <= similarities[0][3] <= 1
@@ -333,9 +342,9 @@ class TestRecommendationEndpoint:
             assert response.status_code == 200
             data = json.loads(response.data)
             
-            assert 'source_title' in data
+            assert 'source_item_title' in data
             assert 'recommendations' in data
-            assert data['source_title'] == 'Source Anime'
+            assert data['source_item_title'] == 'Source Anime'
             assert len(data['recommendations']) == 2
             
             # Verify recommendations are sorted by similarity
