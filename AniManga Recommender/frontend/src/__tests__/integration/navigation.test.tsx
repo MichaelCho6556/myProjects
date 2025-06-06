@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import HomePage from "../../pages/HomePage";
 import ItemDetailPage from "../../pages/ItemDetailPage";
+import { AuthProvider } from "../../context/AuthContext";
 import { mockAxios, setMockResponse } from "../../__mocks__/axios";
 
 // Helper functions
@@ -52,11 +53,13 @@ const createMockDistinctValues = (overrides = {}) => ({
 });
 
 const App = () => (
-  <Routes>
-    <Route path="/" element={<HomePage />} />
-    <Route path="/search" element={<HomePage />} />
-    <Route path="/item/:uid" element={<ItemDetailPage />} />
-  </Routes>
+  <AuthProvider>
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/search" element={<HomePage />} />
+      <Route path="/item/:uid" element={<ItemDetailPage />} />
+    </Routes>
+  </AuthProvider>
 );
 
 const renderWithRouter = (initialEntries = ["/"], component = <App />) => {

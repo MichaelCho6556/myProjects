@@ -16,6 +16,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
   filtersLoading,
 }) => {
   const {
+    inputValue,
     selectedMediaType,
     selectedGenre,
     selectedTheme,
@@ -39,6 +40,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
   } = filterOptions;
 
   const {
+    handleInputChange,
+    handleSearchSubmit,
     handleSortChange,
     handleMediaTypeChange,
     handleStatusChange,
@@ -102,6 +105,26 @@ const FilterBar: React.FC<FilterBarProps> = ({
 
   return (
     <section className="filter-bar" role="search" aria-label="Filter options">
+      {/* Search Input */}
+      <form onSubmit={handleSearchSubmit} className="search-form">
+        <label htmlFor="searchInput">Search anime and manga titles:</label>
+        <input
+          id="searchInput"
+          type="text"
+          placeholder="Search titles..."
+          value={inputValue}
+          onChange={handleInputChange}
+          disabled={loading || filtersLoading}
+          aria-describedby="search-help"
+        />
+        <span id="search-help" className="sr-only">
+          Enter keywords to search for anime and manga titles
+        </span>
+        <button type="submit" disabled={loading || filtersLoading} aria-label="Submit search">
+          Search
+        </button>
+      </form>
+
       {/* Sort By Selector */}
       <div className="filter-group sort-by-selector">
         <label htmlFor="sortBy">Sort by:</label>

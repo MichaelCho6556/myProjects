@@ -18,10 +18,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Get initial session
-    authApi.getCurrentUser().then(({ data: { user } }) => {
-      setUser(user);
-      setLoading(false);
-    });
+    authApi
+      .getCurrentUser()
+      .then(({ data: { user } }) => {
+        setUser(user);
+        setLoading(false);
+      })
+      .catch(() => {
+        // Handle error gracefully - set loading to false and user to null
+        setUser(null);
+        setLoading(false);
+      });
 
     // Listen for auth changes
     const {
