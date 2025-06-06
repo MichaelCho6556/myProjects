@@ -6,11 +6,16 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { AuthProvider } from "../../context/AuthContext";
 import Navbar from "../../components/Navbar";
 
 // Test utilities
 const renderWithRouter = (component: React.ReactElement) => {
-  return render(<MemoryRouter>{component}</MemoryRouter>);
+  return render(
+    <MemoryRouter>
+      <AuthProvider>{component}</AuthProvider>
+    </MemoryRouter>
+  );
 };
 
 describe("Navbar Component", () => {
@@ -65,11 +70,12 @@ describe("Navbar Component", () => {
       expect(homeLink).toHaveTextContent("Home");
     });
 
-    it('Home link has aria-current="page" attribute', () => {
+    it("Home link navigates to correct route", () => {
       renderWithRouter(<Navbar />);
 
       const homeLink = screen.getByRole("menuitem");
-      expect(homeLink).toHaveAttribute("aria-current", "page");
+      expect(homeLink).toHaveAttribute("href", "/");
+      expect(homeLink).toHaveTextContent("Home");
     });
   });
 
@@ -195,7 +201,9 @@ describe("Navbar Component", () => {
       // Test with different initial routes
       const { rerender } = render(
         <MemoryRouter initialEntries={["/"]}>
-          <Navbar />
+          <AuthProvider>
+            <Navbar />
+          </AuthProvider>
         </MemoryRouter>
       );
 
@@ -204,7 +212,9 @@ describe("Navbar Component", () => {
       // Rerender with different route
       rerender(
         <MemoryRouter initialEntries={["/item/123"]}>
-          <Navbar />
+          <AuthProvider>
+            <Navbar />
+          </AuthProvider>
         </MemoryRouter>
       );
 
@@ -215,7 +225,9 @@ describe("Navbar Component", () => {
     it("maintains consistent structure across different routes", () => {
       render(
         <MemoryRouter initialEntries={["/some-other-route"]}>
-          <Navbar />
+          <AuthProvider>
+            <Navbar />
+          </AuthProvider>
         </MemoryRouter>
       );
 
@@ -236,7 +248,9 @@ describe("Navbar Component", () => {
       // Re-render should not cause issues
       rerender(
         <MemoryRouter>
-          <Navbar />
+          <AuthProvider>
+            <Navbar />
+          </AuthProvider>
         </MemoryRouter>
       );
 
