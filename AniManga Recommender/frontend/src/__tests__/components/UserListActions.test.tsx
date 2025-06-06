@@ -26,11 +26,7 @@ jest.mock("../../context/AuthContext", () => ({
 
 // Mock the authenticated API hook
 jest.mock("../../hooks/useAuthenticatedApi", () => ({
-  useAuthenticatedApi: () => ({
-    getUserItems: jest.fn(),
-    updateUserItemStatus: jest.fn(),
-    removeUserItem: jest.fn(),
-  }),
+  useAuthenticatedApi: jest.fn(),
 }));
 
 // Mock data - Create valid AnimeItem for testing
@@ -115,7 +111,7 @@ describe("UserListActions Component", () => {
 
     // Mock the authenticated API hook
     const { useAuthenticatedApi } = require("../../hooks/useAuthenticatedApi");
-    useAuthenticatedApi.mockReturnValue({
+    (useAuthenticatedApi as jest.Mock).mockReturnValue({
       getUserItems: mockGetUserItems,
       updateUserItemStatus: mockUpdateUserItemStatus,
       removeUserItem: mockRemoveUserItem,
@@ -229,7 +225,7 @@ describe("UserListActions Component", () => {
         fireEvent.change(statusSelect, { target: { value: "watching" } });
       });
 
-      const updateButton = screen.getByText("Update List");
+      const updateButton = screen.getByText("Add to List");
       await userEvent.click(updateButton);
 
       expect(mockUpdateUserItemStatus).toHaveBeenCalledWith("anime_123", {
@@ -297,7 +293,7 @@ describe("UserListActions Component", () => {
         fireEvent.change(progressInput, { target: { value: "12" } });
       });
 
-      const updateButton = screen.getByText("Update List");
+      const updateButton = screen.getByText("Add to List");
       await userEvent.click(updateButton);
 
       expect(mockUpdateUserItemStatus).toHaveBeenCalledWith("anime_123", {
@@ -447,7 +443,7 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        expect(screen.getByText("Remove from List")).toBeInTheDocument();
+        expect(screen.getByText("Remove")).toBeInTheDocument();
       });
     });
 
@@ -465,7 +461,7 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        const removeButton = screen.getByText("Remove from List");
+        const removeButton = screen.getByText("Remove");
         userEvent.click(removeButton);
       });
 
@@ -486,7 +482,7 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        const removeButton = screen.getByText("Remove from List");
+        const removeButton = screen.getByText("Remove");
         userEvent.click(removeButton);
       });
 
@@ -512,7 +508,7 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        const updateButton = screen.getByText("Update List");
+        const updateButton = screen.getByText("Add to List");
         userEvent.click(updateButton);
       });
 
@@ -545,7 +541,7 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        const updateButton = screen.getByText("Update List");
+        const updateButton = screen.getByText("Add to List");
         userEvent.click(updateButton);
       });
 
@@ -565,7 +561,7 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        const updateButton = screen.getByText("Update List");
+        const updateButton = screen.getByText("Add to List");
         userEvent.click(updateButton);
       });
 
@@ -593,7 +589,7 @@ describe("UserListActions Component", () => {
 
         // Should show form inputs in edit mode
         expect(screen.getByRole("combobox")).toBeInTheDocument();
-        expect(screen.getByText("Update List")).toBeInTheDocument();
+        expect(screen.getByText("Update")).toBeInTheDocument();
       });
     });
 

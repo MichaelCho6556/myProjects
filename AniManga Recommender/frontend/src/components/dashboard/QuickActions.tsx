@@ -10,8 +10,14 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onRefresh }) => {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await onRefresh();
-    setTimeout(() => setIsRefreshing(false), 1000); // Visual feedback
+    try {
+      await onRefresh();
+    } catch (error) {
+      // Handle errors gracefully - just log them but don't crash
+      console.error("Refresh failed:", error);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 1000); // Visual feedback
+    }
   };
 
   return (

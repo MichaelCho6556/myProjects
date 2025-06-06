@@ -123,10 +123,13 @@ describe("QuickActions Component", () => {
       expect(screen.getByText("Refreshing...")).toBeInTheDocument();
       expect(screen.getByText("⟳")).toBeInTheDocument();
 
-      // Wait for refresh to complete
-      await waitFor(() => {
-        expect(screen.getByText("Refresh Data")).toBeInTheDocument();
-      });
+      // Wait for refresh to complete (onRefresh + timeout delay)
+      await waitFor(
+        () => {
+          expect(screen.getByText("Refresh Data")).toBeInTheDocument();
+        },
+        { timeout: 2000 }
+      ); // Increased timeout to account for the 1000ms delay
     });
 
     test("disables refresh button during refresh", async () => {
@@ -136,16 +139,19 @@ describe("QuickActions Component", () => {
 
       renderWithRouter(<QuickActions onRefresh={slowRefresh} />);
 
-      const refreshButton = screen.getByText("Refresh Data");
+      const refreshButton = screen.getByRole("button", { name: /refresh data/i });
       await userEvent.click(refreshButton);
 
       // Button should be disabled during refresh
       expect(refreshButton).toBeDisabled();
 
-      // Wait for refresh to complete
-      await waitFor(() => {
-        expect(refreshButton).not.toBeDisabled();
-      });
+      // Wait for refresh to complete (onRefresh + timeout delay)
+      await waitFor(
+        () => {
+          expect(refreshButton).not.toBeDisabled();
+        },
+        { timeout: 2000 }
+      ); // Increased timeout to account for the 1000ms delay
     });
   });
 
@@ -189,7 +195,7 @@ describe("QuickActions Component", () => {
     test("buttons are keyboard accessible", async () => {
       renderWithRouter(<QuickActions onRefresh={mockOnRefresh} />);
 
-      const refreshButton = screen.getByText("Refresh Data");
+      const refreshButton = screen.getByRole("button", { name: /refresh data/i });
 
       // Focus and activate with keyboard
       refreshButton.focus();
@@ -246,29 +252,31 @@ describe("QuickActions Component", () => {
 
   describe("Edge Cases", () => {
     test("handles onRefresh errors gracefully", async () => {
+      const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
       const errorRefresh = jest.fn().mockRejectedValue(new Error("Refresh failed"));
 
       renderWithRouter(<QuickActions onRefresh={errorRefresh} />);
 
-      const refreshButton = screen.getByText("Refresh Data");
+      const refreshButton = screen.getByRole("button", { name: /refresh data/i });
 
-      // Should not crash on refresh error - catch the rejection
-      try {
-        await userEvent.click(refreshButton);
-        // Wait a bit for the error to be handled
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch (error) {
-        // Expected to catch the error, but component should still work
-      }
+      // Click should not crash the component
+      await userEvent.click(refreshButton);
+
+      // Wait for error handling
+      await waitFor(() => {
+        expect(consoleSpy).toHaveBeenCalledWith("Refresh failed:", expect.any(Error));
+      });
 
       // Component should still be functional after error
       expect(refreshButton).toBeInTheDocument();
+
+      consoleSpy.mockRestore();
     });
 
     test("handles rapid clicking of refresh", async () => {
       renderWithRouter(<QuickActions onRefresh={mockOnRefresh} />);
 
-      const refreshButton = screen.getByText("Refresh Data");
+      const refreshButton = screen.getByRole("button", { name: /refresh data/i });
 
       // Rapid clicking
       await userEvent.click(refreshButton);
