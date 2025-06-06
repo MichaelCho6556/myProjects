@@ -3,10 +3,10 @@ import { Link } from "react-router-dom";
 import { UserActivity } from "../../types";
 
 interface ActivityFeedProps {
-  activities: UserActivity[];
+  activities?: UserActivity[];
 }
 
-const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities }) => {
+const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities = [] }) => {
   const getActivityText = (activity: UserActivity): string => {
     switch (activity.activity_type) {
       case "status_changed":
