@@ -3,18 +3,18 @@ import { Link } from "react-router-dom";
 import { UserItem } from "../../types";
 
 interface ItemListsProps {
-  inProgress: UserItem[];
-  planToWatch: UserItem[];
-  onHold: UserItem[];
-  completedRecently: UserItem[];
+  inProgress?: UserItem[];
+  planToWatch?: UserItem[];
+  onHold?: UserItem[];
+  completedRecently?: UserItem[];
   onStatusUpdate: (itemUid: string, newStatus: string, additionalData?: any) => void;
 }
 
 const ItemLists: React.FC<ItemListsProps> = ({
-  inProgress,
-  planToWatch,
-  onHold,
-  completedRecently,
+  inProgress = [],
+  planToWatch = [],
+  onHold = [],
+  completedRecently = [],
   onStatusUpdate,
 }) => {
   const [activeTab, setActiveTab] = useState<string>("watching");

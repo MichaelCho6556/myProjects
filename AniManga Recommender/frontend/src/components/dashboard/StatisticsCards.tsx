@@ -2,11 +2,50 @@ import React from "react";
 import { UserStatistics, QuickStats } from "../../types";
 
 interface StatisticsCardsProps {
-  userStats: UserStatistics;
-  quickStats: QuickStats;
+  userStats: UserStatistics | undefined;
+  quickStats: QuickStats | undefined;
 }
 
 const StatisticsCards: React.FC<StatisticsCardsProps> = ({ userStats, quickStats }) => {
+  // Return loading state if data is not available
+  if (!userStats || !quickStats) {
+    return (
+      <div className="statistics-grid">
+        <div className="stat-card">
+          <div className="stat-icon">📺</div>
+          <div className="stat-content">
+            <h3>Anime Watched</h3>
+            <div className="stat-number">-</div>
+            <div className="stat-subtitle">Loading...</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">📚</div>
+          <div className="stat-content">
+            <h3>Manga Read</h3>
+            <div className="stat-number">-</div>
+            <div className="stat-subtitle">Loading...</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">▶️</div>
+          <div className="stat-content">
+            <h3>Currently Watching</h3>
+            <div className="stat-number">-</div>
+            <div className="stat-subtitle">Loading...</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">✅</div>
+          <div className="stat-content">
+            <h3>Completion Rate</h3>
+            <div className="stat-number">-</div>
+            <div className="stat-subtitle">Loading...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="statistics-grid">
       <div className="stat-card anime">

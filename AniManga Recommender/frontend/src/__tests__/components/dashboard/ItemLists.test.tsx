@@ -149,10 +149,10 @@ describe("ItemLists Component", () => {
       renderWithRouter(<ItemLists {...mockProps} />); // Fixed: Using correct props
 
       expect(screen.getByText("Your Lists")).toBeInTheDocument();
-      expect(screen.getByText(/Watching/)).toBeInTheDocument();
-      expect(screen.getByText(/Plan to Watch/)).toBeInTheDocument();
-      expect(screen.getByText(/On Hold/)).toBeInTheDocument();
-      expect(screen.getByText(/Recently Completed/)).toBeInTheDocument();
+      expect(screen.getByText("Watching (1)")).toBeInTheDocument();
+      expect(screen.getByText("Plan to Watch (1)")).toBeInTheDocument();
+      expect(screen.getByText("On Hold (0)")).toBeInTheDocument();
+      expect(screen.getByText("Recently Completed (1)")).toBeInTheDocument();
     });
 
     test("displays items in correct sections", () => {
@@ -186,7 +186,7 @@ describe("ItemLists Component", () => {
       expect(screen.getByText("Attack on Titan")).toBeInTheDocument();
 
       // Click on plan to watch tab
-      const planToWatchTab = screen.getByText(/Plan to Watch/);
+      const planToWatchTab = screen.getByText("Plan to Watch (1)");
       await userEvent.click(planToWatchTab);
 
       expect(screen.getByText("Demon Slayer")).toBeInTheDocument();
@@ -229,7 +229,7 @@ describe("ItemLists Component", () => {
       renderWithRouter(<ItemLists {...mockProps} />);
 
       // Click on plan to watch tab
-      const planToWatchTab = screen.getByText(/Plan to Watch/);
+      const planToWatchTab = screen.getByText("Plan to Watch (1)");
       await userEvent.click(planToWatchTab);
 
       const demonSlayerCard = screen.getByText("Demon Slayer").closest(".dashboard-item-card");
@@ -325,7 +325,7 @@ describe("ItemLists Component", () => {
       renderWithRouter(<ItemLists {...mockProps} />);
 
       // Click on plan to watch tab
-      const planToWatchTab = screen.getByText(/Plan to Watch/);
+      const planToWatchTab = screen.getByText("Plan to Watch (1)");
       await userEvent.click(planToWatchTab);
 
       const viewAllLink = screen.getByText("View Full Lists →");
