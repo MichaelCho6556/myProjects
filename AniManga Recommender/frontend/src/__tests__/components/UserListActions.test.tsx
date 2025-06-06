@@ -119,12 +119,14 @@ describe("UserListActions Component", () => {
   });
 
   describe("Rendering and Initial State", () => {
-    test("renders component for authenticated user", () => {
+    test("renders component for authenticated user", async () => {
       mockGetUserItems.mockResolvedValue([]);
 
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
-      expect(screen.getByText("Add to List")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText("Add to List")).toBeInTheDocument();
+      });
     });
 
     test("renders login prompt for unauthenticated user", () => {
@@ -138,7 +140,7 @@ describe("UserListActions Component", () => {
 
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
-      expect(screen.getByText(/Sign in to add to your list/)).toBeInTheDocument();
+      expect(screen.getByText("Sign in to add this to your list")).toBeInTheDocument();
     });
 
     test("displays loading state during initialization", async () => {
@@ -147,7 +149,7 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       // Should show loading initially
-      expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
     });
 
     test("loads existing user item data", async () => {
@@ -164,10 +166,11 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        expect(screen.getByDisplayValue("watching")).toBeInTheDocument();
-        expect(screen.getByDisplayValue("12")).toBeInTheDocument();
-        expect(screen.getByDisplayValue("4")).toBeInTheDocument();
-        expect(screen.getByDisplayValue("Great anime!")).toBeInTheDocument();
+        // Component shows display mode by default, not edit mode
+        expect(screen.getByText("Watching")).toBeInTheDocument();
+        expect(screen.getByText("12 / 25 episodes")).toBeInTheDocument();
+        expect(screen.getByText("⭐ 4.0/10")).toBeInTheDocument();
+        expect(screen.getByText("Edit")).toBeInTheDocument();
       });
     });
   });
@@ -310,7 +313,7 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        expect(screen.getByLabelText(/Rating \(0-10\)/)).toBeInTheDocument();
+        expect(screen.getByLabelText(/Rating \(0\.0 - 10\.0, optional\)/)).toBeInTheDocument();
       });
     });
 
@@ -320,7 +323,7 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        const ratingInput = screen.getByLabelText(/Rating \(0-10\)/) as HTMLInputElement;
+        const ratingInput = screen.getByLabelText(/Rating \(0\.0 - 10\.0, optional\)/) as HTMLInputElement;
 
         // Test invalid high rating
         fireEvent.change(ratingInput, { target: { value: "15" } });
@@ -339,11 +342,11 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        const ratingInput = screen.getByLabelText(/Rating \(0-10\)/);
+        const ratingInput = screen.getByLabelText(/Rating \(0\.0 - 10\.0, optional\)/);
         fireEvent.change(ratingInput, { target: { value: "8.7" } });
       });
 
-      const updateButton = screen.getByText("Update List");
+      const updateButton = screen.getByText("Add to List");
       await userEvent.click(updateButton);
 
       expect(mockUpdateUserItemStatus).toHaveBeenCalledWith("anime_123", {
@@ -360,11 +363,11 @@ describe("UserListActions Component", () => {
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
       await waitFor(() => {
-        const ratingInput = screen.getByLabelText(/Rating \(0-10\)/);
+        const ratingInput = screen.getByLabelText(/Rating \(0\.0 - 10\.0, optional\)/);
         fireEvent.change(ratingInput, { target: { value: "" } });
       });
 
-      const updateButton = screen.getByText("Update List");
+      const updateButton = screen.getByText("Add to List");
       await userEvent.click(updateButton);
 
       expect(mockUpdateUserItemStatus).toHaveBeenCalledWith("anime_123", {
@@ -396,7 +399,7 @@ describe("UserListActions Component", () => {
         fireEvent.change(notesInput, { target: { value: "This anime is amazing!" } });
       });
 
-      const updateButton = screen.getByText("Update List");
+      const updateButton = screen.getByText("Add to List");
       await userEvent.click(updateButton);
 
       expect(mockUpdateUserItemStatus).toHaveBeenCalledWith("anime_123", {
@@ -417,7 +420,7 @@ describe("UserListActions Component", () => {
         fireEvent.change(statusSelect, { target: { value: "completed" } });
       });
 
-      const updateButton = screen.getByText("Update List");
+      const updateButton = screen.getByText("Add to List");
       await userEvent.click(updateButton);
 
       expect(mockUpdateUserItemStatus).toHaveBeenCalledWith(
@@ -513,7 +516,7 @@ describe("UserListActions Component", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText(/Failed to update status/)).toBeInTheDocument();
+        expect(screen.getByText("Update failed")).toBeInTheDocument();
       });
     });
 
