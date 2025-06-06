@@ -20,6 +20,9 @@ def client():
     """Create a test client for the Flask application."""
     app.config['TESTING'] = True
     app.config['WTF_CSRF_ENABLED'] = False
+    os.environ['SUPABASE_URL'] = 'http://test.supabase.co'
+    os.environ['SUPABASE_KEY'] = 'test_key'
+    os.environ['SUPABASE_SERVICE_KEY'] = 'test_service_key'
     
     with app.test_client() as client:
         with app.app_context():

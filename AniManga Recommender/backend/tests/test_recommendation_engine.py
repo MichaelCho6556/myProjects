@@ -51,7 +51,7 @@ class TestDataLoadingAndPreprocessing:
             'synopsis': ['Action-packed anime', 'Funny comedy', 'Romantic story']
         })
         
-        with patch('supabase_client.SupabaseClient') as mock_client_class, \
+        with patch('app.SupabaseClient') as mock_client_class, \
              patch('app.create_combined_text_features') as mock_create_features, \
              patch('sklearn.feature_extraction.text.TfidfVectorizer') as mock_tfidf:
             
@@ -108,7 +108,7 @@ class TestDataLoadingAndPreprocessing:
         app.df_processed = pd.DataFrame({'uid': ['test_1'], 'title': ['Test']})
         app.tfidf_matrix_global = np.array([[1, 0, 0]])
         
-        with patch('supabase_client.SupabaseClient') as mock_client_class:
+        with patch('app.SupabaseClient') as mock_client_class:
             mock_client = Mock()
             mock_client_class.return_value = mock_client
             
