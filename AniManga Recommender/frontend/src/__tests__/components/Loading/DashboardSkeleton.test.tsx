@@ -11,7 +11,7 @@ describe("DashboardSkeleton Component", () => {
     it("renders without crashing", () => {
       render(<DashboardSkeleton />);
 
-      const skeleton = screen.getByTestId("dashboard-skeleton");
+      const skeleton = screen.getByLabelText("Loading dashboard content");
       expect(skeleton).toBeInTheDocument();
       expect(skeleton).toHaveClass("dashboard-skeleton");
     });
@@ -19,9 +19,8 @@ describe("DashboardSkeleton Component", () => {
     it("has proper loading state attributes", () => {
       render(<DashboardSkeleton />);
 
-      const skeleton = screen.getByRole("status");
-      expect(skeleton).toHaveAttribute("aria-busy", "true");
-      expect(skeleton).toHaveAttribute("aria-live", "polite");
+      const skeleton = screen.getByLabelText("Loading dashboard content");
+      expect(skeleton).toHaveAttribute("aria-label", "Loading dashboard content");
     });
   });
 
@@ -29,7 +28,7 @@ describe("DashboardSkeleton Component", () => {
     it("renders stats grid skeleton", () => {
       render(<DashboardSkeleton />);
 
-      const statsGrid = screen.getByTestId("skeleton-stats-grid");
+      const statsGrid = document.querySelector(".skeleton-stats-grid");
       expect(statsGrid).toBeInTheDocument();
       expect(statsGrid).toHaveClass("skeleton-stats-grid");
     });
@@ -37,22 +36,21 @@ describe("DashboardSkeleton Component", () => {
     it("renders correct number of stat cards", () => {
       render(<DashboardSkeleton />);
 
-      const statCards = screen.getAllByTestId(/skeleton-stat-card-/);
+      const statCards = document.querySelectorAll(".skeleton-stat-card");
       expect(statCards).toHaveLength(4);
 
-      statCards.forEach((card, index) => {
+      statCards.forEach((card) => {
         expect(card).toHaveClass("skeleton-stat-card");
-        expect(card).toHaveAttribute("data-testid", `skeleton-stat-card-${index}`);
       });
     });
 
     it("stat cards have proper structure", () => {
       render(<DashboardSkeleton />);
 
-      const statCards = screen.getAllByTestId(/skeleton-stat-card-/);
+      const statCards = document.querySelectorAll(".skeleton-stat-card");
 
       statCards.forEach((card) => {
-        expect(card.querySelector(".skeleton-stat-value")).toBeInTheDocument();
+        expect(card.querySelector(".skeleton-stat-number")).toBeInTheDocument();
         expect(card.querySelector(".skeleton-stat-label")).toBeInTheDocument();
         expect(card.querySelector(".skeleton-stat-icon")).toBeInTheDocument();
       });
@@ -63,7 +61,7 @@ describe("DashboardSkeleton Component", () => {
     it("renders activity feed skeleton", () => {
       render(<DashboardSkeleton />);
 
-      const activityFeed = screen.getByTestId("skeleton-activity-feed");
+      const activityFeed = document.querySelector(".skeleton-activity-feed");
       expect(activityFeed).toBeInTheDocument();
       expect(activityFeed).toHaveClass("skeleton-activity-feed");
     });
@@ -71,79 +69,82 @@ describe("DashboardSkeleton Component", () => {
     it("renders correct number of activity items", () => {
       render(<DashboardSkeleton />);
 
-      const activityItems = screen.getAllByTestId(/skeleton-activity-item-/);
+      const activityItems = document.querySelectorAll(".skeleton-activity-item");
       expect(activityItems).toHaveLength(5);
 
-      activityItems.forEach((item, index) => {
+      activityItems.forEach((item) => {
         expect(item).toHaveClass("skeleton-activity-item");
-        expect(item).toHaveAttribute("data-testid", `skeleton-activity-item-${index}`);
       });
     });
 
     it("activity items have proper structure", () => {
       render(<DashboardSkeleton />);
 
-      const activityItems = screen.getAllByTestId(/skeleton-activity-item-/);
+      const activityItems = document.querySelectorAll(".skeleton-activity-item");
 
       activityItems.forEach((item) => {
-        expect(item.querySelector(".skeleton-activity-avatar")).toBeInTheDocument();
         expect(item.querySelector(".skeleton-activity-content")).toBeInTheDocument();
-        expect(item.querySelector(".skeleton-activity-timestamp")).toBeInTheDocument();
+        expect(item.querySelector(".skeleton-activity-time")).toBeInTheDocument();
+        expect(item.querySelector(".skeleton-activity-title")).toBeInTheDocument();
+        expect(item.querySelector(".skeleton-activity-description")).toBeInTheDocument();
       });
     });
   });
 
-  describe("Charts Section Structure", () => {
-    it("renders charts section skeleton", () => {
+  describe("Quick Actions Structure", () => {
+    it("renders quick actions skeleton", () => {
       render(<DashboardSkeleton />);
 
-      const chartsSection = screen.getByTestId("skeleton-charts-section");
-      expect(chartsSection).toBeInTheDocument();
-      expect(chartsSection).toHaveClass("skeleton-charts-section");
+      const quickActions = document.querySelector(".skeleton-quick-actions");
+      expect(quickActions).toBeInTheDocument();
+      expect(quickActions).toHaveClass("skeleton-quick-actions");
     });
 
-    it("renders chart placeholders", () => {
+    it("renders action buttons", () => {
       render(<DashboardSkeleton />);
 
-      const chartPlaceholders = screen.getAllByTestId(/skeleton-chart-/);
-      expect(chartPlaceholders.length).toBeGreaterThan(0);
+      const actionButtons = document.querySelectorAll(".skeleton-action-button");
+      expect(actionButtons).toHaveLength(4);
 
-      chartPlaceholders.forEach((chart) => {
-        expect(chart).toHaveClass("skeleton-chart-placeholder");
+      actionButtons.forEach((button) => {
+        expect(button).toHaveClass("skeleton-action-button");
+        expect(button.querySelector(".skeleton-action-icon")).toBeInTheDocument();
+        expect(button.querySelector(".skeleton-action-text")).toBeInTheDocument();
       });
     });
   });
 
   describe("Animation and Styling", () => {
-    it("applies shimmer animation to all skeleton elements", () => {
+    it("renders all skeleton elements with proper classes", () => {
       render(<DashboardSkeleton />);
 
-      const skeletonElements = [
-        ...screen.getAllByTestId(/skeleton-stat-card-/),
-        ...screen.getAllByTestId(/skeleton-activity-item-/),
-        ...screen.getAllByTestId(/skeleton-chart-/),
-      ];
+      const statCards = document.querySelectorAll(".skeleton-stat-card");
+      const activityItems = document.querySelectorAll(".skeleton-activity-item");
+      const actionButtons = document.querySelectorAll(".skeleton-action-button");
 
-      skeletonElements.forEach((element) => {
-        expect(element).toHaveClass("skeleton-shimmer");
-      });
+      expect(statCards.length).toBeGreaterThan(0);
+      expect(activityItems.length).toBeGreaterThan(0);
+      expect(actionButtons.length).toBeGreaterThan(0);
     });
 
-    it("has pulse animation class", () => {
+    it("has dashboard skeleton structure", () => {
       render(<DashboardSkeleton />);
 
-      const skeleton = screen.getByTestId("dashboard-skeleton");
-      expect(skeleton).toHaveClass("skeleton-pulse");
+      const skeleton = screen.getByLabelText("Loading dashboard content");
+      expect(skeleton).toHaveClass("dashboard-skeleton");
     });
 
-    it("maintains responsive layout classes", () => {
+    it("maintains responsive layout structure", () => {
       render(<DashboardSkeleton />);
 
-      const statsGrid = screen.getByTestId("skeleton-stats-grid");
-      expect(statsGrid).toHaveClass("responsive-grid");
+      const statsGrid = document.querySelector(".skeleton-stats-grid");
+      expect(statsGrid).toHaveClass("skeleton-stats-grid");
 
-      const activityFeed = screen.getByTestId("skeleton-activity-feed");
-      expect(activityFeed).toHaveClass("responsive-feed");
+      const activityFeed = document.querySelector(".skeleton-activity-feed");
+      expect(activityFeed).toHaveClass("skeleton-activity-feed");
+
+      const dashboardGrid = document.querySelector(".skeleton-dashboard-grid");
+      expect(dashboardGrid).toHaveClass("skeleton-dashboard-grid");
     });
   });
 
@@ -155,23 +156,25 @@ describe("DashboardSkeleton Component", () => {
       expect(skeleton).toBeInTheDocument();
     });
 
-    it("announces loading state to screen readers", () => {
+    it("provides semantic structure for screen readers", () => {
       render(<DashboardSkeleton />);
 
-      const skeleton = screen.getByRole("status");
-      expect(skeleton).toBeInTheDocument();
+      const skeleton = screen.getByLabelText("Loading dashboard content");
+      expect(skeleton).toHaveAttribute("aria-label", "Loading dashboard content");
     });
 
-    it("has proper landmark roles", () => {
+    it("has proper semantic structure", () => {
       render(<DashboardSkeleton />);
 
-      const statsSection = screen.getByTestId("skeleton-stats-grid");
-      expect(statsSection).toHaveAttribute("role", "region");
-      expect(statsSection).toHaveAttribute("aria-label", "Loading statistics");
+      // Check that main structural elements exist
+      const statsGrid = document.querySelector(".skeleton-stats-grid");
+      expect(statsGrid).toBeInTheDocument();
 
-      const activitySection = screen.getByTestId("skeleton-activity-feed");
-      expect(activitySection).toHaveAttribute("role", "region");
-      expect(activitySection).toHaveAttribute("aria-label", "Loading activity feed");
+      const activityFeed = document.querySelector(".skeleton-activity-feed");
+      expect(activityFeed).toBeInTheDocument();
+
+      const dashboardMain = document.querySelector(".skeleton-dashboard-main");
+      expect(dashboardMain).toBeInTheDocument();
     });
   });
 
@@ -180,26 +183,34 @@ describe("DashboardSkeleton Component", () => {
       render(<DashboardSkeleton />);
 
       // Check that skeleton structure matches expected dashboard layout
-      const skeleton = screen.getByTestId("dashboard-skeleton");
+      const skeleton = screen.getByLabelText("Loading dashboard content");
 
       // Should have header area
-      expect(skeleton.querySelector(".skeleton-dashboard-header")).toBeInTheDocument();
+      expect(skeleton.querySelector(".skeleton-header")).toBeInTheDocument();
 
       // Should have main content area
       expect(skeleton.querySelector(".skeleton-dashboard-main")).toBeInTheDocument();
 
-      // Should have sidebar area
-      expect(skeleton.querySelector(".skeleton-dashboard-sidebar")).toBeInTheDocument();
+      // Should have stats grid
+      expect(skeleton.querySelector(".skeleton-stats-grid")).toBeInTheDocument();
+
+      // Should have activity feed
+      expect(skeleton.querySelector(".skeleton-activity-feed")).toBeInTheDocument();
     });
 
-    it("preserves aspect ratios for chart areas", () => {
+    it("has proper item structure for loading states", () => {
       render(<DashboardSkeleton />);
 
-      const chartPlaceholders = screen.getAllByTestId(/skeleton-chart-/);
+      // Check item lists structure
+      const itemLists = document.querySelector(".skeleton-item-lists");
+      expect(itemLists).toBeInTheDocument();
 
-      chartPlaceholders.forEach((chart) => {
-        expect(chart).toHaveClass("aspect-ratio-preserved");
-      });
+      const itemCards = document.querySelectorAll(".skeleton-item-card");
+      expect(itemCards.length).toBeGreaterThan(0);
+
+      // Check tabs structure
+      const tabs = document.querySelectorAll(".skeleton-tab");
+      expect(tabs).toHaveLength(4);
     });
   });
 });

@@ -17,6 +17,8 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "../../context/AuthContext";
+import { ToastProvider } from "../../components/Feedback/ToastProvider";
+import ErrorBoundary from "../../components/ErrorBoundary";
 import App from "../../App";
 import { supabase } from "../../lib/supabase";
 import axios from "axios";
@@ -25,6 +27,7 @@ import HomePage from "../../pages/HomePage";
 import ItemDetailPage from "../../pages/ItemDetailPage";
 import DashboardPage from "../../pages/DashboardPage";
 import UserListsPage from "../../pages/lists/UserListsPage";
+import NetworkStatus from "../../components/Feedback/NetworkStatus";
 
 // Mock Supabase
 jest.mock("../../lib/supabase", () => {
@@ -223,21 +226,27 @@ const mockDashboardData = {
 const renderApp = (initialEntries: string[] = ["/"]) => {
   // Since App component has BrowserRouter which doesn't work in tests,
   // we need to render the App content with MemoryRouter instead
+  // Match the exact provider structure from App.tsx: ErrorBoundary > ToastProvider > AuthProvider > Router
   return render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={initialEntries}>
-        <div className="App">
-          <Navbar />
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/item/:uid" element={<ItemDetailPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/lists" element={<UserListsPage />} />
-            <Route path="/profile" element={<UserListsPage />} />
-          </Routes>
-        </div>
-      </MemoryRouter>
-    </AuthProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AuthProvider>
+          <MemoryRouter initialEntries={initialEntries}>
+            <div className="App">
+              <NetworkStatus position="top" />
+              <Navbar />
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/item/:uid" element={<ItemDetailPage />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/lists" element={<UserListsPage />} />
+                <Route path="/profile" element={<UserListsPage />} />
+              </Routes>
+            </div>
+          </MemoryRouter>
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 };
 
@@ -251,12 +260,16 @@ const setupAuthenticatedUser = () => {
     error: null,
   });
 
-  authApi.onAuthStateChange.mockReturnValue({
-    data: {
-      subscription: {
-        unsubscribe: jest.fn(),
+  authApi.onAuthStateChange.mockImplementation((callback: any) => {
+    // Immediately call the callback with authenticated session
+    setTimeout(() => callback("SIGNED_IN", mockSession), 0);
+    return {
+      data: {
+        subscription: {
+          unsubscribe: jest.fn(),
+        },
       },
-    },
+    };
   });
 
   authApi.signOut.mockResolvedValue({ error: null });
@@ -272,12 +285,16 @@ const setupAuthenticatedUser = () => {
     error: null,
   });
 
-  (supabase.auth.onAuthStateChange as jest.Mock).mockReturnValue({
-    data: {
-      subscription: {
-        unsubscribe: jest.fn(),
+  (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback: any) => {
+    // Immediately call the callback with authenticated session
+    setTimeout(() => callback("SIGNED_IN", mockSession), 0);
+    return {
+      data: {
+        subscription: {
+          unsubscribe: jest.fn(),
+        },
       },
-    },
+    };
   });
 };
 
@@ -291,12 +308,16 @@ const setupUnauthenticatedUser = () => {
     error: null,
   });
 
-  authApi.onAuthStateChange.mockReturnValue({
-    data: {
-      subscription: {
-        unsubscribe: jest.fn(),
+  authApi.onAuthStateChange.mockImplementation((callback: any) => {
+    // Immediately call the callback with unauthenticated state
+    setTimeout(() => callback("SIGNED_OUT", null), 0);
+    return {
+      data: {
+        subscription: {
+          unsubscribe: jest.fn(),
+        },
       },
-    },
+    };
   });
 
   // Mock supabase auth methods as backup
@@ -305,12 +326,21 @@ const setupUnauthenticatedUser = () => {
     error: null,
   });
 
-  (supabase.auth.onAuthStateChange as jest.Mock).mockReturnValue({
-    data: {
-      subscription: {
-        unsubscribe: jest.fn(),
+  (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+    data: { user: null },
+    error: null,
+  });
+
+  (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback: any) => {
+    // Immediately call the callback with unauthenticated state
+    setTimeout(() => callback("SIGNED_OUT", null), 0);
+    return {
+      data: {
+        subscription: {
+          unsubscribe: jest.fn(),
+        },
       },
-    },
+    };
   });
 };
 
@@ -680,9 +710,6 @@ describe("Complete User Journey Integration Tests", () => {
     test("handles search errors and empty results gracefully", async () => {
       setupAuthenticatedUser();
 
-      // Mock API error
-      (axios.get as jest.Mock).mockRejectedValueOnce(new Error("Network error"));
-
       renderApp();
 
       await waitFor(() => {
@@ -704,13 +731,35 @@ describe("Complete User Journey Integration Tests", () => {
         expect(searchButton).not.toBeDisabled();
       });
 
+      // Mock API error specifically for the items endpoint (not filter options)
+      (axios.get as jest.Mock).mockImplementation((url) => {
+        if (url.includes("/items?")) {
+          return Promise.reject(new Error("Network error"));
+        }
+        // Allow other requests (like filter options) to succeed
+        return Promise.resolve({
+          data: {
+            media_types: ["anime", "manga"],
+            genres: ["Action", "Adventure"],
+            themes: ["Military", "Pirates"],
+            demographics: ["Shounen"],
+            statuses: ["Finished Airing", "Currently Airing"],
+            studios: ["Studio Pierrot"],
+            authors: ["Test Author"],
+          },
+        });
+      });
+
       const searchButton = screen.getByRole("button", { name: /submit search/i });
       await userEvent.click(searchButton);
 
       // Should show error message
-      await waitFor(() => {
-        expect(screen.getByText(/error loading/i)).toBeInTheDocument();
-      });
+      await waitFor(
+        () => {
+          expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
+        },
+        { timeout: 5000 }
+      );
 
       // Check that the page is still functional after error
       expect(document.body).toBeInTheDocument();
@@ -1095,8 +1144,8 @@ describe("Complete User Journey Integration Tests", () => {
         expect(document.body).toBeInTheDocument(); // Basic check that page is still functional
       });
 
-      // 3. User can retry by searching again (no dedicated retry button expected)
-      (axios.get as jest.Mock).mockResolvedValueOnce({
+      // 3. User can retry using the error page retry button or by searching again
+      (axios.get as jest.Mock).mockResolvedValue({
         data: {
           items: mockAnimeItems,
           total_items: mockAnimeItems.length,
@@ -1106,13 +1155,22 @@ describe("Complete User Journey Integration Tests", () => {
         },
       });
 
-      // Retry by performing search again
-      await userEvent.click(screen.getByRole("button", { name: /submit search/i }));
+      // Try to find and click the "Retry Loading" button from the error state
+      const retryButton = screen.queryByText("Retry Loading");
+      if (retryButton) {
+        await userEvent.click(retryButton);
+      } else {
+        // Fallback: retry by performing search again
+        await userEvent.click(screen.getByRole("button", { name: /submit search/i }));
+      }
 
       // 4. Operation succeeds on retry
-      await waitFor(() => {
-        expect(screen.getByText("Attack on Titan")).toBeInTheDocument();
-      });
+      await waitFor(
+        () => {
+          expect(screen.getByText("Attack on Titan")).toBeInTheDocument();
+        },
+        { timeout: 5000 }
+      );
 
       // 5. User can continue with their workflow (basic navigation test)
       const dashboardLink = screen.getByRole("menuitem", { name: /dashboard/i });
@@ -1129,7 +1187,7 @@ describe("Complete User Journey Integration Tests", () => {
 
       let authStateCallback: (event: string, session: any) => void;
 
-      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback: any) => {
         authStateCallback = callback;
         return {
           data: {
