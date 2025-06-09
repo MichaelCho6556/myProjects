@@ -10,7 +10,6 @@ import { FilterBarProps, SelectOption } from "../../types";
 
 const createMockProps = (): FilterBarProps => ({
   filters: {
-    inputValue: "",
     selectedMediaType: "All" as any,
     selectedGenre: [] as SelectOption[],
     selectedTheme: [] as SelectOption[],
@@ -56,8 +55,6 @@ const createMockProps = (): FilterBarProps => ({
     ],
   },
   handlers: {
-    handleInputChange: jest.fn(),
-    handleSearchSubmit: jest.fn(),
     handleSortChange: jest.fn(),
     handleMediaTypeChange: jest.fn(),
     handleStatusChange: jest.fn(),
@@ -86,7 +83,8 @@ describe("FilterBar Component", () => {
     it("renders all filter controls", () => {
       render(<FilterBar {...mockProps} />);
 
-      expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
+      // Search is now in Navbar, not FilterBar - only test FilterBar-specific controls
+      expect(screen.getByLabelText(/sort by/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/type/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/genres/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/themes/i)).toBeInTheDocument();
@@ -103,40 +101,27 @@ describe("FilterBar Component", () => {
     });
   });
 
-  describe("Search Functionality", () => {
-    it("calls handleInputChange when typing in search input", async () => {
+  describe("Filter Bar Structure", () => {
+    it("renders as a search section with proper accessibility", () => {
       render(<FilterBar {...mockProps} />);
 
-      const searchInput = screen.getByPlaceholderText(/search/i);
-      await userEvent.type(searchInput, "naruto");
-
-      expect(mockProps.handlers.handleInputChange).toHaveBeenCalled();
+      // FilterBar should render as a search section (for filtering, not text search)
+      expect(screen.getByRole("search")).toBeInTheDocument();
+      expect(screen.getByLabelText(/filter options/i)).toBeInTheDocument();
     });
 
-    it("calls handleSearchSubmit on form submission", async () => {
+    it("renders all filter categories", () => {
       render(<FilterBar {...mockProps} />);
 
-      // Find the form and trigger submit directly instead of clicking button
-      const searchForm = screen.getByRole("search").querySelector("form");
-      if (searchForm) {
-        fireEvent.submit(searchForm);
-        expect(mockProps.handlers.handleSearchSubmit).toHaveBeenCalled();
-      }
-    });
-
-    it("displays current search query", () => {
-      const propsWithSearch = {
-        ...mockProps,
-        filters: {
-          ...mockProps.filters,
-          inputValue: "test query",
-        },
-      };
-
-      render(<FilterBar {...propsWithSearch} />);
-
-      const searchInput = screen.getByDisplayValue("test query");
-      expect(searchInput).toBeInTheDocument();
+      // Verify all filter sections exist
+      expect(screen.getByText("Sort by:")).toBeInTheDocument();
+      expect(screen.getByText("Type:")).toBeInTheDocument();
+      expect(screen.getByText("Genres:")).toBeInTheDocument();
+      expect(screen.getByText("Themes:")).toBeInTheDocument();
+      expect(screen.getByText("Demographics:")).toBeInTheDocument();
+      expect(screen.getByText("Status:")).toBeInTheDocument();
+      expect(screen.getByText("Studios:")).toBeInTheDocument();
+      expect(screen.getByText("Authors:")).toBeInTheDocument();
     });
   });
 
@@ -219,24 +204,31 @@ describe("FilterBar Component", () => {
         ...mockProps,
         filters: {
           ...mockProps.filters,
-          inputValue: "test search",
           selectedGenre: [{ value: "Action", label: "Action" }],
           minScore: "8.0",
+          selectedYear: "2023",
         },
       };
 
       const { rerender } = render(<FilterBar {...filledProps} />);
 
+      // Verify filled values are displayed
+      expect(screen.getByText("Action")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("8.0")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("2023")).toBeInTheDocument();
+
       // Reset to original empty state
       rerender(<FilterBar {...mockProps} />);
 
-      // Use more specific selectors instead of getByDisplayValue("")
-      const searchInput = screen.getByPlaceholderText(/search titles/i);
-      expect(searchInput).toHaveValue("");
-
-      // Check that at least one "All" option is present (there may be multiple react-select instances)
+      // Check that filters are reset - "All" options should be present
       const allOptions = screen.getAllByText("All");
       expect(allOptions.length).toBeGreaterThan(0);
+
+      // Min score and year should be empty (could be empty string or null)
+      const minScoreInput = screen.getByLabelText(/min score/i) as HTMLInputElement;
+      const yearInput = screen.getByLabelText(/year/i) as HTMLInputElement;
+      expect(minScoreInput.value).toBe("");
+      expect(yearInput.value).toBe("");
     });
   });
 
@@ -249,9 +241,13 @@ describe("FilterBar Component", () => {
 
       render(<FilterBar {...loadingProps} />);
 
-      // Check for select components disabled state instead of specific disabled attribute
-      const searchInput = screen.getByPlaceholderText(/search/i);
-      expect(searchInput).toBeInTheDocument();
+      // Check for loading banner and disabled select components
+      expect(screen.getByText(/loading filters/i)).toBeInTheDocument();
+      expect(screen.getByRole("status")).toBeInTheDocument();
+
+      // Check that select components are disabled during loading
+      const mediaTypeSelect = screen.getByLabelText(/type/i);
+      expect(mediaTypeSelect.closest(".react-select--is-disabled")).toBeInTheDocument();
     });
 
     it("disables reset button when loading", () => {
@@ -271,11 +267,17 @@ describe("FilterBar Component", () => {
     it("has proper labels for form controls", () => {
       render(<FilterBar {...mockProps} />);
 
-      // Use more specific selectors that exist in the component
-      expect(screen.getByLabelText(/search anime and manga titles/i)).toBeInTheDocument();
+      // Check for labels that exist in the FilterBar component
+      expect(screen.getByLabelText(/sort by/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/type/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/genres/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/themes/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/demographics/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/status/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/studios/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/authors/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/min score/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/year/i)).toBeInTheDocument();
     });
 
     it("provides reset button with descriptive aria-label", () => {

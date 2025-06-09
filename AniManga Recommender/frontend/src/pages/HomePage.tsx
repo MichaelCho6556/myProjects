@@ -21,6 +21,7 @@ import {
   SelectChangeHandler,
   FilterBarProps,
 } from "../types";
+import { secureStorage } from "../utils/security";
 
 const API_BASE_URL = "http://localhost:5000/api";
 
@@ -29,14 +30,16 @@ const API_BASE_URL = "http://localhost:5000/api";
  * @returns Valid items per page value
  */
 const getInitialItemsPerPage = (): number => {
-  const storedValue = localStorage.getItem("aniMangaItemsPerPage");
-  if (storedValue) {
-    const parsedValue = parseInt(storedValue, 10);
-    if ([10, 20, 25, 30, 50].includes(parsedValue)) {
-      return parsedValue;
+  try {
+    const storedValue = secureStorage.getItem("aniMangaItemsPerPage");
+    if (storedValue) {
+      const parsed = parseInt(storedValue, 10);
+      return isNaN(parsed) || parsed < 5 || parsed > 50 ? 20 : parsed;
     }
+  } catch (error) {
+    console.warn("Failed to retrieve items per page preference");
   }
-  return 30;
+  return 20;
 };
 
 const DEFAULT_ITEMS_PER_PAGE = getInitialItemsPerPage();
@@ -126,7 +129,7 @@ const HomePage: React.FC = () => {
 
   // ✅ NEW: Add filter visibility state for collapsible functionality
   const [filterBarVisible, setFilterBarVisible] = useState<boolean>(() => {
-    const saved = localStorage.getItem("aniMangaFilterBarVisible");
+    const saved = secureStorage.getItem("aniMangaFilterBarVisible");
     return saved !== null ? JSON.parse(saved) : true;
   });
 
@@ -668,7 +671,11 @@ const HomePage: React.FC = () => {
   const handleFilterBarToggle = (): void => {
     const newVisibility = !filterBarVisible;
     setFilterBarVisible(newVisibility);
-    localStorage.setItem("aniMangaFilterBarVisible", JSON.stringify(newVisibility));
+    try {
+      secureStorage.setItem("aniMangaFilterBarVisible", JSON.stringify(newVisibility));
+    } catch (error) {
+      console.warn("Failed to save filter bar preference");
+    }
   };
 
   // Pagination handlers
@@ -686,8 +693,12 @@ const HomePage: React.FC = () => {
 
   const handleItemsPerPageChange: SelectChangeHandler = (event) => {
     const newIPP = Number(event.target.value);
-    localStorage.setItem("aniMangaItemsPerPage", newIPP.toString());
     setItemsPerPage(newIPP);
+    try {
+      secureStorage.setItem("aniMangaItemsPerPage", newIPP.toString());
+    } catch (error) {
+      console.warn("Failed to save items per page preference");
+    }
     setCurrentPage(1);
   };
 

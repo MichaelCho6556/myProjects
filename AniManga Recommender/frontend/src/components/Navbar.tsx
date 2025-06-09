@@ -2,10 +2,11 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthModal } from "./Auth/AuthModal";
+import { csrfUtils, sanitizeInput } from "../utils/security"; // ✅ NEW: Import security utilities
 import "./Navbar.css";
 
 /**
- * Enhanced Navbar Component with integrated search functionality
+ * Enhanced Navbar Component with integrated search functionality and security
  *
  * @returns JSX.Element
  */
@@ -14,9 +15,14 @@ const Navbar: React.FC = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-
-  // ✅ NEW: Search state for navbar
   const [navSearchValue, setNavSearchValue] = useState<string>(searchParams.get("q") || "");
+  const [csrfToken, setCsrfToken] = useState(""); // ✅ NEW: CSRF token for search
+
+  // ✅ NEW: Generate CSRF token on component mount
+  useEffect(() => {
+    const token = csrfUtils.generateToken();
+    setCsrfToken(token);
+  }, []);
 
   // Sync navbar search input with URL parameters
   useEffect(() => {
@@ -28,38 +34,50 @@ const Navbar: React.FC = () => {
     try {
       await signOut();
     } catch (error) {
-      console.error("Sign out error:", error);
+      console.warn("Sign out error occurred"); // ✅ UPDATED: Remove sensitive error details
     }
   };
 
-  // ✅ NEW: Handle search from navbar
+  // ✅ UPDATED: Handle search from navbar with security
   const handleNavSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (navSearchValue.trim()) {
+
+    // ✅ NEW: CSRF validation
+    if (!csrfUtils.validateToken(csrfToken)) {
+      console.warn("Invalid CSRF token in search");
+      return;
+    }
+
+    // ✅ NEW: Input sanitization
+    const sanitizedSearchValue = sanitizeInput(navSearchValue);
+
+    if (sanitizedSearchValue.trim()) {
       // Navigate to homepage with search term
       const newParams = new URLSearchParams(searchParams);
-      newParams.set("q", navSearchValue.trim());
-      newParams.set("page", "1"); // Reset to first page
+      newParams.set("q", sanitizedSearchValue.trim());
+      newParams.set("page", "1");
       navigate(`/?${newParams.toString()}`);
     }
   };
 
   const handleNavSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setNavSearchValue(event.target.value);
+    // ✅ NEW: Input sanitization on change
+    const sanitizedValue = sanitizeInput(event.target.value);
+    setNavSearchValue(sanitizedValue);
   };
 
   // Get display name from user metadata or fallback to email
   const getDisplayName = () => {
     if (!user) return "";
 
-    // Try to get display name from user metadata
     const displayName =
       user.user_metadata?.display_name ||
       user.user_metadata?.displayName ||
       user.user_metadata?.full_name ||
-      user.email?.split("@")[0]; // Fallback to email username part
+      user.email?.split("@")[0];
 
-    return displayName;
+    // ✅ NEW: Sanitize display name
+    return sanitizeInput(displayName || "");
   };
 
   return (
@@ -71,8 +89,11 @@ const Navbar: React.FC = () => {
             AniMangaRecommender
           </Link>
 
-          {/* ✅ NEW: Search bar in navbar */}
+          {/* ✅ UPDATED: Search bar with CSRF protection */}
           <form onSubmit={handleNavSearchSubmit} className="navbar-search-form">
+            {/* ✅ NEW: CSRF token hidden field */}
+            <input type="hidden" name="csrf_token" value={csrfToken} />
+
             <label htmlFor="navbar-search-input" className="sr-only">
               Search anime and manga titles from navigation
             </label>
@@ -84,6 +105,7 @@ const Navbar: React.FC = () => {
               onChange={handleNavSearchChange}
               className="navbar-search-input"
               aria-describedby="navbar-search-help"
+              maxLength={100} // ✅ NEW: Input length limit
             />
             <span id="navbar-search-help" className="sr-only">
               Enter keywords to search for anime and manga titles

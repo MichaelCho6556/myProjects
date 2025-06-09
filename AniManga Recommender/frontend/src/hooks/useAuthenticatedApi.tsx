@@ -1,18 +1,25 @@
 // frontend/src/hooks/useAuthenticatedApi.tsx
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { RateLimiter } from "../utils/security";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 export const useAuthenticatedApi = () => {
   const { user } = useAuth();
 
+  const rateLimiter = new RateLimiter(10, 60000);
+
   const makeAuthenticatedRequest = async (endpoint: string, options: RequestInit = {}) => {
     if (!user) {
       throw new Error("User not authenticated");
     }
 
-    // Get current session token
+    const userId = user.id;
+    if (!rateLimiter.isAllowed(userId)) {
+      throw new Error("Rate limit exceeded. Please wait before making more requests.");
+    }
+
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -40,6 +47,8 @@ export const useAuthenticatedApi = () => {
       } catch {
         errorMessage = response.statusText || errorMessage;
       }
+
+      console.warn("API request failed:", response.status);
       throw new Error(errorMessage);
     }
 
@@ -57,7 +66,12 @@ export const useAuthenticatedApi = () => {
     return { success: true };
   };
 
-  // User profile operations
+  const resetRateLimit = () => {
+    if (user) {
+      rateLimiter.reset(user.id);
+    }
+  };
+
   const getUserProfile = () => makeAuthenticatedRequest("/api/auth/profile");
 
   const updateUserProfile = (updates: any) =>
@@ -66,7 +80,6 @@ export const useAuthenticatedApi = () => {
       body: JSON.stringify(updates),
     });
 
-  // User item operations
   const getUserItems = (status?: string) => {
     const params = status ? `?status=${status}` : "";
     return makeAuthenticatedRequest(`/api/auth/user-items${params}`);
@@ -83,7 +96,6 @@ export const useAuthenticatedApi = () => {
       method: "DELETE",
     });
 
-  // NEW: Dashboard-specific method to ensure consistency
   const getDashboardData = () => makeAuthenticatedRequest("/api/auth/dashboard");
 
   return {
@@ -94,5 +106,6 @@ export const useAuthenticatedApi = () => {
     updateUserItemStatus,
     removeUserItem,
     getDashboardData,
+    resetRateLimit,
   };
 };
