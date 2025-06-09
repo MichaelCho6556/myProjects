@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import HomePage from "../../pages/HomePage";
 import ItemDetailPage from "../../pages/ItemDetailPage";
+import Navbar from "../../components/Navbar";
 import { AuthProvider } from "../../context/AuthContext";
 import { mockAxios, setMockResponse } from "../../__mocks__/axios";
 
@@ -54,11 +55,16 @@ const createMockDistinctValues = (overrides = {}) => ({
 
 const App = () => (
   <AuthProvider>
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/search" element={<HomePage />} />
-      <Route path="/item/:uid" element={<ItemDetailPage />} />
-    </Routes>
+    <div className="App">
+      <Navbar />
+      <main className="app-container">
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/search" element={<HomePage />} />
+          <Route path="/item/:uid" element={<ItemDetailPage />} />
+        </Routes>
+      </main>
+    </div>
   </AuthProvider>
 );
 
@@ -202,7 +208,8 @@ describe("Navigation Flow Tests", () => {
       await waitFor(
         () => {
           expect(screen.getByRole("search")).toBeInTheDocument();
-          expect(screen.getByLabelText(/search anime and manga titles/i)).toBeInTheDocument();
+          // Check for Navbar search functionality
+          expect(screen.getByPlaceholderText(/search titles/i)).toBeInTheDocument();
         },
         { timeout: 3000 }
       );
@@ -232,8 +239,8 @@ describe("Navigation Flow Tests", () => {
         expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent("Test Manga");
       });
 
-      // Click on media type tag (it's a link, not a button)
-      const mediaTypeTag = screen.getByRole("link", { name: /manga/i });
+      // Click on media type tag - be more specific to avoid navbar
+      const mediaTypeTag = screen.getByTitle("View all manga");
 
       await act(async () => {
         await userEvent.click(mediaTypeTag);
@@ -243,7 +250,8 @@ describe("Navigation Flow Tests", () => {
       await waitFor(
         () => {
           expect(screen.getByRole("search")).toBeInTheDocument();
-          expect(screen.getByLabelText(/search anime and manga titles/i)).toBeInTheDocument();
+          // Check for Navbar search functionality
+          expect(screen.getByPlaceholderText(/search titles/i)).toBeInTheDocument();
         },
         { timeout: 3000 }
       );
@@ -266,8 +274,8 @@ describe("Navigation Flow Tests", () => {
         expect(screen.getByText("Test Anime 1")).toBeInTheDocument();
       });
 
-      // Navigate to item detail
-      const itemLink = screen.getByRole("link");
+      // Navigate to item detail - be more specific to avoid navbar
+      const itemLink = screen.getByRole("link", { name: /view details for test anime 1/i });
 
       await act(async () => {
         await userEvent.click(itemLink);
@@ -289,7 +297,8 @@ describe("Navigation Flow Tests", () => {
       // Should be back on homepage/search page
       await waitFor(() => {
         expect(screen.getByRole("search")).toBeInTheDocument();
-        expect(screen.getByLabelText(/search anime and manga titles/i)).toBeInTheDocument();
+        // Check for Navbar search functionality
+        expect(screen.getByPlaceholderText(/search titles/i)).toBeInTheDocument();
       });
     });
   });
@@ -384,8 +393,8 @@ describe("Navigation Flow Tests", () => {
         expect(errorText).toBeInTheDocument();
       });
 
-      // Should have link back to homepage
-      const homeLink = screen.getByRole("link", { name: /go to homepage/i });
+      // Should have link back to homepage - be more specific to avoid navbar
+      const homeLink = screen.getByText("Go to Homepage");
       expect(homeLink).toHaveAttribute("href", "/");
     });
   });

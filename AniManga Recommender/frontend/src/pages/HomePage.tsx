@@ -19,12 +19,10 @@ import {
   StatusType,
   InputChangeHandler,
   SelectChangeHandler,
-  FormSubmitHandler,
   FilterBarProps,
 } from "../types";
 
 const API_BASE_URL = "http://localhost:5000/api";
-const DEBOUNCE_DELAY = 500;
 
 /**
  * Get initial items per page from localStorage with validation
@@ -99,7 +97,6 @@ const HomePage: React.FC = () => {
   const [totalItems, setTotalItems] = useState<number>(0);
 
   // Search and filter states
-  const [inputValue, setInputValue] = useState<string>(searchParams.get("q") || "");
   const [searchTerm, setSearchTerm] = useState<string>(searchParams.get("q") || "");
   const [selectedMediaType, setSelectedMediaType] = useState<MediaType>(
     (searchParams.get("media_type") as MediaType) || "All"
@@ -135,7 +132,6 @@ const HomePage: React.FC = () => {
 
   // Refs for component lifecycle and debouncing
   const topOfPageRef = useRef<HTMLDivElement>(null);
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMounted = useRef<boolean>(false);
   const isInternalUrlUpdate = useRef<boolean>(false);
 
@@ -218,7 +214,6 @@ const HomePage: React.FC = () => {
     setItemsPerPage(parseInt(urlParams.get("per_page") || "") || DEFAULT_ITEMS_PER_PAGE);
 
     const query = urlParams.get("q") || "";
-    setInputValue(query);
     setSearchTerm(query);
 
     setSelectedMediaType((urlParams.get("media_type") as MediaType) || "All");
@@ -254,22 +249,18 @@ const HomePage: React.FC = () => {
   ]);
 
   /**
-   * Effect 3: Debounce search input changes
-   * Prevents excessive API calls while user is typing
+   * Effect 3: Handle search term updates from URL navigation
+   * Since search input is now in Navbar, this handles URL-based search changes
+   * Only update if this is not an internal URL update to prevent loops
    */
   useEffect(() => {
-    if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-
-    debounceTimeoutRef.current = setTimeout(() => {
-      if (inputValue !== searchTerm) {
-        setSearchTerm(inputValue);
+    if (!isInternalUrlUpdate.current) {
+      const urlSearchTerm = searchParams.get("q") || "";
+      if (urlSearchTerm !== searchTerm) {
+        setSearchTerm(urlSearchTerm);
       }
-    }, DEBOUNCE_DELAY);
-
-    return () => {
-      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-    };
-  }, [inputValue, searchTerm]);
+    }
+  }, [searchParams, searchTerm]);
 
   /**
    * Effect 2.5: Handle URL changes from external navigation (like clicking tags)
@@ -489,14 +480,6 @@ const HomePage: React.FC = () => {
   }, [fetchItems, filtersLoading]);
 
   // Event handlers for filter changes
-  const handleInputChange: InputChangeHandler = (event) => setInputValue(event.target.value);
-
-  const handleSearchSubmit: FormSubmitHandler = (event) => {
-    event.preventDefault();
-    if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-    if (searchTerm !== inputValue) setSearchTerm(inputValue);
-    if (currentPage !== 1) setCurrentPage(1);
-  };
 
   // Specific handlers for react-select components
   const handleMediaTypeChange = (selectedOption: SelectOption | null): void => {
@@ -659,7 +642,6 @@ const HomePage: React.FC = () => {
     isInternalUrlUpdate.current = true;
 
     // Clear all state
-    setInputValue("");
     setSearchTerm("");
     setSelectedMediaType("All");
     setSelectedGenre([]);
@@ -747,7 +729,6 @@ const HomePage: React.FC = () => {
   // Prepare props for FilterBar component
   const filterProps: FilterBarProps = {
     filters: {
-      inputValue,
       selectedMediaType,
       selectedGenre,
       selectedTheme,
@@ -769,8 +750,6 @@ const HomePage: React.FC = () => {
       statusOptions,
     },
     handlers: {
-      handleInputChange,
-      handleSearchSubmit,
       handleSortChange,
       handleMediaTypeChange,
       handleStatusChange,

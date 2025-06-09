@@ -161,7 +161,6 @@ export interface SelectOption {
  * Filter state structure
  */
 export interface FilterState {
-  inputValue: string;
   selectedMediaType: string;
   selectedGenre: SelectOption[];
   selectedTheme: SelectOption[];
@@ -191,8 +190,6 @@ export interface FilterOptions {
  * Filter change handlers
  */
 export interface FilterHandlers {
-  handleInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  handleSearchSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   handleSortChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
   handleMediaTypeChange: (selectedOption: SelectOption | null) => void;
   handleStatusChange: (selectedOption: SelectOption | null) => void;

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthModal } from "./Auth/AuthModal";
@@ -17,6 +17,12 @@ const Navbar: React.FC = () => {
 
   // ✅ NEW: Search state for navbar
   const [navSearchValue, setNavSearchValue] = useState<string>(searchParams.get("q") || "");
+
+  // Sync navbar search input with URL parameters
+  useEffect(() => {
+    const urlQuery = searchParams.get("q") || "";
+    setNavSearchValue(urlQuery);
+  }, [searchParams]);
 
   const handleSignOut = async () => {
     try {
