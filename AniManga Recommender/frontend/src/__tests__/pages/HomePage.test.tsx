@@ -9,6 +9,29 @@ import { MemoryRouter } from "react-router-dom";
 import HomePage from "../../pages/HomePage";
 import { mockAxios, mockItemsResponse, mockDistinctValuesResponse } from "../../__mocks__/axios";
 
+// Helper function to create mock items
+const createMockItem = (overrides = {}) => {
+  return {
+    uid: "test-123",
+    title: "Test Anime Title",
+    media_type: "anime",
+    genres: ["Action", "Adventure"],
+    themes: ["School", "Military"],
+    demographics: ["Shounen"],
+    score: 8.5,
+    scored_by: 10000,
+    status: "Finished Airing",
+    episodes: 24,
+    start_date: "2020-01-01",
+    rating: "PG-13",
+    synopsis: "This is a test synopsis for the anime.",
+    producers: ["Test Producer"],
+    studios: ["Test Studio"],
+    image_url: "https://example.com/test-image.jpg",
+    ...overrides,
+  };
+};
+
 // Test utilities
 const renderWithRouter = (initialEntries = ["/"], component = <HomePage />) => {
   return render(<MemoryRouter initialEntries={initialEntries}>{component}</MemoryRouter>);
@@ -172,54 +195,45 @@ describe("HomePage Integration Tests", () => {
   });
 
   describe("Search Functionality", () => {
-    it("searches items by title", async () => {
-      renderWithRouter();
+    it("loads items with search parameters from URL", async () => {
+      // Since search input is now in Navbar, test URL-based search instead
+      renderWithRouter(["/?q=Naruto"]);
 
       await waitFor(() => {
         expect(screen.getByText("Test Anime 1")).toBeInTheDocument();
       });
 
-      mockAxios.clearMocks();
-      mockItemsResponse([createMockItem({ title: "Naruto" })], 1);
-
-      // Find search input and type
-      const searchInput = screen.getByPlaceholderText(/search/i);
-      await userEvent.type(searchInput, "Naruto");
-
-      // Verify API call with search parameter (use 'q' parameter)
-      await waitFor(() => {
-        expect(mockAxios.get).toHaveBeenCalledWith(expect.stringContaining("q=Naruto"));
-      });
+      // Verify API call includes search parameter from URL
+      expect(mockAxios.get).toHaveBeenCalledWith(expect.stringContaining("q=Naruto"));
     });
 
-    it("debounces search input", async () => {
-      renderWithRouter();
+    it("handles search parameter changes from URL updates", async () => {
+      // Test that component correctly reads search parameters from different URLs
+
+      // First, test with one search term
+      const { unmount } = renderWithRouter(["/?q=initial"]);
 
       await waitFor(() => {
         expect(screen.getByText("Test Anime 1")).toBeInTheDocument();
       });
 
-      // Clear the initial API calls
+      // Verify API call includes initial search parameter
+      expect(mockAxios.get).toHaveBeenCalledWith(expect.stringContaining("q=initial"));
+
+      // Clean up first component
+      unmount();
+
+      // Clear mocks and set up new response
       mockAxios.clearMocks();
+      mockItemsResponse([createMockItem({ title: "Updated Result" })], 1);
 
-      const searchInput = screen.getByPlaceholderText(/search/i);
+      // Render with different search parameter
+      renderWithRouter(["/?q=updated"]);
 
-      // Type multiple characters quickly
-      await userEvent.type(searchInput, "test");
-
-      // Wait a brief moment but not the full debounce time
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Should not have made new API calls yet due to debounce
-      const initialCallCount = mockAxios.get.mock.calls.length;
-
-      // Wait for debounce
-      await waitFor(
-        () => {
-          expect(mockAxios.get.mock.calls.length).toBeGreaterThan(initialCallCount);
-        },
-        { timeout: 1000 }
-      );
+      // Verify new API call with updated search parameter
+      await waitFor(() => {
+        expect(mockAxios.get).toHaveBeenCalledWith(expect.stringContaining("q=updated"));
+      });
     });
   });
 
