@@ -251,6 +251,7 @@ export interface SpinnerProps {
   size?: string | number;
   color?: string;
   className?: string;
+  "data-testid"?: string;
 }
 
 // ================================

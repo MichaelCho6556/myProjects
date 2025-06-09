@@ -6,7 +6,6 @@ import CryptoJS from "crypto-js";
 
 // CSRF Token Management
 const CSRF_TOKEN_KEY = "csrf_token";
-const CSRF_SECRET = process.env.REACT_APP_CSRF_SECRET || "default-csrf-secret-key";
 
 export const csrfUtils = {
   generateToken(): string {

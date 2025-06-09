@@ -148,12 +148,21 @@ describe("StatisticsCards Component", () => {
         watching: 0,
       };
 
-      render(<StatisticsCards userStats={zeroStats} quickStats={zeroQuickStats} />);
+      const { container } = render(<StatisticsCards userStats={zeroStats} quickStats={zeroQuickStats} />);
 
-      expect(screen.getByText("0")).toBeInTheDocument(); // Should appear multiple times
+      // Use container queries to be more specific about which zero values we're checking
+      const animeCard = container.querySelector(".stat-card.anime .stat-number");
+      const mangaCard = container.querySelector(".stat-card.manga .stat-number");
+      const watchingCard = container.querySelector(".stat-card.watching .stat-number");
+      const completionCard = container.querySelector(".stat-card.completion .stat-number");
+
+      expect(animeCard).toHaveTextContent("0");
+      expect(mangaCard).toHaveTextContent("0");
+      expect(watchingCard).toHaveTextContent("0");
+      expect(completionCard).toHaveTextContent("0%");
+
       expect(screen.getByText("0.0 hours")).toBeInTheDocument();
       expect(screen.getByText("0 chapters")).toBeInTheDocument();
-      expect(screen.getByText("0%")).toBeInTheDocument();
     });
 
     it("handles very large numbers correctly", () => {
@@ -204,12 +213,18 @@ describe("StatisticsCards Component", () => {
         watching: undefined as any,
       };
 
-      // Should not crash
+      // Should not crash - test will pass once component handles undefined values
       render(<StatisticsCards userStats={partialStats} quickStats={partialQuickStats} />);
 
       // Component should still render other valid data
       expect(screen.getByText("Anime Watched")).toBeInTheDocument();
       expect(screen.getByText("Manga Read")).toBeInTheDocument();
+      expect(screen.getByText("Currently Watching")).toBeInTheDocument();
+      expect(screen.getByText("Completion Rate")).toBeInTheDocument();
+
+      // After component fix, these should work:
+      expect(screen.getByText("0.0 hours")).toBeInTheDocument(); // fallback to 0
+      expect(screen.getByText("0 chapters")).toBeInTheDocument(); // fallback to 0
     });
   });
 
@@ -274,7 +289,7 @@ describe("StatisticsCards Component", () => {
 
       const validQuickStats: QuickStats = {
         total_items: 50,
-        watching: 10,
+        watching: 15, // Changed from 10 to avoid duplicate values
         completed: 30,
         plan_to_watch: 5,
         on_hold: 3,
@@ -282,12 +297,22 @@ describe("StatisticsCards Component", () => {
       };
 
       // Should render without errors
-      render(<StatisticsCards userStats={validStats} quickStats={validQuickStats} />);
+      const { container } = render(<StatisticsCards userStats={validStats} quickStats={validQuickStats} />);
 
-      expect(screen.getByText("10")).toBeInTheDocument(); // total_anime_watched
-      expect(screen.getByText("5")).toBeInTheDocument(); // total_manga_read from UserStatistics
-      expect(screen.getByText("10")).toBeInTheDocument(); // watching from QuickStats
-      expect(screen.getByText("75%")).toBeInTheDocument(); // completion_rate
+      // Use more specific selectors to avoid multiple element conflicts
+      const animeCard = container.querySelector(".stat-card.anime .stat-number");
+      const mangaCard = container.querySelector(".stat-card.manga .stat-number");
+      const watchingCard = container.querySelector(".stat-card.watching .stat-number");
+      const completionCard = container.querySelector(".stat-card.completion .stat-number");
+
+      expect(animeCard).toHaveTextContent("10"); // total_anime_watched
+      expect(mangaCard).toHaveTextContent("5"); // total_manga_read from UserStatistics
+      expect(watchingCard).toHaveTextContent("15"); // watching from QuickStats
+      expect(completionCard).toHaveTextContent("75%"); // completion_rate
+
+      // Also verify specific formatted text
+      expect(screen.getByText("100.5 hours")).toBeInTheDocument();
+      expect(screen.getByText("200 chapters")).toBeInTheDocument();
     });
 
     it("renders correctly with minimum required props", () => {

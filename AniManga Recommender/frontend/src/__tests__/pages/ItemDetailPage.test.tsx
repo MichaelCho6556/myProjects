@@ -7,6 +7,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import ItemDetailPage from "../../pages/ItemDetailPage";
+import { AuthProvider } from "../../context/AuthContext";
 import { mockAxios, mockItemDetailResponse, mockRecommendationsResponse } from "../../__mocks__/axios";
 
 // Helper function to create mock items
@@ -35,13 +36,15 @@ const createMockItem = (overrides = {}) => {
 // Test utilities
 const renderWithRouter = (initialEntries = ["/item/test-123"], component = <ItemDetailPage />) => {
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route path="/item/:uid" element={component} />
-        <Route path="/search" element={<div>Search Page</div>} />
-        <Route path="/" element={<div>Home Page</div>} />
-      </Routes>
-    </MemoryRouter>
+    <AuthProvider>
+      <MemoryRouter initialEntries={initialEntries}>
+        <Routes>
+          <Route path="/item/:uid" element={component} />
+          <Route path="/search" element={<div>Search Page</div>} />
+          <Route path="/" element={<div>Home Page</div>} />
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>
   );
 };
 

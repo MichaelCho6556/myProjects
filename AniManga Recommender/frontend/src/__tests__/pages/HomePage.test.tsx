@@ -297,8 +297,8 @@ describe("HomePage Integration Tests", () => {
       mockAxios.clearMocks();
       mockItemsResponse(createTestItems(), 1);
 
-      // Find items per page select
-      const itemsPerPageSelect = screen.getByDisplayValue("30");
+      // Find items per page select by its label - the default value is 20, not 30
+      const itemsPerPageSelect = screen.getByLabelText(/items per page/i);
       await userEvent.selectOptions(itemsPerPageSelect, "50");
 
       // Verify API call with new per_page parameter
