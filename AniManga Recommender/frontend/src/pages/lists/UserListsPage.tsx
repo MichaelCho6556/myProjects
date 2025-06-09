@@ -343,8 +343,8 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
     (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       const formData = new FormData(e.currentTarget);
-      const query = formData.get("search") as string;
-      updateParams({ q: query.trim() });
+      const query = formData.get("search") as string | null;
+      updateParams({ q: (query || "").trim() });
     },
     [updateParams]
   );
@@ -469,7 +469,7 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
 
   return (
     <div className="user-lists-page">
-      <div className="user-lists-container">
+      <div className="user-lists-container" data-testid="lists-container">
         {/* Header */}
         <header className="lists-header">
           <div className="header-content">
@@ -609,7 +609,7 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
         {/* Loading State */}
         {listData.loading && (
           <div className="loading-state">
-            <Spinner size="40px" />
+            <Spinner size="40px" data-testid="loading-spinner" />
             <p>Loading your {currentStatusConfig?.label.toLowerCase()}...</p>
           </div>
         )}
@@ -673,7 +673,7 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
             </div>
 
             {/* Items Grid - Using Dashboard Style */}
-            <div className="items-grid">
+            <div className="items-grid" data-testid="items-grid">
               {filteredItems.map((userItem) => {
                 // ✅ FIXED: Enhanced validation before rendering
                 if (!userItem || !userItem.item_uid || !userItem.item) {

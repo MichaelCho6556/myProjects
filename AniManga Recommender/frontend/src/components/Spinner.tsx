@@ -12,6 +12,7 @@ const Spinner: React.FC<SpinnerProps> = ({
   size = "50px",
   color = "var(--accent-primary)",
   className = "",
+  "data-testid": dataTestId,
 }) => {
   // Ensure size is converted to string if it's a number
   const sizeValue = typeof size === "number" ? `${size}px` : size;
@@ -29,6 +30,7 @@ const Spinner: React.FC<SpinnerProps> = ({
       }}
       role="status"
       aria-label="Loading"
+      data-testid={dataTestId}
     />
   );
 };
