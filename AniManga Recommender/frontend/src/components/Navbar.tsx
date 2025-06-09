@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthModal } from "./Auth/AuthModal";
 import { csrfUtils, sanitizeInput } from "../utils/security"; // ✅ NEW: Import security utilities
+import ConnectionIndicator from "./Feedback/ConnectionIndicator";
 import "./Navbar.css";
 
 /**
@@ -114,6 +115,9 @@ const Navbar: React.FC = () => {
               🔍
             </button>
           </form>
+
+          {/* Connection Indicator */}
+          <ConnectionIndicator position="top-right" showText={false} showOnlyWhenPoor={true} />
 
           {/* Navigation Menu */}
           <ul className="nav-menu" role="menubar">

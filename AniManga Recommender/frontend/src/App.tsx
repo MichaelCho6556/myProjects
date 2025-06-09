@@ -1,12 +1,14 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ToastProvider } from "./components/Feedback/ToastProvider";
 import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
 import ItemDetailPage from "./pages/ItemDetailPage";
 import DashboardPage from "./pages/DashboardPage";
 import UserListsPage from "./pages/lists/UserListsPage";
 import ErrorBoundary from "./components/ErrorBoundary";
+import NetworkStatus from "./components/Feedback/NetworkStatus";
 import "./App.css";
 
 /**
@@ -16,20 +18,23 @@ import "./App.css";
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <Router>
-          <div className="App">
-            <Navbar />
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/item/:uid" element={<ItemDetailPage />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/lists" element={<UserListsPage />} />
-              <Route path="/profile" element={<UserListsPage />} />
-            </Routes>
-          </div>
-        </Router>
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <Router>
+            <div className="App">
+              <NetworkStatus position="top" />
+              <Navbar />
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/item/:uid" element={<ItemDetailPage />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/lists" element={<UserListsPage />} />
+                <Route path="/profile" element={<UserListsPage />} />
+              </Routes>
+            </div>
+          </Router>
+        </AuthProvider>
+      </ToastProvider>
     </ErrorBoundary>
   );
 };

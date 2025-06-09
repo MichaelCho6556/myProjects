@@ -1,6 +1,7 @@
 import React from "react";
 import Select from "react-select";
 import { FilterBarProps, CustomSelectStyles } from "../types";
+import LoadingBanner from "./Loading/LoadingBanner";
 
 /**
  * FilterBar Component - Handles all filtering controls for the application
@@ -116,17 +117,11 @@ const FilterBar: React.FC<FilterBarProps> = ({
         </select>
       </div>
 
-      {/* ✅ NEW: Professional Loading Banner */}
-      {(loading || filtersLoading) && (
-        <div className="loading-banner" role="status" aria-live="polite">
-          <div className="loading-content">
-            <div className="loading-spinner"></div>
-            <span className="loading-text">
-              {filtersLoading ? "Loading filters..." : "Loading content..."}
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Professional Loading Banner */}
+      <LoadingBanner
+        message={filtersLoading ? "Loading filters..." : "Loading content..."}
+        isVisible={loading || filtersLoading}
+      />
 
       {/* Media Type Filter */}
       <div className="filter-group">

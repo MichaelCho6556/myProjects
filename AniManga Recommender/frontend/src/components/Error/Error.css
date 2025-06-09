@@ -1,0 +1,440 @@
+/* ==============================================
+   ERROR HANDLING - CSS STYLES
+   ============================================== */
+
+/* Error Fallback Component */
+.error-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 2rem;
+  background-color: var(--bg-deep-dark);
+}
+
+.error-fallback-content {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2rem;
+  text-align: center;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.error-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.error-title {
+  color: var(--text-primary);
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  line-height: 1.3;
+}
+
+.error-message {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+
+/* Error Details (Expandable) */
+.error-details {
+  margin: 1.5rem 0;
+  text-align: left;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.error-details summary {
+  padding: 1rem;
+  cursor: pointer;
+  background: var(--bg-overlay);
+  color: var(--text-secondary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.2s ease;
+}
+
+.error-details summary:hover {
+  background: var(--bg-dark);
+  color: var(--text-primary);
+}
+
+.error-technical {
+  padding: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.error-technical p {
+  margin-bottom: 0.5rem;
+}
+
+.error-technical strong {
+  color: var(--text-primary);
+}
+
+.error-stack {
+  margin-top: 1rem;
+}
+
+.error-stack pre {
+  background: var(--bg-deep-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.75rem;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Error Actions */
+.error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.error-actions .btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  border: none;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.error-actions .btn-primary {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: white;
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
+}
+
+.error-actions .btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent-primary-hover), var(--accent-secondary-hover));
+  box-shadow: 0 6px 16px rgba(20, 184, 166, 0.4);
+  transform: translateY(-2px);
+}
+
+.error-actions .btn-secondary {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.error-actions .btn-secondary:hover {
+  background: var(--bg-dark);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.error-actions .btn-outline {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.error-actions .btn-outline:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+/* Error Help */
+.error-help {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.error-help-link {
+  color: var(--accent-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.error-help-link:hover {
+  color: var(--accent-primary-hover);
+  text-decoration: underline;
+}
+
+/* ==============================================
+   ERROR BOUNDARY STYLES
+   ============================================== */
+
+.error-boundary {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-deep-dark);
+  padding: 2rem;
+}
+
+.error-content {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2.5rem;
+  text-align: center;
+  max-width: 600px;
+  width: 100%;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+/* ==============================================
+   INLINE ERROR STATES
+   ============================================== */
+
+.inline-error {
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.1), rgba(239, 68, 68, 0.05));
+  border: 1px solid #f87171;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  color: #f87171;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.inline-error-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.inline-error-content {
+  flex: 1;
+}
+
+.inline-error-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.inline-error-message {
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
+.inline-error-dismiss {
+  background: none;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.inline-error-dismiss:hover {
+  background: rgba(248, 113, 113, 0.1);
+}
+
+/* ==============================================
+   NETWORK STATUS INDICATORS
+   ============================================== */
+
+.network-offline {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  padding: 0.75rem;
+  text-align: center;
+  font-weight: 600;
+  z-index: 10000;
+  animation: slideDown 0.3s ease-out;
+}
+
+.network-offline-icon {
+  margin-right: 0.5rem;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* ==============================================
+   RETRY MECHANISMS
+   ============================================== */
+
+.retry-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.retry-message {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.retry-button {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
+}
+
+.retry-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent-primary-hover), var(--accent-secondary-hover));
+  box-shadow: 0 6px 16px rgba(20, 184, 166, 0.4);
+  transform: translateY(-2px);
+}
+
+.retry-button:disabled {
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.retry-count {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+/* ==============================================
+   RESPONSIVE DESIGN
+   ============================================== */
+
+@media (max-width: 768px) {
+  .error-fallback {
+    padding: 1rem;
+    min-height: 300px;
+  }
+
+  .error-fallback-content {
+    padding: 1.5rem;
+  }
+
+  .error-icon {
+    font-size: 3rem;
+  }
+
+  .error-title {
+    font-size: 1.5rem;
+  }
+
+  .error-message {
+    font-size: 1rem;
+  }
+
+  .error-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .error-actions .btn {
+    width: 100%;
+    padding: 1rem;
+  }
+
+  .error-content {
+    padding: 2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .error-fallback-content {
+    padding: 1rem;
+  }
+
+  .error-icon {
+    font-size: 2.5rem;
+  }
+
+  .error-title {
+    font-size: 1.3rem;
+  }
+
+  .error-stack pre {
+    font-size: 0.7rem;
+    max-height: 150px;
+  }
+
+  .error-technical {
+    font-size: 0.8rem;
+  }
+}
+
+/* ==============================================
+   ACCESSIBILITY ENHANCEMENTS
+   ============================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .error-actions .btn,
+  .retry-button {
+    transition: none;
+  }
+
+  .error-actions .btn:hover,
+  .retry-button:hover {
+    transform: none;
+  }
+
+  .network-offline {
+    animation: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .error-fallback-content,
+  .error-content {
+    border: 2px solid var(--text-primary);
+  }
+
+  .inline-error {
+    border: 2px solid #f87171;
+  }
+
+  .error-actions .btn {
+    border: 2px solid;
+  }
+}
+
+/* Focus management for keyboard navigation */
+.error-actions .btn:focus-visible,
+.retry-button:focus-visible,
+.inline-error-dismiss:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}

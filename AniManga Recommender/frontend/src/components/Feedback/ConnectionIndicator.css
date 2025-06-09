@@ -1,0 +1,284 @@
+/* Connection Indicator Component Styles */
+
+.connection-indicator {
+  position: fixed;
+  z-index: 999;
+  font-family: var(--font-family);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Position variants */
+.connection-indicator--top-left {
+  top: 1rem;
+  left: 1rem;
+}
+
+.connection-indicator--top-right {
+  top: 1rem;
+  right: 1rem;
+}
+
+.connection-indicator--bottom-left {
+  bottom: 1rem;
+  left: 1rem;
+}
+
+.connection-indicator--bottom-right {
+  bottom: 1rem;
+  right: 1rem;
+}
+
+.connection-indicator__content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  padding: 0.5rem 0.75rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-lg);
+  transition: all 0.3s ease;
+}
+
+/* Signal strength bars */
+.connection-indicator__signal {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+  width: 20px;
+}
+
+.connection-indicator__bar {
+  width: 3px;
+  border-radius: 1px;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.2);
+  min-height: 2px;
+}
+
+.connection-indicator__bar--active {
+  opacity: 1;
+}
+
+.connection-indicator__bar:nth-child(1) {
+  height: 25%;
+}
+
+.connection-indicator__bar:nth-child(2) {
+  height: 50%;
+}
+
+.connection-indicator__bar:nth-child(3) {
+  height: 75%;
+}
+
+.connection-indicator__bar:nth-child(4) {
+  height: 100%;
+}
+
+/* Text label */
+.connection-indicator__text {
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Warning indicator */
+.connection-indicator__warning {
+  font-size: 0.875rem;
+  animation: pulse-warning 2s infinite;
+}
+
+.connection-indicator__offline {
+  font-size: 0.875rem;
+  animation: fade-pulse 2s infinite;
+}
+
+/* Animations */
+@keyframes pulse-warning {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes fade-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Signal strength animation for active bars */
+.connection-indicator__bar--active {
+  animation: signal-glow 3s ease-in-out infinite;
+}
+
+@keyframes signal-glow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Hover effects (for when pointer events are enabled) */
+.connection-indicator:hover .connection-indicator__content {
+  background: rgba(0, 0, 0, 0.9);
+  transform: scale(1.05);
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .connection-indicator--top-left,
+  .connection-indicator--top-right {
+    top: 0.5rem;
+  }
+
+  .connection-indicator--bottom-left,
+  .connection-indicator--bottom-right {
+    bottom: 0.5rem;
+  }
+
+  .connection-indicator--top-left,
+  .connection-indicator--bottom-left {
+    left: 0.5rem;
+  }
+
+  .connection-indicator--top-right,
+  .connection-indicator--bottom-right {
+    right: 0.5rem;
+  }
+
+  .connection-indicator__content {
+    padding: 0.4rem 0.6rem;
+    gap: 0.4rem;
+  }
+
+  .connection-indicator__signal {
+    height: 14px;
+    width: 18px;
+  }
+
+  .connection-indicator__bar {
+    width: 2.5px;
+  }
+
+  .connection-indicator__text {
+    font-size: 0.7rem;
+  }
+}
+
+/* Very small screens */
+@media (max-width: 480px) {
+  .connection-indicator__content {
+    padding: 0.3rem 0.5rem;
+  }
+
+  .connection-indicator__signal {
+    height: 12px;
+    width: 16px;
+  }
+
+  .connection-indicator__bar {
+    width: 2px;
+    gap: 1px;
+  }
+
+  .connection-indicator__text {
+    font-size: 0.65rem;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .connection-indicator__content {
+    background: #000000;
+    border: 2px solid #ffffff;
+  }
+
+  .connection-indicator__bar {
+    border: 1px solid #ffffff;
+  }
+
+  .connection-indicator__text {
+    text-shadow: none;
+    font-weight: 600;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .connection-indicator__content {
+    transition: none;
+  }
+
+  .connection-indicator__bar {
+    transition: none;
+  }
+
+  .connection-indicator__warning,
+  .connection-indicator__offline {
+    animation: none;
+  }
+
+  .connection-indicator__bar--active {
+    animation: none;
+  }
+
+  .connection-indicator:hover .connection-indicator__content {
+    transform: none;
+  }
+}
+
+/* Dark theme adjustments */
+@media (prefers-color-scheme: dark) {
+  .connection-indicator__content {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* Light theme adjustments */
+@media (prefers-color-scheme: light) {
+  .connection-indicator__content {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(0, 0, 0, 0.1);
+    color: #000000;
+  }
+
+  .connection-indicator__text {
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+  }
+}
+
+/* Status-specific styling */
+.connection-indicator--excellent .connection-indicator__content {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.connection-indicator--good .connection-indicator__content {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.connection-indicator--poor .connection-indicator__content {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.connection-indicator--offline .connection-indicator__content {
+  border-color: rgba(239, 68, 68, 0.3);
+}
