@@ -501,8 +501,52 @@ button.btn-primary:disabled,
 .filter-bar > .filter-group:nth-child(10) {
   grid-area: year;
 } /* Year */
-.filter-bar > .reset-filters-btn {
+/* ✅ NEW: Professional Filter Actions Container */
+.filter-bar > .filter-actions {
   grid-area: reset;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 15px 0;
+}
+
+/* ✅ UPDATED: Professional Reset Button */
+.filter-bar .reset-filters-btn {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 160px;
+  justify-content: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.filter-bar .reset-filters-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4);
+}
+
+.filter-bar .reset-filters-btn:active {
+  transform: translateY(0px);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.filter-bar .reset-filters-btn:disabled {
+  background: #6b7280;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* ✅ UPDATED: Larger minimum height for filter groups with multi-select */
@@ -877,10 +921,13 @@ button.btn-primary:disabled,
     flex-basis: 100%;
     order: -1;
   }
-  .filter-bar > .reset-filters-btn {
-    margin-left: 0;
-    width: 100%;
+  .filter-bar > .filter-actions {
     margin-top: 10px;
+  }
+
+  .filter-bar .reset-filters-btn {
+    width: 100%;
+    min-width: auto;
   }
 }
 
