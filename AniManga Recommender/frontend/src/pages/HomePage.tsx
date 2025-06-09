@@ -2,12 +2,13 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import axios from "axios";
 import ItemCard from "../components/ItemCard";
-import SkeletonCard from "../components/SkeletonCard";
+import ItemCardSkeleton from "../components/Loading/ItemCardSkeleton";
 import FilterBar from "../components/FilterBar";
 import PaginationControls from "../components/PaginationControls";
 import Spinner from "../components/Spinner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { createErrorHandler, retryOperation, validateResponseData } from "../utils/errorHandler";
+import RetryButton from "../components/Feedback/RetryButton";
 import "../App.css";
 import {
   AnimeItem,
@@ -151,7 +152,7 @@ const HomePage: React.FC = () => {
       setFiltersLoading(true);
       try {
         const operation = () => axios.get<DistinctValuesApiResponse>(`${API_BASE_URL}/distinct-values`);
-        const response = await retryOperation(operation, 3, 1000);
+        const response = await retryOperation(operation, { maxRetries: 3, baseDelayMs: 1000 });
 
         let distinctData = response.data;
 
@@ -425,7 +426,7 @@ const HomePage: React.FC = () => {
 
     try {
       const operation = () => axios.get<ItemsApiResponse>(`${API_BASE_URL}/items?${paramsString}`);
-      const response = await retryOperation(operation, 2, 1000);
+      const response = await retryOperation(operation, { maxRetries: 2, baseDelayMs: 1000 });
 
       const responseData = response.data;
 
@@ -834,7 +835,7 @@ const HomePage: React.FC = () => {
           <section className="skeleton-container" aria-label="Loading content" data-testid="skeleton-loading">
             <div className="item-list">
               {Array.from({ length: itemsPerPage }).map((_, index) => (
-                <SkeletonCard key={`skeleton-${index}`} />
+                <ItemCardSkeleton key={`skeleton-${index}`} />
               ))}
             </div>
           </section>
@@ -862,9 +863,14 @@ const HomePage: React.FC = () => {
                 <summary>Technical details</summary>
                 <p>{error}</p>
               </details>
-              <button onClick={() => window.location.reload()} className="retry-button">
-                Try Again
-              </button>
+              <div className="error-actions">
+                <RetryButton onRetry={fetchItems} variant="primary">
+                  Retry Loading
+                </RetryButton>
+                <button onClick={() => window.location.reload()} className="retry-button-secondary">
+                  Refresh Page
+                </button>
+              </div>
             </div>
           </section>
         )}

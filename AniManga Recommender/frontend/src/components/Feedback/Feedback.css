@@ -1,0 +1,365 @@
+/* Feedback Components - Toast and Confirmation Dialog Styles */
+
+/* Toast Container */
+.toast-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 400px;
+  pointer-events: none;
+}
+
+/* Individual Toast */
+.toast {
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  box-shadow: var(--shadow-elevated);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  pointer-events: auto;
+  transform: translateX(100%);
+  opacity: 0;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.toast-visible {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast-exiting {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+/* Toast Variants */
+.toast-success {
+  border-left: 4px solid #10b981;
+}
+
+.toast-error {
+  border-left: 4px solid #ef4444;
+}
+
+.toast-warning {
+  border-left: 4px solid #f59e0b;
+}
+
+.toast-info {
+  border-left: 4px solid #3b82f6;
+}
+
+/* Toast Content */
+.toast-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  position: relative;
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: bold;
+  font-size: 0.875rem;
+}
+
+.toast-success .toast-icon {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.toast-error .toast-icon {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.toast-warning .toast-icon {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
+.toast-info .toast-icon {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.toast-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-title {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.toast-message {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.toast-action {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--accent-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.toast-action:hover {
+  background: var(--bg-overlay);
+  border-color: var(--accent-primary);
+}
+
+.toast-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.toast-close:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+/* Toast Progress Bar */
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: currentColor;
+  opacity: 0.3;
+  animation: toast-progress linear forwards;
+}
+
+@keyframes toast-progress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+/* Confirmation Dialog */
+.confirmation-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  opacity: 0;
+  animation: fade-in 0.2s ease forwards;
+}
+
+.confirmation-dialog {
+  background: var(--bg-elevated);
+  border-radius: 12px;
+  box-shadow: var(--shadow-elevated);
+  border: 1px solid var(--border-color);
+  max-width: 500px;
+  width: 100%;
+  transform: scale(0.95);
+  animation: scale-in 0.2s ease forwards;
+}
+
+.confirmation-dialog-header {
+  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.confirmation-dialog-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.confirmation-dialog-icon {
+  font-size: 1.25rem;
+}
+
+.confirmation-dialog-content {
+  padding: 1.5rem;
+}
+
+.confirmation-dialog-message {
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.confirmation-dialog-actions {
+  padding: 1rem 1.5rem;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-color);
+}
+
+.confirmation-dialog-button {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.confirmation-dialog-button--primary {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.confirmation-dialog-button--primary:hover {
+  background: var(--accent-primary-hover);
+}
+
+.confirmation-dialog-button--secondary {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.confirmation-dialog-button--secondary:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-highlight);
+}
+
+.confirmation-dialog-button--danger {
+  background: #ef4444;
+  color: white;
+}
+
+.confirmation-dialog-button--danger:hover {
+  background: #dc2626;
+}
+
+/* Animations */
+@keyframes fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .toast-container {
+    left: 1rem;
+    right: 1rem;
+    max-width: none;
+  }
+
+  .toast-content {
+    padding: 0.75rem;
+  }
+
+  .confirmation-dialog {
+    margin: 1rem;
+    max-width: none;
+  }
+
+  .confirmation-dialog-actions {
+    flex-direction: column;
+  }
+
+  .confirmation-dialog-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .toast {
+    border-width: 2px;
+  }
+
+  .toast-success {
+    border-left-width: 6px;
+  }
+
+  .toast-error {
+    border-left-width: 6px;
+  }
+
+  .toast-warning {
+    border-left-width: 6px;
+  }
+
+  .toast-info {
+    border-left-width: 6px;
+  }
+
+  .confirmation-dialog {
+    border-width: 2px;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    transition: none;
+  }
+
+  .toast-progress {
+    animation: none;
+    width: 50%;
+  }
+
+  .confirmation-dialog-overlay {
+    animation: none;
+    opacity: 1;
+  }
+
+  .confirmation-dialog {
+    animation: none;
+    transform: scale(1);
+  }
+}

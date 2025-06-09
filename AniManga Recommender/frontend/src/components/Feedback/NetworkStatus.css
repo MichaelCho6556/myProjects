@@ -1,0 +1,275 @@
+/* NetworkStatus Component Styles */
+
+.network-status {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  font-family: var(--font-family);
+}
+
+.network-status--top {
+  top: 0;
+}
+
+.network-status--bottom {
+  bottom: 0;
+}
+
+/* Banner Styles */
+.network-status__banner {
+  padding: 1rem;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-elevated);
+  animation: slideIn 0.3s ease-out;
+  transition: all 0.3s ease;
+}
+
+.network-status__banner--offline {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.95), rgba(185, 28, 28, 0.95));
+  color: white;
+}
+
+.network-status__banner--slow {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.95));
+  color: white;
+}
+
+.network-status__content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.network-status__icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.network-status__message {
+  flex: 1;
+  min-width: 0;
+}
+
+.network-status__message strong {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.network-status__message p {
+  margin: 0;
+  opacity: 0.9;
+  font-size: 0.875rem;
+}
+
+.network-status__action,
+.network-status__dismiss {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.network-status__action:hover,
+.network-status__dismiss:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.network-status__action:active,
+.network-status__dismiss:active {
+  transform: translateY(0);
+}
+
+.network-status__dismiss {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+/* Online Indicator */
+.network-status__indicator {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(34, 197, 94, 0.95);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-elevated);
+  animation: fadeIn 0.3s ease-out;
+}
+
+.network-status__dot {
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.network-status__text {
+  font-size: 0.875rem;
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .network-status__banner {
+    padding: 0.75rem;
+  }
+
+  .network-status__content {
+    gap: 0.75rem;
+  }
+
+  .network-status__icon {
+    font-size: 1.25rem;
+  }
+
+  .network-status__message strong {
+    font-size: 0.875rem;
+  }
+
+  .network-status__message p {
+    font-size: 0.8rem;
+  }
+
+  .network-status__action {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.875rem;
+  }
+
+  .network-status__indicator {
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .network-status__content {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.5rem;
+  }
+
+  .network-status__message {
+    order: 1;
+  }
+
+  .network-status__icon {
+    order: 0;
+  }
+
+  .network-status__action,
+  .network-status__dismiss {
+    order: 2;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .network-status__banner--offline {
+    background: #dc2626;
+    border: 2px solid #ffffff;
+  }
+
+  .network-status__banner--slow {
+    background: #f59e0b;
+    border: 2px solid #ffffff;
+  }
+
+  .network-status__action,
+  .network-status__dismiss {
+    background: rgba(255, 255, 255, 0.9);
+    color: #000000;
+    border: 2px solid #ffffff;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .network-status__banner,
+  .network-status__indicator {
+    animation: none;
+  }
+
+  .network-status__dot {
+    animation: none;
+  }
+
+  .network-status__action,
+  .network-status__dismiss {
+    transition: none;
+  }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .network-status__banner {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .network-status__indicator {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+}

@@ -1,0 +1,527 @@
+/* ==============================================
+   PROFESSIONAL LOADING STATES - CSS STYLES
+   ============================================== */
+
+/* Base Loading Banner */
+.loading-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  margin: 16px 0;
+  box-shadow: 0 4px 15px rgba(20, 184, 166, 0.3);
+  color: white;
+  animation: pulse 2s infinite;
+  grid-column: 1 / -1; /* Span full width in grid layouts */
+  transition: all 0.3s ease;
+}
+
+.loading-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: white;
+}
+
+/* ==============================================
+   SKELETON LOADING ANIMATIONS
+   ============================================== */
+
+/* Base skeleton shimmer effect */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--bg-overlay) 25%, var(--border-color) 50%, var(--bg-overlay) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 6px;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==============================================
+   DASHBOARD SKELETON COMPONENTS
+   ============================================== */
+
+.dashboard-skeleton {
+  padding: 2rem 0;
+  background-color: var(--bg-deep-dark);
+  min-height: 100vh;
+}
+
+.skeleton-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.skeleton-title {
+  height: 2.5rem;
+  width: 300px;
+  margin: 0 auto 0.5rem;
+  border-radius: 8px;
+}
+
+.skeleton-subtitle {
+  height: 1.2rem;
+  width: 200px;
+  margin: 0 auto;
+  border-radius: 6px;
+}
+
+/* Statistics grid skeleton */
+.skeleton-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 2rem;
+}
+
+.skeleton-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 1.5rem;
+  min-height: 120px;
+}
+
+.skeleton-stat-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.skeleton-stat-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.skeleton-stat-number {
+  height: 2rem;
+  width: 80px;
+  border-radius: 6px;
+}
+
+.skeleton-stat-label {
+  height: 1rem;
+  width: 120px;
+  border-radius: 4px;
+}
+
+/* Dashboard grid skeleton */
+.skeleton-dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.skeleton-dashboard-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* Item lists skeleton */
+.skeleton-item-lists {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 1.5rem;
+}
+
+.skeleton-section-title {
+  height: 1.5rem;
+  width: 200px;
+  margin-bottom: 1.5rem;
+  border-radius: 6px;
+}
+
+.skeleton-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.skeleton-tab {
+  height: 2.5rem;
+  width: 100px;
+  border-radius: 8px;
+}
+
+.skeleton-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+/* Quick actions skeleton */
+.skeleton-quick-actions {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 1.5rem;
+}
+
+.skeleton-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.skeleton-action-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 8px;
+  background: var(--bg-overlay);
+}
+
+.skeleton-action-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 4px;
+}
+
+.skeleton-action-text {
+  width: 80px;
+  height: 1rem;
+  border-radius: 4px;
+}
+
+/* Activity feed skeleton */
+.skeleton-activity-feed {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 1.5rem;
+}
+
+.skeleton-activity-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: var(--bg-overlay);
+  border-radius: 8px;
+}
+
+.skeleton-activity-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.skeleton-activity-title {
+  height: 1.2rem;
+  width: 180px;
+  border-radius: 4px;
+}
+
+.skeleton-activity-description {
+  height: 1rem;
+  width: 140px;
+  border-radius: 4px;
+}
+
+.skeleton-activity-time {
+  width: 60px;
+  height: 0.8rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* ==============================================
+   ITEM CARD SKELETON COMPONENTS
+   ============================================== */
+
+.skeleton-item-card {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 400px;
+}
+
+.skeleton-item-image {
+  width: 100%;
+  height: 330px;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+
+.skeleton-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  flex: 1;
+}
+
+.skeleton-item-title {
+  height: 1.4rem;
+  width: 85%;
+  border-radius: 6px;
+}
+
+.skeleton-item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-item-meta {
+  height: 1rem;
+  width: 70%;
+  border-radius: 4px;
+}
+
+.skeleton-item-meta.short {
+  width: 50%;
+}
+
+.skeleton-item-score {
+  height: 1.2rem;
+  width: 60px;
+  border-radius: 4px;
+  margin-top: auto;
+}
+
+.skeleton-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.skeleton-tag {
+  height: 1.5rem;
+  width: 60px;
+  border-radius: 12px;
+}
+
+.skeleton-tag.short {
+  width: 40px;
+}
+
+/* ==============================================
+   RESPONSIVE DESIGN
+   ============================================== */
+
+@media (max-width: 1024px) {
+  .skeleton-dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .skeleton-stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    padding: 0 1rem;
+  }
+
+  .skeleton-dashboard-grid {
+    padding: 0 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .loading-banner {
+    padding: 12px 16px;
+    margin: 12px 0;
+  }
+
+  .loading-text {
+    font-size: 0.9rem;
+  }
+
+  .skeleton-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .skeleton-stat-card {
+    padding: 1rem;
+    min-height: 100px;
+  }
+
+  .skeleton-stat-icon {
+    width: 50px;
+    height: 50px;
+  }
+
+  .skeleton-items-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .skeleton-actions-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .skeleton-dashboard-grid {
+    padding: 0 0.5rem;
+  }
+
+  .skeleton-stats-grid {
+    padding: 0 0.5rem;
+  }
+
+  .skeleton-items-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .skeleton-activity-item {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .skeleton-activity-time {
+    width: 80px;
+  }
+}
+
+/* ==============================================
+   ACCESSIBILITY ENHANCEMENTS
+   ============================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer,
+  .loading-spinner,
+  .loading-banner {
+    animation: none;
+  }
+
+  /* Provide a static loading indicator for reduced motion */
+  .skeleton-shimmer {
+    background: var(--bg-overlay);
+    opacity: 0.7;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .loading-banner {
+    border: 2px solid;
+    box-shadow: none;
+  }
+
+  .skeleton-shimmer {
+    border: 1px solid var(--text-primary);
+  }
+}
+
+/* ==============================================
+   NETWORK-AWARE LOADING STATES
+   ============================================== */
+
+/* Slow connection loading banner */
+.loading-banner--slow-connection {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.95), rgba(217, 119, 6, 0.95));
+  border-color: rgba(245, 158, 11, 0.3);
+  animation: slow-connection-pulse 2s infinite;
+}
+
+.loading-connection-warning {
+  font-size: 1rem;
+  margin-left: 0.5rem;
+  animation: warning-bounce 1s infinite;
+}
+
+@keyframes slow-connection-pulse {
+  0%,
+  100% {
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes warning-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* Dark mode adjustments for network states */
+@media (prefers-color-scheme: dark) {
+  .loading-banner--slow-connection {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.9), rgba(217, 119, 6, 0.9));
+  }
+}
+
+/* Reduced motion for network indicators */
+@media (prefers-reduced-motion: reduce) {
+  .loading-banner--slow-connection {
+    animation: none;
+  }
+
+  .loading-connection-warning {
+    animation: none;
+  }
+}

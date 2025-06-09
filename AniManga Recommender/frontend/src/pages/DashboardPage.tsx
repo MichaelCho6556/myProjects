@@ -7,6 +7,8 @@ import StatisticsCards from "../components/dashboard/StatisticsCards";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
 import ItemLists from "../components/dashboard/ItemLists";
 import QuickActions from "../components/dashboard/QuickActions";
+import DashboardSkeleton from "../components/Loading/DashboardSkeleton";
+import ErrorFallback from "../components/Error/ErrorFallback";
 import "./DashboardPage.css";
 import { supabase } from "../lib/supabase";
 
@@ -118,10 +120,7 @@ const DashboardPage: React.FC = () => {
   if (loading) {
     return (
       <div className="dashboard-page">
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading your dashboard...</p>
-        </div>
+        <DashboardSkeleton />
       </div>
     );
   }
@@ -129,13 +128,7 @@ const DashboardPage: React.FC = () => {
   if (error) {
     return (
       <div className="dashboard-page">
-        <div className="error-state">
-          <h2>Error Loading Dashboard</h2>
-          <p>{error}</p>
-          <button onClick={fetchDashboardData} className="retry-button">
-            Try Again
-          </button>
-        </div>
+        <ErrorFallback error={new Error(error)} onRetry={fetchDashboardData} showDetails={true} />
       </div>
     );
   }
