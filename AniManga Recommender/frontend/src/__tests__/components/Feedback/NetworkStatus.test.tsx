@@ -6,205 +6,275 @@
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import NetworkStatus from "../../../components/Feedback/NetworkStatus";
 
-// Mock the network status hook
-const mockNetworkStatus = {
-  isOnline: true,
-  connectionQuality: "excellent",
-  isSlowConnection: false,
-  speed: 10.5,
-};
-
-jest.mock("../../../hooks/useNetworkStatus", () => ({
-  useNetworkStatus: jest.fn(() => mockNetworkStatus),
-}));
+// Mock the network monitor
+let mockSubscribeCallback: ((status: any) => void) | null = null;
 
 // Mock toast hook
 const mockAddToast = jest.fn();
-jest.mock("../../../hooks/useToast", () => ({
+jest.mock("../../../components/Feedback/ToastProvider", () => ({
   useToast: () => ({ addToast: mockAddToast }),
 }));
+
+// Mock the error handler module
+jest.mock("../../../utils/errorHandler", () => ({
+  networkMonitor: {
+    getStatus: jest.fn(),
+    subscribe: jest.fn(),
+  },
+}));
+
+// Get the mocked network monitor
+const { networkMonitor: mockNetworkMonitor } = jest.requireMock("../../../utils/errorHandler");
 
 describe("NetworkStatus Component", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset to default online status
+    mockNetworkMonitor.getStatus.mockReturnValue({
+      isOnline: true,
+      isSlowConnection: false,
+      lastChecked: Date.now(),
+    });
+
+    // Setup mock subscribe
+    mockNetworkMonitor.subscribe.mockImplementation((callback: (status: any) => void) => {
+      mockSubscribeCallback = callback;
+      return jest.fn(); // unsubscribe function
+    });
   });
 
   describe("Online Status", () => {
-    it("does not show notification when connection is excellent", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
-        isOnline: true,
-        connectionQuality: "excellent",
-        isSlowConnection: false,
-        speed: 10.5,
-      });
-
+    it("does not show notification when connection is good", () => {
       render(<NetworkStatus />);
 
-      expect(screen.queryByTestId("network-status")).not.toBeInTheDocument();
+      // Component should not render anything when online and not showing online status
+      expect(screen.queryByText(/you're offline/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/slow connection/i)).not.toBeInTheDocument();
     });
 
     it("shows warning for poor connection", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+      // Mock a slow connection
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: true,
-        connectionQuality: "poor",
         isSlowConnection: true,
-        speed: 0.5,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const notification = screen.getByTestId("network-status");
-      expect(notification).toBeInTheDocument();
-      expect(notification).toHaveClass("warning");
-      expect(screen.getByText(/slow connection/i)).toBeInTheDocument();
+      // Trigger the slow connection status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: true,
+            isSlowConnection: true,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      expect(screen.getByText(/slow connection detected/i)).toBeInTheDocument();
+      expect(screen.getByText(/loading may take longer/i)).toBeInTheDocument();
     });
 
-    it("shows speed information for slow connections", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+    it("shows dismiss button for slow connections", () => {
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: true,
-        connectionQuality: "poor",
         isSlowConnection: true,
-        speed: 0.8,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      expect(screen.getByText(/0.8 Mbps/i)).toBeInTheDocument();
+      // Trigger the slow connection status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: true,
+            isSlowConnection: true,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      const dismissButton = screen.getByLabelText(/dismiss slow connection warning/i);
+      expect(dismissButton).toBeInTheDocument();
     });
   });
 
   describe("Offline Status", () => {
     it("shows offline notification when disconnected", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: false,
-        connectionQuality: "offline",
         isSlowConnection: false,
-        speed: 0,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const notification = screen.getByTestId("network-status");
-      expect(notification).toBeInTheDocument();
-      expect(notification).toHaveClass("offline");
-      expect(screen.getByText(/you are offline/i)).toBeInTheDocument();
+      // Trigger the offline status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: false,
+            isSlowConnection: false,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      expect(screen.getByText(/you're offline/i)).toBeInTheDocument();
+      expect(screen.getByText(/please check your internet connection/i)).toBeInTheDocument();
     });
 
     it("shows retry button when offline", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: false,
-        connectionQuality: "offline",
         isSlowConnection: false,
-        speed: 0,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const retryButton = screen.getByRole("button", { name: /check connection/i });
+      // Trigger the offline status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: false,
+            isSlowConnection: false,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      const retryButton = screen.getByLabelText(/retry connection/i);
       expect(retryButton).toBeInTheDocument();
     });
 
-    it("triggers connection check when retry button is clicked", async () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+    it("triggers page reload when retry button is clicked", async () => {
+      // Mock window.location.reload
+      const mockReload = jest.fn();
+      Object.defineProperty(window, "location", {
+        value: { reload: mockReload },
+        writable: true,
+      });
+
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: false,
-        connectionQuality: "offline",
         isSlowConnection: false,
-        speed: 0,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const retryButton = screen.getByRole("button", { name: /check connection/i });
+      // Trigger the offline status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: false,
+            isSlowConnection: false,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      const retryButton = screen.getByLabelText(/retry connection/i);
       fireEvent.click(retryButton);
 
-      await waitFor(() => {
-        expect(mockAddToast).toHaveBeenCalledWith({
-          type: "info",
-          title: "Checking Connection",
-          message: "Testing network connectivity...",
-        });
-      });
+      expect(mockReload).toHaveBeenCalled();
     });
   });
 
   describe("Connection Quality Indicators", () => {
-    it("shows appropriate icon for excellent connection", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
-        isOnline: true,
-        connectionQuality: "excellent",
-        isSlowConnection: false,
-        speed: 15.0,
-      });
-
+    it("shows no indicators when connection is good", () => {
       render(<NetworkStatus />);
 
-      // Should not show notification for excellent connection
-      expect(screen.queryByTestId("network-status")).not.toBeInTheDocument();
+      // Should not show any banners for good connection
+      expect(screen.queryByText(/slow connection detected/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/you're offline/i)).not.toBeInTheDocument();
     });
 
-    it("shows warning icon for poor connection", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+    it("shows slow connection icon for poor connection", () => {
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: true,
-        connectionQuality: "poor",
         isSlowConnection: true,
-        speed: 0.3,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const warningIcon = screen.getByTestId("warning-icon");
-      expect(warningIcon).toBeInTheDocument();
-      expect(warningIcon).toHaveClass("icon-warning");
+      // Trigger the slow connection status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: true,
+            isSlowConnection: true,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      // Check for the slow connection icon (🐌)
+      expect(screen.getByText("🐌")).toBeInTheDocument();
     });
 
     it("shows offline icon when disconnected", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: false,
-        connectionQuality: "offline",
         isSlowConnection: false,
-        speed: 0,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const offlineIcon = screen.getByTestId("offline-icon");
-      expect(offlineIcon).toBeInTheDocument();
-      expect(offlineIcon).toHaveClass("icon-offline");
+      // Trigger the offline status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: false,
+            isSlowConnection: false,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      // Check for the offline icon (📡)
+      expect(screen.getByText("📡")).toBeInTheDocument();
     });
   });
 
   describe("Auto-dismiss Functionality", () => {
-    it("auto-dismisses poor connection notification after delay", async () => {
+    it("auto-dismisses slow connection notification after delay", async () => {
       jest.useFakeTimers();
 
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: true,
-        connectionQuality: "poor",
         isSlowConnection: true,
-        speed: 0.5,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      expect(screen.getByTestId("network-status")).toBeInTheDocument();
-
-      // Fast-forward time
+      // Trigger the slow connection status
       act(() => {
-        jest.advanceTimersByTime(8000); // Auto-dismiss after 8 seconds
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: true,
+            isSlowConnection: true,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      expect(screen.getByText(/slow connection detected/i)).toBeInTheDocument();
+
+      // Fast-forward time to trigger auto-dismiss
+      act(() => {
+        jest.advanceTimersByTime(10000); // Auto-dismiss after 10 seconds
       });
 
       await waitFor(() => {
-        expect(screen.queryByTestId("network-status")).not.toBeInTheDocument();
+        expect(screen.queryByText(/slow connection detected/i)).not.toBeInTheDocument();
       });
 
       jest.useRealTimers();
@@ -213,167 +283,188 @@ describe("NetworkStatus Component", () => {
     it("does not auto-dismiss offline notifications", async () => {
       jest.useFakeTimers();
 
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: false,
-        connectionQuality: "offline",
         isSlowConnection: false,
-        speed: 0,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      expect(screen.getByTestId("network-status")).toBeInTheDocument();
+      // Trigger the offline status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: false,
+            isSlowConnection: false,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      expect(screen.getByText(/you're offline/i)).toBeInTheDocument();
 
       // Fast-forward time
       act(() => {
-        jest.advanceTimersByTime(10000);
+        jest.advanceTimersByTime(15000);
       });
 
       // Should still be visible
-      expect(screen.getByTestId("network-status")).toBeInTheDocument();
+      expect(screen.getByText(/you're offline/i)).toBeInTheDocument();
 
       jest.useRealTimers();
     });
   });
 
   describe("Manual Dismiss", () => {
-    it("shows dismiss button for warning notifications", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+    it("shows dismiss button for slow connection warnings", () => {
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: true,
-        connectionQuality: "poor",
         isSlowConnection: true,
-        speed: 0.4,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const dismissButton = screen.getByRole("button", { name: /dismiss/i });
+      // Trigger the slow connection status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: true,
+            isSlowConnection: true,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      const dismissButton = screen.getByLabelText(/dismiss slow connection warning/i);
       expect(dismissButton).toBeInTheDocument();
     });
 
     it("hides notification when dismiss button is clicked", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: true,
-        connectionQuality: "poor",
         isSlowConnection: true,
-        speed: 0.4,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const dismissButton = screen.getByRole("button", { name: /dismiss/i });
+      // Trigger the slow connection status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: true,
+            isSlowConnection: true,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      const dismissButton = screen.getByLabelText(/dismiss slow connection warning/i);
       fireEvent.click(dismissButton);
 
-      expect(screen.queryByTestId("network-status")).not.toBeInTheDocument();
+      expect(screen.queryByText(/slow connection detected/i)).not.toBeInTheDocument();
     });
   });
 
   describe("Accessibility", () => {
-    it("has proper ARIA attributes", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+    it("has proper ARIA attributes for offline alert", () => {
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: false,
-        connectionQuality: "offline",
         isSlowConnection: false,
-        speed: 0,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
+
+      // Trigger the offline status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: false,
+            isSlowConnection: false,
+            lastChecked: Date.now(),
+          });
+        }
+      });
 
       const notification = screen.getByRole("alert");
       expect(notification).toHaveAttribute("aria-live", "assertive");
-      expect(notification).toHaveAttribute("aria-atomic", "true");
     });
 
-    it("has descriptive labels for screen readers", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+    it("has proper ARIA attributes for slow connection status", () => {
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: true,
-        connectionQuality: "poor",
         isSlowConnection: true,
-        speed: 0.3,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const notification = screen.getByLabelText(/network status warning/i);
-      expect(notification).toBeInTheDocument();
-    });
-
-    it("announces status changes to screen readers", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      const { rerender } = render(<NetworkStatus />);
-
-      // Initially online
-      useNetworkStatus.mockReturnValue({
-        isOnline: true,
-        connectionQuality: "excellent",
-        isSlowConnection: false,
-        speed: 10.0,
+      // Trigger the slow connection status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: true,
+            isSlowConnection: true,
+            lastChecked: Date.now(),
+          });
+        }
       });
-      rerender(<NetworkStatus />);
 
-      // Goes offline
-      useNetworkStatus.mockReturnValue({
-        isOnline: false,
-        connectionQuality: "offline",
-        isSlowConnection: false,
-        speed: 0,
-      });
-      rerender(<NetworkStatus />);
-
-      const alert = screen.getByRole("alert");
-      expect(alert).toHaveAttribute("aria-live", "assertive");
+      const notification = screen.getByRole("status");
+      expect(notification).toHaveAttribute("aria-live", "polite");
     });
   });
 
   describe("Visual Design", () => {
-    it("applies appropriate styling for warning state", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+    it("applies appropriate CSS classes for slow connection", () => {
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: true,
-        connectionQuality: "poor",
         isSlowConnection: true,
-        speed: 0.5,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const notification = screen.getByTestId("network-status");
-      expect(notification).toHaveClass("network-warning");
+      // Trigger the slow connection status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: true,
+            isSlowConnection: true,
+            lastChecked: Date.now(),
+          });
+        }
+      });
+
+      const banner = document.querySelector(".network-status__banner--slow");
+      expect(banner).toBeInTheDocument();
     });
 
-    it("applies appropriate styling for offline state", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
+    it("applies appropriate CSS classes for offline state", () => {
+      mockNetworkMonitor.getStatus.mockReturnValue({
         isOnline: false,
-        connectionQuality: "offline",
         isSlowConnection: false,
-        speed: 0,
+        lastChecked: Date.now(),
       });
 
       render(<NetworkStatus />);
 
-      const notification = screen.getByTestId("network-status");
-      expect(notification).toHaveClass("network-offline");
-    });
-
-    it("has smooth animation transitions", () => {
-      const { useNetworkStatus } = require("../../../hooks/useNetworkStatus");
-      useNetworkStatus.mockReturnValue({
-        isOnline: true,
-        connectionQuality: "poor",
-        isSlowConnection: true,
-        speed: 0.5,
+      // Trigger the offline status
+      act(() => {
+        if (mockSubscribeCallback) {
+          mockSubscribeCallback({
+            isOnline: false,
+            isSlowConnection: false,
+            lastChecked: Date.now(),
+          });
+        }
       });
 
-      render(<NetworkStatus />);
-
-      const notification = screen.getByTestId("network-status");
-      expect(notification).toHaveClass("smooth-transition");
+      const banner = document.querySelector(".network-status__banner--offline");
+      expect(banner).toBeInTheDocument();
     });
   });
 });

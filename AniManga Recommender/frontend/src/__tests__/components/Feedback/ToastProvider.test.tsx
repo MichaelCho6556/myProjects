@@ -119,6 +119,7 @@ describe("ToastProvider Component", () => {
   });
 
   afterEach(() => {
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
@@ -397,29 +398,44 @@ describe("ToastProvider Component", () => {
   });
 
   describe("Memory Management", () => {
-    it("cleans up timeouts when toasts are manually removed", () => {
+    it("cleans up timeouts when toasts are manually removed", async () => {
       const clearTimeoutSpy = jest.spyOn(global, "clearTimeout");
 
       renderWithToastProvider(<TestComponent />);
 
       fireEvent.click(screen.getByTestId("add-success-toast"));
 
-      // Manually remove toast
+      // Wait for toast to appear and get close button
+      await waitFor(() => {
+        expect(screen.getByLabelText("Close notification")).toBeInTheDocument();
+      });
+
       const closeButton = screen.getByLabelText("Close notification");
+
+      // Manually remove toast
       fireEvent.click(closeButton);
 
-      expect(clearTimeoutSpy).toHaveBeenCalled();
+      // Wait for the toast removal to complete
+      await waitFor(() => {
+        expect(clearTimeoutSpy).toHaveBeenCalled();
+      });
 
       clearTimeoutSpy.mockRestore();
     });
 
-    it("cleans up all timeouts when clearing all toasts", () => {
+    it("cleans up all timeouts when clearing all toasts", async () => {
       const clearTimeoutSpy = jest.spyOn(global, "clearTimeout");
 
       renderWithToastProvider(<TestComponent />);
 
       fireEvent.click(screen.getByTestId("add-success-toast"));
       fireEvent.click(screen.getByTestId("add-error-toast"));
+
+      // Wait for toasts to appear
+      await waitFor(() => {
+        expect(screen.getByText("Success")).toBeInTheDocument();
+        expect(screen.getByText("Error")).toBeInTheDocument();
+      });
 
       fireEvent.click(screen.getByTestId("clear-all-toasts"));
 
@@ -430,17 +446,32 @@ describe("ToastProvider Component", () => {
   });
 
   describe("Toast Uniqueness", () => {
-    it("generates unique IDs for each toast", () => {
+    it("generates unique IDs for each toast", async () => {
       renderWithToastProvider(<TestComponent />);
 
       fireEvent.click(screen.getByTestId("add-success-toast"));
       fireEvent.click(screen.getByTestId("add-success-toast"));
 
-      const toasts = screen.getAllByRole("alert");
-      expect(toasts).toHaveLength(2);
+      // Wait for toasts to render
+      await waitFor(() => {
+        const toasts = screen.getAllByRole("alert");
+        expect(toasts).toHaveLength(2);
+      });
 
-      // Check that toasts have different content containers (unique IDs)
+      const toasts = screen.getAllByRole("alert");
+
+      // Check that toasts are different DOM elements
       expect(toasts[0]).not.toBe(toasts[1]);
+
+      // Verify they are separate elements in the DOM
+      expect(toasts[0]).toBeInTheDocument();
+      expect(toasts[1]).toBeInTheDocument();
+
+      // Check that both toasts are rendered with the same content but are distinct elements
+      toasts.forEach((toast) => {
+        expect(toast).toHaveTextContent("Success");
+        expect(toast).toHaveTextContent("Operation completed successfully");
+      });
     });
   });
 });

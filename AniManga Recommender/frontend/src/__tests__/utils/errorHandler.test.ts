@@ -173,6 +173,7 @@ describe("errorHandler Utility", () => {
         technicalDetails: "HTTP 400: Bad Request",
         statusCode: 400,
         originalError: new Error("Bad Request"),
+        isRetryable: false,
       };
 
       logError(parsedError, "TestComponent");
@@ -189,6 +190,7 @@ describe("errorHandler Utility", () => {
         technicalDetails: "HTTP 500: Internal Server Error",
         statusCode: 500,
         originalError: new Error("Server Error"),
+        isRetryable: true,
       };
 
       logError(parsedError, "TestComponent");
@@ -205,6 +207,7 @@ describe("errorHandler Utility", () => {
         technicalDetails: "Unknown error occurred",
         statusCode: null,
         originalError: new Error("Unknown"),
+        isRetryable: false,
       };
 
       logError(parsedError, "TestComponent");
@@ -221,6 +224,7 @@ describe("errorHandler Utility", () => {
         technicalDetails: "Test details",
         statusCode: null,
         originalError: new Error("Test"),
+        isRetryable: false,
       };
 
       logError(parsedError);
@@ -284,7 +288,7 @@ describe("errorHandler Utility", () => {
         .mockRejectedValueOnce(new Error("Temporary failure"))
         .mockResolvedValue(mockResult);
 
-      const result = await retryOperation(operation, 3, 10);
+      const result = await retryOperation(operation, { maxRetries: 3, baseDelayMs: 10 });
 
       expect((result as any).data).toBe("success");
       expect(operation).toHaveBeenCalledTimes(2);
@@ -293,7 +297,9 @@ describe("errorHandler Utility", () => {
     it("fails after max retries", async () => {
       const operation = jest.fn().mockRejectedValue(new Error("Persistent failure"));
 
-      await expect(retryOperation(operation, 2, 10)).rejects.toThrow("Persistent failure");
+      await expect(retryOperation(operation, { maxRetries: 2, baseDelayMs: 10 })).rejects.toThrow(
+        "Persistent failure"
+      );
       expect(operation).toHaveBeenCalledTimes(2);
     });
 
@@ -302,7 +308,9 @@ describe("errorHandler Utility", () => {
       clientError.response = { status: 400, data: {}, statusText: "Bad Request" };
       const operation = jest.fn().mockRejectedValue(clientError);
 
-      await expect(retryOperation(operation, 3, 10)).rejects.toThrow("Client error");
+      await expect(retryOperation(operation, { maxRetries: 3, baseDelayMs: 10 })).rejects.toThrow(
+        "Client error"
+      );
       expect(operation).toHaveBeenCalledTimes(1);
     });
 
@@ -312,7 +320,7 @@ describe("errorHandler Utility", () => {
       const mockResult = { data: "success" };
       const operation = jest.fn().mockRejectedValueOnce(timeoutError).mockResolvedValue(mockResult);
 
-      const result = await retryOperation(operation, 2, 10);
+      const result = await retryOperation(operation, { maxRetries: 2, baseDelayMs: 10 });
 
       expect((result as any).data).toBe("success");
       expect(operation).toHaveBeenCalledTimes(2);

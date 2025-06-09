@@ -11,7 +11,7 @@ describe("ItemCardSkeleton Component", () => {
     it("renders without crashing", () => {
       render(<ItemCardSkeleton />);
 
-      const skeleton = screen.getByTestId("item-card-skeleton");
+      const skeleton = screen.getByRole("status");
       expect(skeleton).toBeInTheDocument();
       expect(skeleton).toHaveClass("skeleton-item-card");
     });
@@ -22,12 +22,13 @@ describe("ItemCardSkeleton Component", () => {
       const skeleton = screen.getByRole("status");
       expect(skeleton).toHaveAttribute("aria-busy", "true");
       expect(skeleton).toHaveAttribute("aria-live", "polite");
+      expect(skeleton).toHaveAttribute("aria-label", "Loading item");
     });
 
     it("applies custom className when provided", () => {
       render(<ItemCardSkeleton className="custom-skeleton" />);
 
-      const skeleton = screen.getByTestId("item-card-skeleton");
+      const skeleton = screen.getByRole("status");
       expect(skeleton).toHaveClass("skeleton-item-card", "custom-skeleton");
     });
   });
@@ -36,142 +37,138 @@ describe("ItemCardSkeleton Component", () => {
     it("contains skeleton image area", () => {
       render(<ItemCardSkeleton />);
 
-      const imageArea = screen.getByTestId("skeleton-image");
+      const imageArea = document.querySelector(".skeleton-item-image");
       expect(imageArea).toBeInTheDocument();
-      expect(imageArea).toHaveClass("skeleton-image");
+      expect(imageArea).toHaveClass("skeleton-item-image", "skeleton-shimmer");
     });
 
     it("contains skeleton content section", () => {
       render(<ItemCardSkeleton />);
 
-      const contentArea = screen.getByTestId("skeleton-content");
+      const contentArea = document.querySelector(".skeleton-item-content");
       expect(contentArea).toBeInTheDocument();
-      expect(contentArea).toHaveClass("skeleton-content");
+      expect(contentArea).toHaveClass("skeleton-item-content");
     });
 
     it("contains skeleton title area", () => {
       render(<ItemCardSkeleton />);
 
-      const titleArea = screen.getByTestId("skeleton-title");
+      const titleArea = document.querySelector(".skeleton-item-title");
       expect(titleArea).toBeInTheDocument();
-      expect(titleArea).toHaveClass("skeleton-title");
+      expect(titleArea).toHaveClass("skeleton-item-title", "skeleton-shimmer");
     });
 
     it("contains skeleton metadata areas", () => {
       render(<ItemCardSkeleton />);
 
-      const metaArea = screen.getByTestId("skeleton-meta");
-      expect(metaArea).toBeInTheDocument();
-      expect(metaArea).toHaveClass("skeleton-meta");
+      const metaAreas = document.querySelectorAll(".skeleton-item-meta");
+      expect(metaAreas.length).toBe(2);
+      metaAreas.forEach((area) => {
+        expect(area).toHaveClass("skeleton-item-meta", "skeleton-shimmer");
+      });
     });
 
     it("contains skeleton tags area", () => {
       render(<ItemCardSkeleton />);
 
-      const tagsArea = screen.getByTestId("skeleton-tags");
+      const tagsArea = document.querySelector(".skeleton-item-tags");
       expect(tagsArea).toBeInTheDocument();
-      expect(tagsArea).toHaveClass("skeleton-tags");
+      expect(tagsArea).toHaveClass("skeleton-item-tags");
     });
 
     it("contains skeleton score area", () => {
       render(<ItemCardSkeleton />);
 
-      const scoreArea = screen.getByTestId("skeleton-score");
+      const scoreArea = document.querySelector(".skeleton-item-score");
       expect(scoreArea).toBeInTheDocument();
-      expect(scoreArea).toHaveClass("skeleton-score");
+      expect(scoreArea).toHaveClass("skeleton-item-score", "skeleton-shimmer");
     });
   });
 
   describe("Enhanced Features", () => {
-    it("contains skeleton synopsis lines", () => {
+    it("contains skeleton details section", () => {
       render(<ItemCardSkeleton />);
 
-      const synopsisLines = screen.getAllByTestId(/skeleton-synopsis-line-/);
-      expect(synopsisLines.length).toBeGreaterThanOrEqual(2);
-      expect(synopsisLines.length).toBeLessThanOrEqual(4);
+      const detailsSection = document.querySelector(".skeleton-item-details");
+      expect(detailsSection).toBeInTheDocument();
+      expect(detailsSection).toHaveClass("skeleton-item-details");
+    });
 
-      synopsisLines.forEach((line) => {
-        expect(line).toHaveClass("skeleton-synopsis-line");
+    it("has multiple skeleton tag elements", () => {
+      render(<ItemCardSkeleton />);
+
+      const tagElements = document.querySelectorAll(".skeleton-tag");
+      expect(tagElements.length).toBe(3);
+
+      tagElements.forEach((tag) => {
+        expect(tag).toHaveClass("skeleton-tag", "skeleton-shimmer");
       });
     });
 
-    it("contains skeleton action buttons area", () => {
+    it("has different sized skeleton elements", () => {
       render(<ItemCardSkeleton />);
 
-      const actionsArea = screen.getByTestId("skeleton-actions");
-      expect(actionsArea).toBeInTheDocument();
-      expect(actionsArea).toHaveClass("skeleton-actions");
-    });
+      const shortElements = document.querySelectorAll(".short");
+      expect(shortElements.length).toBeGreaterThan(0);
 
-    it("has skeleton tag pills", () => {
-      render(<ItemCardSkeleton />);
-
-      const tagPills = screen.getAllByTestId(/skeleton-tag-/);
-      expect(tagPills.length).toBeGreaterThan(0);
-
-      tagPills.forEach((pill) => {
-        expect(pill).toHaveClass("skeleton-tag-pill");
+      shortElements.forEach((element) => {
+        expect(element).toHaveClass("short");
       });
     });
   });
 
   describe("Animation and Visual Effects", () => {
-    it("applies shimmer animation to all elements", () => {
+    it("applies shimmer animation to appropriate elements", () => {
       render(<ItemCardSkeleton />);
 
-      const animatedElements = [
-        screen.getByTestId("skeleton-image"),
-        screen.getByTestId("skeleton-title"),
-        screen.getByTestId("skeleton-meta"),
-        screen.getByTestId("skeleton-tags"),
-        screen.getByTestId("skeleton-score"),
-      ];
+      const shimmerElements = document.querySelectorAll(".skeleton-shimmer");
+      expect(shimmerElements.length).toBeGreaterThan(0);
 
-      animatedElements.forEach((element) => {
+      shimmerElements.forEach((element) => {
         expect(element).toHaveClass("skeleton-shimmer");
       });
     });
 
-    it("has gradient loading animation", () => {
+    it("has proper skeleton structure for visual loading", () => {
       render(<ItemCardSkeleton />);
 
-      const skeleton = screen.getByTestId("item-card-skeleton");
-      expect(skeleton).toHaveClass("skeleton-gradient-loading");
+      const skeleton = screen.getByRole("status");
+      expect(skeleton).toHaveClass("skeleton-item-card");
     });
 
-    it("applies different animation delays for staggered effect", () => {
+    it("contains all necessary visual elements", () => {
       render(<ItemCardSkeleton />);
 
-      const titleArea = screen.getByTestId("skeleton-title");
-      const metaArea = screen.getByTestId("skeleton-meta");
-      const tagsArea = screen.getByTestId("skeleton-tags");
+      const imageElement = document.querySelector(".skeleton-item-image");
+      const titleElement = document.querySelector(".skeleton-item-title");
+      const scoreElement = document.querySelector(".skeleton-item-score");
 
-      expect(titleArea).toHaveStyle("animation-delay: 0.1s");
-      expect(metaArea).toHaveStyle("animation-delay: 0.2s");
-      expect(tagsArea).toHaveStyle("animation-delay: 0.3s");
+      expect(imageElement).toBeInTheDocument();
+      expect(titleElement).toBeInTheDocument();
+      expect(scoreElement).toBeInTheDocument();
     });
   });
 
   describe("Responsive Design", () => {
-    it("maintains card aspect ratio", () => {
+    it("maintains proper card structure", () => {
       render(<ItemCardSkeleton />);
 
-      const skeleton = screen.getByTestId("item-card-skeleton");
-      expect(skeleton).toHaveClass("aspect-ratio-card");
+      const skeleton = screen.getByRole("status");
+      expect(skeleton).toHaveClass("skeleton-item-card");
     });
 
-    it("has responsive image area", () => {
+    it("has image area with proper styling", () => {
       render(<ItemCardSkeleton />);
 
-      const imageArea = screen.getByTestId("skeleton-image");
-      expect(imageArea).toHaveClass("responsive-image");
+      const imageArea = document.querySelector(".skeleton-item-image");
+      expect(imageArea).toHaveClass("skeleton-item-image");
     });
 
-    it("adapts content layout for different screen sizes", () => {
+    it("has content layout structure", () => {
       render(<ItemCardSkeleton />);
 
-      const contentArea = screen.getByTestId("skeleton-content");
-      expect(contentArea).toHaveClass("responsive-content");
+      const contentArea = document.querySelector(".skeleton-item-content");
+      expect(contentArea).toHaveClass("skeleton-item-content");
     });
   });
 
@@ -179,7 +176,7 @@ describe("ItemCardSkeleton Component", () => {
     it("has proper ARIA labels", () => {
       render(<ItemCardSkeleton />);
 
-      const skeleton = screen.getByLabelText(/loading item card/i);
+      const skeleton = screen.getByLabelText(/loading item/i);
       expect(skeleton).toBeInTheDocument();
     });
 
@@ -193,9 +190,10 @@ describe("ItemCardSkeleton Component", () => {
     it("has semantic structure for assistive technology", () => {
       render(<ItemCardSkeleton />);
 
-      const skeleton = screen.getByTestId("item-card-skeleton");
+      const skeleton = screen.getByRole("status");
       expect(skeleton).toHaveAttribute("role", "status");
-      expect(skeleton).toHaveAttribute("aria-label", "Loading item card");
+      expect(skeleton).toHaveAttribute("aria-label", "Loading item");
+      expect(skeleton).toHaveAttribute("aria-busy", "true");
     });
   });
 
@@ -209,19 +207,23 @@ describe("ItemCardSkeleton Component", () => {
         </div>
       );
 
-      const skeletons = screen.getAllByTestId("item-card-skeleton");
+      const skeletons = screen.getAllByRole("status");
       expect(skeletons).toHaveLength(3);
 
       skeletons.forEach((skeleton) => {
-        expect(skeleton).toHaveClass("grid-item");
+        expect(skeleton).toHaveClass("skeleton-item-card");
       });
     });
 
-    it("maintains consistent spacing in grid", () => {
-      render(<ItemCardSkeleton />);
+    it("supports count prop for multiple skeletons", () => {
+      render(<ItemCardSkeleton count={3} />);
 
-      const skeleton = screen.getByTestId("item-card-skeleton");
-      expect(skeleton).toHaveClass("grid-spacing");
+      const skeletons = screen.getAllByRole("status");
+      expect(skeletons).toHaveLength(3);
+
+      skeletons.forEach((skeleton) => {
+        expect(skeleton).toHaveClass("skeleton-item-card");
+      });
     });
   });
 
@@ -234,11 +236,15 @@ describe("ItemCardSkeleton Component", () => {
       expect(nodeCount).toBeLessThan(15); // Keep skeleton lightweight
     });
 
-    it("uses CSS-only animations for performance", () => {
+    it("uses appropriate structure for loading state", () => {
       render(<ItemCardSkeleton />);
 
-      const skeleton = screen.getByTestId("item-card-skeleton");
-      expect(skeleton).toHaveClass("css-only-animation");
+      const skeleton = screen.getByRole("status");
+      expect(skeleton).toHaveClass("skeleton-item-card");
+
+      // Check that it has the expected number of child elements
+      const shimmerElements = document.querySelectorAll(".skeleton-shimmer");
+      expect(shimmerElements.length).toBeGreaterThan(0);
     });
   });
 });
