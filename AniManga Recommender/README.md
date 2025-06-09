@@ -178,6 +178,51 @@ docker-compose up --build
 3. Try searching and filtering functionality
 4. Click on an item to view details and recommendations
 
+## 🔧 Environment Setup
+
+### Required Environment Variables
+
+#### Backend Configuration (.env in /backend directory)
+
+```bash
+# Supabase Configuration
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_KEY=your_supabase_anon_key_here
+SUPABASE_SERVICE_KEY=your_supabase_service_role_key_here
+
+# JWT Configuration
+JWT_SECRET_KEY=your_super_secret_jwt_key_for_token_signing
+
+# Flask Configuration
+FLASK_ENV=development
+SECRET_KEY=your_flask_secret_key_for_sessions
+```
+
+#### Frontend Configuration (.env in /frontend directory)
+
+```bash
+# API Configuration
+REACT_APP_API_URL=http://localhost:5000
+
+# Supabase Configuration
+REACT_APP_SUPABASE_URL=https://your-project-id.supabase.co
+REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+```
+
+### Supabase Setup
+
+1. **Create Account**: Go to [supabase.com](https://supabase.com) and create an account
+2. **Create Project**: Click "New Project" and fill in project details
+3. **Get Credentials**: Go to Settings > API to find your keys
+
+### Generate Secret Keys
+
+```python
+import secrets
+print("JWT_SECRET_KEY:", secrets.token_urlsafe(32))
+print("SECRET_KEY:", secrets.token_urlsafe(32))
+```
+
 ## 📊 Data Preprocessing
 
 The application includes comprehensive data preprocessing scripts:
@@ -212,82 +257,173 @@ python explore_data.py
 python preprocess_data.py
 ```
 
-## 🔌 API Endpoints
+## 🚀 API Documentation
 
-### Core Endpoints
+### Base Information
 
-#### `GET /api/items`
+**Base URL:** `http://localhost:5000` (development) | `https://your-domain.com` (production)  
+**Authentication:** JWT Bearer Token  
+**Content-Type:** `application/json`  
+**Rate Limiting:** 10 requests/minute per authenticated user
 
-Retrieve paginated list of anime/manga items with filtering and search.
+### Authentication
+
+Protected endpoints require JWT token in Authorization header:
+
+```http
+Authorization: Bearer <jwt_token>
+```
+
+### Public Endpoints
+
+#### GET `/`
+
+Health check endpoint
+
+```http
+GET /
+```
+
+**Response:**
+
+```json
+{
+  "message": "Hello from AniManga Recommender Backend! Loaded 68598 items.",
+  "status": "healthy"
+}
+```
+
+#### GET `/api/items`
+
+Get paginated anime/manga items with filtering
+
+```http
+GET /api/items?page=1&per_page=20&q=attack&genre=action&min_score=8.0
+```
 
 **Query Parameters:**
 
 - `page` (int): Page number (default: 1)
-- `per_page` (int): Items per page (default: 30)
+- `per_page` (int): Items per page (default: 30, max: 50)
 - `q` (string): Search query
 - `media_type` (string): "anime" or "manga"
-- `genre` (string): Genre filter
-- `theme` (string): Theme filter
-- `demographic` (string): Demographic filter
-- `studio` (string): Studio filter (anime only)
-- `author` (string): Author filter (manga only)
-- `status` (string): Status filter
-- `min_score` (float): Minimum score filter
-- `year` (int): Year filter
-- `sort_by` (string): Sorting option
+- `genre` (string): Comma-separated genres
+- `min_score` (float): Minimum score (0-10)
+- `year` (int): Release year
 
 **Response:**
 
 ```json
 {
-  "items": [...],
-  "total_items": 1500,
-  "total_pages": 50,
-  "current_page": 1,
-  "items_per_page": 30
+  "items": [
+    {
+      "uid": "anime_16498",
+      "title": "Attack on Titan",
+      "media_type": "anime",
+      "score": 9.0,
+      "genres": ["Action", "Drama"],
+      "main_picture": "https://example.com/image.jpg",
+      "episodes": 25
+    }
+  ],
+  "total_items": 1205,
+  "total_pages": 61,
+  "current_page": 1
 }
 ```
 
-#### `GET /api/items/<uid>`
+#### GET `/api/items/<uid>`
 
-Get detailed information for a specific item.
+Get detailed item information
 
-**Response:** Single item object with all metadata.
+```http
+GET /api/items/anime_16498
+```
 
-#### `GET /api/recommendations/<uid>`
+#### GET `/api/recommendations/<uid>`
 
-Get personalized recommendations for a specific item.
+Get content-based recommendations
 
-**Query Parameters:**
+```http
+GET /api/recommendations/anime_16498?n=10
+```
 
-- `n` (int): Number of recommendations (default: 10)
+### Protected Endpoints
+
+#### GET `/api/auth/dashboard`
+
+Get user dashboard data
+
+```http
+GET /api/auth/dashboard
+Authorization: Bearer <token>
+```
 
 **Response:**
 
 ```json
 {
-  "recommendations": [...]
+  "user_stats": {
+    "total_anime_watched": 142,
+    "total_manga_read": 58,
+    "average_score": 7.8
+  },
+  "recent_activity": [
+    {
+      "type": "completed",
+      "item_title": "Attack on Titan",
+      "timestamp": "2024-01-15T08:30:00Z"
+    }
+  ],
+  "in_progress": [],
+  "plan_to_watch": []
 }
 ```
 
-#### `GET /api/distinct-values`
+#### GET `/api/auth/user-items`
 
-Get all available filter options for the frontend.
+Get user's anime/manga list
 
-**Response:**
+```http
+GET /api/auth/user-items?status=watching
+Authorization: Bearer <token>
+```
+
+#### POST `/api/auth/user-items/<uid>`
+
+Add/update item in user's list
+
+```http
+POST /api/auth/user-items/anime_16498
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "status": "completed",
+  "rating": 9,
+  "progress": 25
+}
+```
+
+### Error Responses
+
+All errors return consistent format:
 
 ```json
 {
-  "media_types": ["anime", "manga"],
-  "genres": [...],
-  "themes": [...],
-  "demographics": [...],
-  "studios": [...],
-  "authors": [...],
-  "statuses": [...],
-  "ratings": [...]
+  "error": "Error message",
+  "status": 400
 }
 ```
+
+**Status Codes:**
+
+- `200` - Success
+- `400` - Bad Request
+- `401` - Unauthorized
+- `404` - Not Found
+- `429` - Rate Limit Exceeded
+- `500` - Server Error
 
 ## 🤖 Recommendation Algorithm
 
@@ -306,6 +442,91 @@ The recommendation system uses **content-based filtering** with the following ap
 - Synopsis text
 - Studios/authors
 - User ratings and popularity
+
+## 🔧 Troubleshooting
+
+### Quick Diagnostics
+
+```bash
+# Backend health check
+curl http://localhost:5000/
+
+# Frontend check
+curl http://localhost:3000/
+
+# Database connection test (from backend directory)
+python -c "from supabase_client import SupabaseClient; client = SupabaseClient(); print('✅ Database connected successfully')"
+```
+
+### Common Issues & Solutions
+
+#### Environment Variables Not Found
+
+```
+ValueError: SUPABASE_URL and SUPABASE_KEY must be set in .env
+```
+
+**Solutions:**
+
+1. Create `.env` files in both `backend/` and `frontend/` directories
+2. Check file location and proper formatting
+3. Restart servers after creating .env files
+
+#### Python Dependencies Issues
+
+```
+ModuleNotFoundError: No module named 'flask'
+```
+
+**Solutions:**
+
+1. Activate virtual environment: `venv\Scripts\activate` (Windows) or `source venv/bin/activate` (macOS/Linux)
+2. Install dependencies: `pip install -r requirements.txt`
+3. Verify Python version: `python --version` (requires 3.10+)
+
+#### Backend Not Starting
+
+```
+Port 5000 is already in use
+```
+
+**Solutions:**
+
+1. Kill existing process: `netstat -ano | findstr :5000` then `taskkill /F /PID <PID>`
+2. Use different port: `set FLASK_RUN_PORT=5001` and update frontend .env
+3. Check firewall settings
+
+#### Authentication Issues
+
+```
+Error: No valid session token
+```
+
+**Solutions:**
+
+1. Sign out and sign in again to refresh token
+2. Clear browser storage: `localStorage.clear(); sessionStorage.clear();`
+3. Verify Supabase configuration matches between frontend and backend
+
+#### Performance Issues
+
+**Slow Data Loading:**
+
+- Check data size (large datasets require patience on first load)
+- Monitor memory usage (4GB+ RAM recommended)
+- Use pagination to reduce load
+
+**High Memory Usage:**
+
+- Reduce batch sizes in data loading
+- Clear browser cache and reload
+- Restart backend server to clear memory
+
+### Rate Limiting
+
+- 10 requests per minute per authenticated user
+- Wait 60 seconds before making new requests if exceeded
+- Rate limit headers included in responses
 
 ## 📁 Project Structure
 
@@ -390,6 +611,25 @@ pip install -r requirements.txt
 gunicorn app:app
 ```
 
+### Deployment Platforms
+
+**Vercel (Frontend):**
+
+```bash
+# Environment variables in Vercel dashboard
+REACT_APP_API_URL=https://your-api-domain.com
+REACT_APP_SUPABASE_URL=https://your-project-id.supabase.co
+REACT_APP_SUPABASE_ANON_KEY=your_anon_key_here
+```
+
+**Heroku (Backend):**
+
+```bash
+# Set via Heroku CLI
+heroku config:set SUPABASE_URL=https://your-project-id.supabase.co
+heroku config:set SUPABASE_KEY=your_anon_key_here
+```
+
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -422,7 +662,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📧 Contact
 
-**F** - [Michael Cho](mailto:cho.michael13524@gmail.com)
+**Developer** - [Michael Cho](mailto:cho.michael13524@gmail.com)
 
 **Project Link**: [https://github.com/MichaelCho6556/myProjects.git](https://github.com/MichaelCho6556/myProjects.git)
 

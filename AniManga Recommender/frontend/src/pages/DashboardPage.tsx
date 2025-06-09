@@ -1,3 +1,50 @@
+/**
+ * Dashboard page component that displays comprehensive user statistics and activity.
+ *
+ * This component serves as the main user dashboard for the AniManga Recommender,
+ * providing a complete overview of the user's anime and manga activity, progress,
+ * and personalized statistics. It implements real-time data loading, error handling,
+ * and responsive design patterns.
+ *
+ * Key Features:
+ * - User statistics cards with anime/manga metrics
+ * - Recent activity feed with timeline
+ * - User item lists organized by status (watching, completed, etc.)
+ * - Quick action shortcuts for common tasks
+ * - Real-time data synchronization across browser tabs
+ * - Professional loading states and error boundaries
+ *
+ * Data Sources:
+ * - User statistics from backend analytics
+ * - Recent activity from user action logs
+ * - Item lists from user's personal collections
+ * - Quick statistics for dashboard widgets
+ *
+ * Authentication:
+ * - Requires authenticated user session
+ * - Redirects to sign-in if user not authenticated
+ * - Uses Supabase authentication context
+ *
+ * @component
+ * @example
+ * ```tsx
+ * // Basic usage - automatically fetches data for authenticated user
+ * <DashboardPage />
+ *
+ * // Component handles all authentication checks and data loading internally
+ * // No props required as it uses authentication context
+ * ```
+ *
+ * @see {@link StatisticsCards} for user statistics display
+ * @see {@link ActivityFeed} for recent activity timeline
+ * @see {@link ItemLists} for user's anime/manga collections
+ * @see {@link QuickActions} for dashboard action shortcuts
+ * @see {@link DashboardData} for complete data interface
+ *
+ * @since 1.0.0
+ * @author Michael Cho
+ */
+
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
@@ -12,7 +59,29 @@ import ErrorFallback from "../components/Error/ErrorFallback";
 import "./DashboardPage.css";
 import { supabase } from "../lib/supabase";
 
-const DashboardPage: React.FC = () => {
+/**
+ * Dashboard page component interface.
+ *
+ * Currently, this component doesn't accept any props as it manages
+ * all state internally and relies on authentication context.
+ *
+ * @interface DashboardPageProps
+ */
+interface DashboardPageProps {
+  // No props currently - component is self-contained
+}
+
+/**
+ * Main dashboard page component implementation.
+ *
+ * Manages dashboard data loading, error states, and real-time synchronization
+ * across browser tabs. Implements comprehensive error boundaries and loading
+ * states for optimal user experience.
+ *
+ * @param props - Component props (currently empty)
+ * @returns JSX.Element representing the complete dashboard interface
+ */
+const DashboardPage: React.FC<DashboardPageProps> = () => {
   const { user } = useAuth();
   const { makeAuthenticatedRequest } = useAuthenticatedApi();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -27,7 +96,28 @@ const DashboardPage: React.FC = () => {
     }
   }, [user]);
 
-  const fetchDashboardData = async () => {
+  /**
+   * Fetches comprehensive dashboard data from the backend API.
+   *
+   * This function handles the complete data loading process including:
+   * - Session validation and token refresh
+   * - API request with proper authentication
+   * - Error handling and user feedback
+   * - Data validation and state updates
+   *
+   * @async
+   * @function fetchDashboardData
+   * @returns {Promise<void>} Promise that resolves when data is loaded
+   *
+   * @throws {Error} When session is invalid or API request fails
+   *
+   * @example
+   * ```typescript
+   * // Called automatically on component mount and user changes
+   * await fetchDashboardData();
+   * ```
+   */
+  const fetchDashboardData = async (): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
@@ -67,12 +157,37 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const refreshDashboard = async () => {
+  /**
+   * Refreshes dashboard data and provides user feedback.
+   *
+   * This function is called when users perform actions that might
+   * affect dashboard data or when manual refresh is requested.
+   *
+   * @async
+   * @function refreshDashboard
+   * @returns {Promise<void>} Promise that resolves when refresh is complete
+   *
+   * @example
+   * ```typescript
+   * // Called by QuickActions component or after user actions
+   * await refreshDashboard();
+   * ```
+   */
+  const refreshDashboard = async (): Promise<void> => {
     console.log("🔄 Refreshing dashboard data...");
     await fetchDashboardData();
   };
 
+  // Set up cross-tab synchronization for real-time updates
   useEffect(() => {
+    /**
+     * Handles storage events for cross-tab data synchronization.
+     *
+     * Listens for localStorage changes indicating that another tab
+     * has updated user data, triggering a dashboard refresh.
+     *
+     * @param e - Storage event from localStorage changes
+     */
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "animanga_list_updated") {
         console.log("📱 Detected list update, refreshing dashboard...");
@@ -87,7 +202,30 @@ const DashboardPage: React.FC = () => {
     };
   }, []);
 
-  const handleStatusUpdate = async (itemUid: string, newStatus: string, additionalData?: any) => {
+  /**
+   * Handles item status updates from child components.
+   *
+   * This function processes status changes from ItemLists component,
+   * updates the backend, and refreshes dashboard data to reflect changes.
+   *
+   * @async
+   * @function handleStatusUpdate
+   * @param itemUid - Unique identifier of the item to update
+   * @param newStatus - New status to set (watching, completed, etc.)
+   * @param additionalData - Optional additional data for the update
+   * @returns {Promise<void>} Promise that resolves when update is complete
+   *
+   * @example
+   * ```typescript
+   * // Called by ItemLists component when user changes item status
+   * await handleStatusUpdate("anime_123", "completed", { rating: 9 });
+   * ```
+   */
+  const handleStatusUpdate = async (
+    itemUid: string,
+    newStatus: string,
+    additionalData?: any
+  ): Promise<void> => {
     try {
       const updateData = {
         status: newStatus,
@@ -106,6 +244,7 @@ const DashboardPage: React.FC = () => {
     }
   };
 
+  // Render authentication required state
   if (!user) {
     return (
       <div className="dashboard-page">
@@ -117,6 +256,7 @@ const DashboardPage: React.FC = () => {
     );
   }
 
+  // Render loading state with skeleton
   if (loading) {
     return (
       <div className="dashboard-page">
@@ -125,6 +265,7 @@ const DashboardPage: React.FC = () => {
     );
   }
 
+  // Render error state with retry functionality
   if (error) {
     return (
       <div className="dashboard-page">
@@ -133,6 +274,7 @@ const DashboardPage: React.FC = () => {
     );
   }
 
+  // Render empty state for new users
   if (!dashboardData) {
     return (
       <div className="dashboard-page">
@@ -144,6 +286,7 @@ const DashboardPage: React.FC = () => {
     );
   }
 
+  // Render main dashboard interface
   return (
     <div className="dashboard-page">
       <div className="dashboard-container">

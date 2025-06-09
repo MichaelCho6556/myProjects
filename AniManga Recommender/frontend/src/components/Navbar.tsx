@@ -7,9 +7,59 @@ import ConnectionIndicator from "./Feedback/ConnectionIndicator";
 import "./Navbar.css";
 
 /**
- * Enhanced Navbar Component with integrated search functionality and security
+ * Enhanced Navigation Bar Component with integrated search and authentication.
  *
- * @returns JSX.Element
+ * This component provides the main navigation interface for the AniManga Recommender,
+ * featuring secure search functionality, user authentication controls, connection
+ * monitoring, and responsive design. It serves as the primary navigation hub
+ * accessible from all pages.
+ *
+ * Key Features:
+ * - Integrated search bar with CSRF protection and input sanitization
+ * - Dynamic authentication state display (Sign In/Sign Out)
+ * - Real-time connection status indicator
+ * - User profile display with welcome message
+ * - Responsive navigation menu with accessibility support
+ * - URL synchronization for search parameters
+ *
+ * Security Features:
+ * - CSRF token validation for search submissions
+ * - Input sanitization to prevent XSS attacks
+ * - Controlled input length limits
+ * - Secure display name handling
+ *
+ * Authentication Integration:
+ * - Uses AuthContext for user state management
+ * - Displays user welcome message with sanitized display name
+ * - Handles sign-out functionality with error handling
+ * - Shows/hides navigation items based on authentication status
+ *
+ * Search Functionality:
+ * - Synchronized with URL search parameters
+ * - Submits searches to home page with preserved filters
+ * - Real-time input validation and sanitization
+ * - Accessibility-compliant form structure
+ *
+ * @component
+ * @example
+ * ```tsx
+ * // Basic usage - automatically integrates with routing and auth
+ * <Navbar />
+ *
+ * // The component handles all state management internally
+ * // No props required as it uses context providers
+ * ```
+ *
+ * @see {@link useAuth} for authentication context integration
+ * @see {@link ConnectionIndicator} for network status monitoring
+ * @see {@link AuthModal} for authentication modal functionality
+ * @see {@link csrfUtils} for CSRF token management
+ * @see {@link sanitizeInput} for input security utilities
+ *
+ * @returns {JSX.Element} The complete navigation bar with all features
+ *
+ * @since 1.0.0
+ * @author AniManga Recommender Team
  */
 const Navbar: React.FC = () => {
   const { user, signOut, loading } = useAuth();
