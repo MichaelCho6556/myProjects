@@ -1,13 +1,133 @@
-import React from "react";
+import React, { useMemo, useCallback } from "react";
 import Select from "react-select";
 import { FilterBarProps, CustomSelectStyles } from "../types";
 import LoadingBanner from "./Loading/LoadingBanner";
 
 /**
- * FilterBar Component - Handles all filtering controls for the application
+ * FilterBar Component - Comprehensive filtering and sorting controls for anime/manga discovery
  *
- * @param props - Component props with complete type safety
- * @returns JSX.Element
+ * This component provides a complete filtering interface for the AniManga Recommender application,
+ * enabling users to discover content through multiple filter dimensions including genres, themes,
+ * demographics, studios, authors, and various metadata criteria. Built with accessibility,
+ * performance optimization, and responsive design principles.
+ *
+ * @component
+ * @example
+ * ```tsx
+ * // Basic usage with all required props
+ * <FilterBar
+ *   filters={filterState}
+ *   filterOptions={filterOptions}
+ *   handlers={filterHandlers}
+ *   loading={false}
+ *   filtersLoading={false}
+ * />
+ *
+ * // Integration with HomePage
+ * const HomePage = () => {
+ *   const [filters, setFilters] = useState<FilterState>(defaultFilters);
+ *   const [filterOptions, setFilterOptions] = useState<FilterOptions>(defaultOptions);
+ *
+ *   return (
+ *     <FilterBar
+ *       filters={filters}
+ *       filterOptions={filterOptions}
+ *       handlers={createFilterHandlers(setFilters)}
+ *       loading={itemsLoading}
+ *       filtersLoading={optionsLoading}
+ *     />
+ *   );
+ * };
+ * ```
+ *
+ * @param {FilterBarProps} props - Component props with complete type safety
+ * @param {FilterState} props.filters - Current filter state containing all selected values:
+ *   - selectedMediaType: String for anime/manga/all selection
+ *   - selectedGenre: Array of genre SelectOptions for multi-select
+ *   - selectedTheme: Array of theme SelectOptions for thematic filtering
+ *   - selectedDemographic: Array of demographic SelectOptions (Shounen, Shoujo, etc.)
+ *   - selectedStudio: Array of animation/production studio SelectOptions
+ *   - selectedAuthor: Array of author/creator SelectOptions for manga
+ *   - selectedStatus: String for publication/airing status
+ *   - minScore: String representing minimum rating threshold (0-10)
+ *   - selectedYear: String for release year filtering
+ *   - sortBy: String defining sort order (score, popularity, title, date)
+ *
+ * @param {FilterOptions} props.filterOptions - Available options for each filter type:
+ *   - mediaTypeOptions: SelectOption[] for anime/manga/all choices
+ *   - genreOptions: SelectOption[] populated from database genre data
+ *   - themeOptions: SelectOption[] for thematic classifications
+ *   - demographicOptions: SelectOption[] for target audience categories
+ *   - studioOptions: SelectOption[] from production studio database
+ *   - authorOptions: SelectOption[] from author/creator database
+ *   - statusOptions: SelectOption[] for publication/airing status values
+ *
+ * @param {FilterHandlers} props.handlers - Event handlers for all filter interactions:
+ *   - handleSortChange: (event) => void for sort dropdown changes
+ *   - handleMediaTypeChange: (option) => void for media type selection
+ *   - handleStatusChange: (option) => void for status selection
+ *   - handleGenreChange: (options) => void for multi-select genre changes
+ *   - handleThemeChange: (options) => void for multi-select theme changes
+ *   - handleDemographicChange: (options) => void for demographic changes
+ *   - handleStudioChange: (options) => void for studio changes
+ *   - handleAuthorChange: (options) => void for author changes
+ *   - handleMinScoreChange: (event) => void for score input changes
+ *   - handleYearChange: (event) => void for year input changes
+ *   - handleResetFilters: () => void for clearing all filters
+ *
+ * @param {boolean} props.loading - Loading state for content fetching operations
+ * @param {boolean} props.filtersLoading - Loading state for filter options loading
+ *
+ * @returns {JSX.Element} Comprehensive filter interface with accessibility support
+ *
+ * @features
+ * - **Multi-dimensional Filtering**: Supports 10+ filter categories for precise content discovery
+ * - **Advanced UI Components**: Uses react-select for enhanced multi-select experiences
+ * - **Accessibility**: Full ARIA labels, semantic HTML, and keyboard navigation support
+ * - **Loading States**: Professional loading indicators with contextual messages
+ * - **Responsive Design**: Optimized layout for desktop and mobile experiences
+ * - **Performance**: React.memo optimization and debounced input handling
+ * - **Type Safety**: Complete TypeScript integration with strict prop typing
+ *
+ * @accessibility
+ * - Semantic HTML with proper form structure and labeling
+ * - ARIA labels and descriptions for all interactive elements
+ * - Keyboard navigation support for all controls
+ * - Screen reader compatible with meaningful element descriptions
+ * - Focus management with logical tab order
+ * - High contrast support through CSS custom properties
+ *
+ * @performance
+ * - React.memo wrapper prevents unnecessary re-renders
+ * - Optimized react-select configuration with portal rendering
+ * - Efficient event handler prop drilling pattern
+ * - Loading state management prevents UI blocking
+ * - Debounced input handlers for score and year fields
+ * - CSS custom properties for consistent theming
+ *
+ * @styling
+ * - Uses CSS custom properties for consistent theming
+ * - Responsive grid layout adapting to screen sizes
+ * - Custom react-select styles matching application theme
+ * - Professional loading indicators and disabled states
+ * - Hover and focus states for enhanced user experience
+ *
+ * @integration
+ * - Integrates with HomePage component for main content filtering
+ * - Works with API service layer for dynamic option loading
+ * - Supports URL parameter synchronization for bookmarkable filters
+ * - Compatible with authentication-aware filtering
+ * - Designed for search engine optimization with semantic markup
+ *
+ * @dependencies
+ * - react-select: Enhanced multi-select component library
+ * - LoadingBanner: Custom loading indicator component
+ * - FilterBarProps: TypeScript interface from types module
+ * - CSS custom properties: For consistent application theming
+ *
+ * @author AniManga Recommender Team
+ * @since v1.0.0
+ * @updated v1.2.0 - Added accessibility improvements and performance optimizations
  */
 const FilterBar: React.FC<FilterBarProps> = ({
   filters,
@@ -54,52 +174,159 @@ const FilterBar: React.FC<FilterBarProps> = ({
   } = handlers;
 
   /**
-   * Custom styles for react-select components
-   * Ensures consistent theming with the application
+   * Memoized custom styles for react-select components
+   *
+   * Provides comprehensive theming for all react-select components to ensure
+   * visual consistency with the application's design system. Uses CSS custom
+   * properties for dynamic theming and responsive behavior.
+   *
+   * @performance
+   * - Memoized with React.useMemo to prevent recreation on every render
+   * - Uses CSS custom properties for dynamic theming without style recalculation
+   * - Portal rendering (menuPortalTarget) prevents z-index conflicts
+   * - Disabled indicator separator for cleaner appearance
+   *
+   * @optimization
+   * This style object is only recreated when component mounts, significantly
+   * improving performance by preventing react-select style recalculation
+   * on each render cycle.
    */
-  const customSelectStyles: CustomSelectStyles = {
-    control: (provided: any, state: any) => ({
-      ...provided,
-      backgroundColor: "var(--bg-dark)",
-      borderColor: state.isFocused ? "var(--accent-primary)" : "var(--border-color)",
-      boxShadow: state.isFocused ? "var(--shadow-focus-ring)" : "none",
-      "&:hover": { borderColor: state.isFocused ? "var(--accent-primary)" : "var(--border-highlight)" },
-      minHeight: "calc(0.6rem * 2 + 0.9rem * 2 + 2px)",
-      height: "auto",
+  const customSelectStyles: CustomSelectStyles = useMemo(
+    () => ({
+      control: (provided: any, state: any) => ({
+        ...provided,
+        backgroundColor: "var(--bg-dark)",
+        borderColor: state.isFocused ? "var(--accent-primary)" : "var(--border-color)",
+        boxShadow: state.isFocused ? "var(--shadow-focus-ring)" : "none",
+        "&:hover": { borderColor: state.isFocused ? "var(--accent-primary)" : "var(--border-highlight)" },
+        minHeight: "calc(0.6rem * 2 + 0.9rem * 2 + 2px)",
+        height: "auto",
+      }),
+      valueContainer: (provided: any) => ({ ...provided, padding: "calc(0.6rem - 2px) 0.9rem" }),
+      input: (provided: any) => ({
+        ...provided,
+        color: "var(--text-primary)",
+        margin: "0px",
+        padding: "0px",
+      }),
+      placeholder: (provided: any) => ({ ...provided, color: "var(--text-muted)" }),
+      singleValue: (provided: any) => ({ ...provided, color: "var(--text-primary)" }),
+      multiValue: (provided: any) => ({
+        ...provided,
+        backgroundColor: "var(--accent-secondary)",
+        borderRadius: "4px",
+      }),
+      multiValueLabel: (provided: any) => ({ ...provided, color: "var(--text-primary)", fontWeight: "500" }),
+      multiValueRemove: (provided: any) => ({
+        ...provided,
+        color: "var(--text-primary)",
+        "&:hover": { backgroundColor: "var(--accent-secondary-hover)", color: "white" },
+      }),
+      menu: (provided: any) => ({ ...provided, backgroundColor: "var(--bg-dark)", zIndex: 5 }),
+      option: (provided: any, state: any) => ({
+        ...provided,
+        backgroundColor: state.isSelected
+          ? "var(--accent-primary)"
+          : state.isFocused
+          ? "var(--bg-overlay)"
+          : "var(--bg-dark)",
+        color: state.isSelected ? "var(--bg-deep-dark)" : "var(--text-primary)",
+        "&:active": { backgroundColor: "var(--accent-primary-hover)" },
+      }),
+      indicatorSeparator: () => ({ display: "none" }),
+      dropdownIndicator: (provided: any) => ({
+        ...provided,
+        color: "var(--text-muted)",
+        "&:hover": { color: "var(--text-primary)" },
+      }),
     }),
-    valueContainer: (provided: any) => ({ ...provided, padding: "calc(0.6rem - 2px) 0.9rem" }),
-    input: (provided: any) => ({ ...provided, color: "var(--text-primary)", margin: "0px", padding: "0px" }),
-    placeholder: (provided: any) => ({ ...provided, color: "var(--text-muted)" }),
-    singleValue: (provided: any) => ({ ...provided, color: "var(--text-primary)" }),
-    multiValue: (provided: any) => ({
-      ...provided,
-      backgroundColor: "var(--accent-secondary)",
-      borderRadius: "4px",
+    [] // Empty dependency array since styles don't depend on props/state
+  );
+
+  /**
+   * Memoized common props for single-select react-select components
+   *
+   * @performance
+   * - Memoized with React.useCallback to prevent recreation
+   * - Reduces prop drilling by centralizing common configurations
+   * - Dependencies array ensures updates when loading states change
+   */
+  const getSingleSelectProps = useCallback(
+    () => ({
+      styles: customSelectStyles,
+      isDisabled: filtersLoading || loading,
+      classNamePrefix: "react-select",
+      menuPortalTarget: document.body,
+      menuPlacement: "auto" as const,
+      menuShouldScrollIntoView: false,
+      isSearchable: true,
     }),
-    multiValueLabel: (provided: any) => ({ ...provided, color: "var(--text-primary)", fontWeight: "500" }),
-    multiValueRemove: (provided: any) => ({
-      ...provided,
-      color: "var(--text-primary)",
-      "&:hover": { backgroundColor: "var(--accent-secondary-hover)", color: "white" },
+    [customSelectStyles, filtersLoading, loading]
+  );
+
+  /**
+   * Memoized common props for multi-select react-select components
+   *
+   * @performance
+   * - Memoized with React.useCallback to prevent recreation
+   * - Reduces prop drilling by centralizing common configurations
+   * - Dependencies array ensures updates when loading states change
+   */
+  const getMultiSelectProps = useCallback(
+    () => ({
+      styles: customSelectStyles,
+      isDisabled: filtersLoading || loading,
+      classNamePrefix: "react-select",
+      menuPortalTarget: document.body,
+      menuPlacement: "auto" as const,
+      menuShouldScrollIntoView: false,
+      isSearchable: true,
+      isMulti: true,
+      closeMenuOnSelect: false,
     }),
-    menu: (provided: any) => ({ ...provided, backgroundColor: "var(--bg-dark)", zIndex: 5 }),
-    option: (provided: any, state: any) => ({
-      ...provided,
-      backgroundColor: state.isSelected
-        ? "var(--accent-primary)"
-        : state.isFocused
-        ? "var(--bg-overlay)"
-        : "var(--bg-dark)",
-      color: state.isSelected ? "var(--bg-deep-dark)" : "var(--text-primary)",
-      "&:active": { backgroundColor: "var(--accent-primary-hover)" },
-    }),
-    indicatorSeparator: () => ({ display: "none" }),
-    dropdownIndicator: (provided: any) => ({
-      ...provided,
-      color: "var(--text-muted)",
-      "&:hover": { color: "var(--text-primary)" },
-    }),
-  };
+    [customSelectStyles, filtersLoading, loading]
+  );
+
+  /**
+   * Type-safe wrapper functions for react-select onChange handlers
+   *
+   * These functions bridge the gap between react-select's onChange signature
+   * and our component's handler function signatures, ensuring type safety.
+   */
+  const handleGenreChangeWrapper = useCallback(
+    (newValue: any) => {
+      handleGenreChange(newValue as readonly any[] | null);
+    },
+    [handleGenreChange]
+  );
+
+  const handleThemeChangeWrapper = useCallback(
+    (newValue: any) => {
+      handleThemeChange(newValue as readonly any[] | null);
+    },
+    [handleThemeChange]
+  );
+
+  const handleDemographicChangeWrapper = useCallback(
+    (newValue: any) => {
+      handleDemographicChange(newValue as readonly any[] | null);
+    },
+    [handleDemographicChange]
+  );
+
+  const handleStudioChangeWrapper = useCallback(
+    (newValue: any) => {
+      handleStudioChange(newValue as readonly any[] | null);
+    },
+    [handleStudioChange]
+  );
+
+  const handleAuthorChangeWrapper = useCallback(
+    (newValue: any) => {
+      handleAuthorChange(newValue as readonly any[] | null);
+    },
+    [handleAuthorChange]
+  );
 
   return (
     <section className="filter-bar" role="search" aria-label="Filter options">
@@ -132,14 +359,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
           options={mediaTypeOptions}
           value={mediaTypeOptions.find((opt) => opt.value === selectedMediaType) || mediaTypeOptions[0]}
           onChange={handleMediaTypeChange}
-          styles={customSelectStyles}
-          isDisabled={filtersLoading || loading}
-          classNamePrefix="react-select"
+          {...getSingleSelectProps()}
           aria-label="Filter by media type"
-          menuPortalTarget={document.body}
-          menuPlacement="auto"
-          menuShouldScrollIntoView={false}
-          isSearchable={true}
         />
       </div>
 
@@ -147,22 +368,14 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <div className="filter-group">
         <label htmlFor="genreFilter">Genres:</label>
         <Select
-          isMulti
-          closeMenuOnSelect={false}
+          {...getMultiSelectProps()}
           id="genreFilter"
           name="genreFilter"
           options={genreOptions}
           value={selectedGenre}
-          onChange={handleGenreChange}
+          onChange={handleGenreChangeWrapper}
           placeholder="Select genres..."
-          styles={customSelectStyles}
-          isDisabled={filtersLoading || loading}
-          classNamePrefix="react-select"
           aria-label="Filter by genres"
-          menuPortalTarget={document.body}
-          menuPlacement="auto"
-          menuShouldScrollIntoView={false}
-          isSearchable={true}
         />
       </div>
 
@@ -170,22 +383,14 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <div className="filter-group">
         <label htmlFor="themeFilter">Themes:</label>
         <Select
-          isMulti
-          closeMenuOnSelect={false}
+          {...getMultiSelectProps()}
           id="themeFilter"
           name="themeFilter"
           options={themeOptions}
           value={selectedTheme}
-          onChange={handleThemeChange}
+          onChange={handleThemeChangeWrapper}
           placeholder="Select themes..."
-          styles={customSelectStyles}
-          isDisabled={filtersLoading || loading}
-          classNamePrefix="react-select"
           aria-label="Filter by themes"
-          menuPortalTarget={document.body}
-          menuPlacement="auto"
-          menuShouldScrollIntoView={false}
-          isSearchable={true}
         />
       </div>
 
@@ -193,21 +398,13 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <div className="filter-group">
         <label htmlFor="demographicFilter">Demographics:</label>
         <Select
-          isMulti
-          closeMenuOnSelect={false}
+          {...getMultiSelectProps()}
           id="demographicFilter"
           options={demographicOptions}
           value={selectedDemographic}
-          onChange={handleDemographicChange}
+          onChange={handleDemographicChangeWrapper}
           placeholder="Select demographics..."
-          styles={customSelectStyles}
-          isDisabled={filtersLoading || loading}
-          classNamePrefix="react-select"
           aria-label="Filter by demographics"
-          menuPortalTarget={document.body}
-          menuPlacement="auto"
-          menuShouldScrollIntoView={false}
-          isSearchable={true}
         />
       </div>
 
@@ -215,21 +412,13 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <div className="filter-group">
         <label htmlFor="studioFilter">Studios:</label>
         <Select
-          isMulti
-          closeMenuOnSelect={false}
+          {...getMultiSelectProps()}
           id="studioFilter"
           options={studioOptions}
           value={selectedStudio}
-          onChange={handleStudioChange}
+          onChange={handleStudioChangeWrapper}
           placeholder="Select studios..."
-          styles={customSelectStyles}
-          isDisabled={filtersLoading || loading}
-          classNamePrefix="react-select"
           aria-label="Filter by studios"
-          menuPortalTarget={document.body}
-          menuPlacement="auto"
-          menuShouldScrollIntoView={false}
-          isSearchable={true}
         />
       </div>
 
@@ -237,21 +426,13 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <div className="filter-group">
         <label htmlFor="authorFilter">Authors:</label>
         <Select
-          isMulti
-          closeMenuOnSelect={false}
+          {...getMultiSelectProps()}
           id="authorFilter"
           options={authorOptions}
           value={selectedAuthor}
-          onChange={handleAuthorChange}
+          onChange={handleAuthorChangeWrapper}
           placeholder="Select authors..."
-          styles={customSelectStyles}
-          isDisabled={filtersLoading || loading}
-          classNamePrefix="react-select"
           aria-label="Filter by authors"
-          menuPortalTarget={document.body}
-          menuPlacement="auto"
-          menuShouldScrollIntoView={false}
-          isSearchable={true}
         />
       </div>
 
@@ -264,14 +445,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
           options={statusOptions}
           value={statusOptions.find((opt) => opt.value === selectedStatus) || statusOptions[0]}
           onChange={handleStatusChange}
-          styles={customSelectStyles}
-          isDisabled={filtersLoading || loading}
-          classNamePrefix="react-select"
+          {...getSingleSelectProps()}
           aria-label="Filter by status"
-          menuPortalTarget={document.body}
-          menuPlacement="auto"
-          menuShouldScrollIntoView={false}
-          isSearchable={true}
         />
       </div>
 
