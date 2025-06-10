@@ -116,15 +116,15 @@ class TestParseListColsOnLoad:
             'genres': ["['Action', 'Adventure'", "malformed[list]", "['Comedy']"]
         })
         
-        with patch('ast.literal_eval', side_effect=[ValueError("Test error"), ValueError("Test error"), ['Comedy']]):
-            result = parse_list_cols_on_load(df)
-            
-            # When ast.literal_eval fails, the except block treats all values as empty lists
-            # The function applies lambda x: [] if not isinstance(x, list) else x
-            assert result.loc[0, 'genres'] == []
-            assert result.loc[1, 'genres'] == []
-            # The third row should also become empty list due to the except block logic
-            assert result.loc[2, 'genres'] == []
+        # When ast.literal_eval fails, the function returns [] for unparseable values
+        # The third value "['Comedy']" should succeed and return ['Comedy']
+        result = parse_list_cols_on_load(df)
+        
+        # Values that can't be parsed become empty lists
+        assert result.loc[0, 'genres'] == []  # Invalid syntax
+        assert result.loc[1, 'genres'] == []  # Invalid syntax
+        # The third row should parse successfully since it's valid
+        assert result.loc[2, 'genres'] == ['Comedy']
 
 
 class TestFieldMapping:

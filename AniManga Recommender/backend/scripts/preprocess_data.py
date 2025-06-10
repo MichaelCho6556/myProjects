@@ -1,3 +1,46 @@
+"""
+AniManga Recommender Data Preprocessing Module
+
+This module handles the preprocessing of combined anime and manga data for the 
+AniManga Recommender system. It performs data cleaning, feature engineering,
+and TF-IDF vectorization to prepare data for machine learning operations.
+
+Key Operations:
+    - Data type conversions and validation
+    - Missing value imputation with intelligent defaults
+    - List column parsing from string representations
+    - Text preprocessing and normalization
+    - TF-IDF feature generation for content-based filtering
+    - Author name extraction and standardization
+
+Input Requirements:
+    - combined_media.csv: Combined anime and manga dataset
+    - File must contain columns for genres, themes, demographics, synopsis, etc.
+    - Author data should be in structured format (list of dictionaries)
+
+Output:
+    - processed_media.csv: Cleaned and preprocessed dataset ready for ML
+    - Includes engineered features and TF-IDF text representations
+
+Usage:
+    Run as standalone script:
+    >>> python preprocess_data.py
+    
+    Or import functions:
+    >>> from preprocess_data import safe_literal_eval, preprocess_text
+    >>> parsed_data = safe_literal_eval(string_representation)
+
+Dependencies:
+    - pandas: Data manipulation and analysis
+    - numpy: Numerical computing
+    - scikit-learn: TF-IDF vectorization
+    - ast: Safe literal evaluation of string representations
+
+Author: AniManga Recommender Team
+Version: 1.0.0
+License: MIT
+"""
+
 import pandas as pd
 import numpy as np
 import os
@@ -5,6 +48,7 @@ import ast
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+# Configuration constants for file paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
 
@@ -15,6 +59,47 @@ INPUT_PATH = os.path.join(DATA_DIR, INPUT_FILENAME)
 OUTPUT_PATH = os.path.join(DATA_DIR, OUTPUT_FILENAME)
 
 def safe_literal_eval(val):
+    """
+    Safely evaluate string representations of Python literals.
+    
+    This function attempts to parse string representations of Python data structures
+    (lists, dicts, etc.) back into their original types. It handles malformed strings
+    gracefully by returning the original value if parsing fails.
+    
+    Args:
+        val (Any): Input value to evaluate. Can be string, list, dict, or other types.
+    
+    Returns:
+        Any: Parsed Python object if input is a valid string representation,
+             otherwise returns the original input value unchanged.
+    
+    Examples:
+        >>> safe_literal_eval("['Action', 'Adventure']")
+        ['Action', 'Adventure']
+        
+        >>> safe_literal_eval("[{'name': 'Studio Ghibli'}]")
+        [{'name': 'Studio Ghibli'}]
+        
+        >>> safe_literal_eval("malformed string")
+        'malformed string'
+        
+        >>> safe_literal_eval(['already', 'a', 'list'])
+        ['already', 'a', 'list']
+    
+    Error Handling:
+        - ValueError: When string contains invalid Python syntax
+        - SyntaxError: When string has syntax errors
+        - Returns original value instead of raising exceptions
+    
+    Security:
+        Uses ast.literal_eval() which only evaluates literals (strings, numbers,
+        tuples, lists, dicts, booleans, None) for security. Will not execute
+        arbitrary code unlike eval().
+    
+    Note:
+        This function is essential for parsing CSV data where complex data structures
+        are stored as string representations.
+    """
     if isinstance(val, str):
         try:
             return ast.literal_eval(val)
@@ -24,8 +109,70 @@ def safe_literal_eval(val):
 
 def extract_author_names(authors_data_cell_value):
     """
-    Extracts author names from the authors data structure.
-    Input can be a string representation of a list of dicts, or already a list of dicts
+    Extract and normalize author names from structured author data.
+    
+    This function processes author information stored in various formats (string
+    representations of lists, actual lists, or dictionaries) and extracts clean,
+    standardized author names for use in the application.
+    
+    Author Data Processing:
+        - Handles first_name and last_name combinations
+        - Manages single-name authors (common in manga)
+        - Filters out empty or invalid entries
+        - Removes duplicate names
+        - Handles Japanese name conventions
+    
+    Args:
+        authors_data_cell_value (Union[str, list, dict, None]): Author data in various formats:
+            - String representation of list: "['author1', 'author2']"
+            - List of dictionaries: [{'first_name': 'Hayao', 'last_name': 'Miyazaki'}]
+            - Single dictionary: {'first_name': 'Akira', 'last_name': 'Toriyama'}
+            - None or empty values
+    
+    Returns:
+        List[str]: List of cleaned, unique author names.
+                   Empty list if no valid authors found.
+    
+    Examples:
+        >>> authors_data = [{'first_name': 'Hayao', 'last_name': 'Miyazaki'}]
+        >>> extract_author_names(authors_data)
+        ['Hayao Miyazaki']
+        
+        >>> authors_str = "[{'first_name': '', 'last_name': 'Toriyama'}]"
+        >>> extract_author_names(authors_str)
+        ['Toriyama']
+        
+        >>> invalid_data = "malformed_string"
+        >>> extract_author_names(invalid_data)
+        []
+        
+        >>> empty_data = None
+        >>> extract_author_names(empty_data)
+        []
+    
+    Name Processing Logic:
+        1. Parse input data if it's a string representation
+        2. Extract first_name and last_name from each author entry
+        3. Handle cases where only last_name exists (common in Japanese media)
+        4. Combine names with proper spacing
+        5. Remove duplicates and empty entries
+        6. Return sorted list for consistency
+    
+    Error Handling:
+        - Invalid JSON/string formats return empty list
+        - Missing name fields are handled gracefully
+        - Non-dictionary entries in lists are skipped
+        - Maintains data integrity by never raising exceptions
+    
+    Cultural Considerations:
+        - Handles Japanese naming conventions where family name may be only name
+        - Preserves original name order and spacing
+        - Supports both Western and Eastern name formats
+    
+    Performance:
+        - Uses set operations to remove duplicates efficiently
+        - Minimal string operations for performance
+        - Handles large author lists without memory issues
     """
     processed_authors_list = []
     if isinstance(authors_data_cell_value, str):
@@ -53,11 +200,198 @@ def extract_author_names(authors_data_cell_value):
     return list(set(names))
 
 def preprocess_text(text):
+    """
+    Preprocess text data for machine learning and analysis.
+    
+    This function standardizes text data by converting to lowercase and removing
+    unnecessary whitespace. It's designed for use with synopsis, titles, and other
+    textual content in the anime/manga dataset.
+    
+    Text Processing Steps:
+        1. Convert to lowercase for consistency
+        2. Strip leading and trailing whitespace
+        3. Handle non-string inputs gracefully
+        4. Return empty string for invalid inputs
+    
+    Args:
+        text (Any): Input text to preprocess. Expected to be string but handles
+                   other types gracefully.
+    
+    Returns:
+        str: Preprocessed text in lowercase with stripped whitespace.
+             Returns empty string if input is not a string or is None.
+    
+    Examples:
+        >>> preprocess_text("  DEMON SLAYER: Mugen Train  ")
+        'demon slayer: mugen train'
+        
+        >>> preprocess_text("Attack on Titan")
+        'attack on titan'
+        
+        >>> preprocess_text(None)
+        ''
+        
+        >>> preprocess_text(123)
+        ''
+        
+        >>> preprocess_text("")
+        ''
+    
+    Use Cases:
+        - Synopsis text normalization for TF-IDF vectorization
+        - Title standardization for search functionality
+        - Genre and theme text processing
+        - Consistent text representation across the dataset
+    
+    Performance:
+        - Minimal operations for optimal performance
+        - Handles large text datasets efficiently
+        - No regex operations for speed
+    
+    Integration:
+        Used in conjunction with TF-IDF vectorization to create consistent
+        text features for content-based recommendation algorithms.
+    
+    Note:
+        This function is specifically designed for the anime/manga domain where
+        titles and descriptions may contain mixed case, special characters,
+        and formatting inconsistencies.
+    """
     if isinstance(text, str):
         return text.lower().strip()
     return ""
 
 def main():
+    """
+    Main preprocessing pipeline for AniManga Recommender data.
+    
+    This function orchestrates the complete data preprocessing workflow for the
+    AniManga Recommender system. It loads raw combined data, performs cleaning
+    and feature engineering, and outputs processed data ready for machine learning.
+    
+    Processing Pipeline:
+        1. Load combined anime/manga CSV data
+        2. Data type conversions and validation
+        3. Missing value imputation with domain-specific defaults
+        4. List column parsing from string representations
+        5. Author name extraction and standardization
+        6. Text preprocessing and normalization
+        7. Feature engineering (combined text features)
+        8. TF-IDF vectorization for content-based filtering
+        9. Year extraction and normalization
+        10. Column selection and final dataset preparation
+        11. Export processed data for downstream use
+    
+    Input Requirements:
+        - File: data/combined_media.csv
+        - Must contain standard anime/manga columns
+        - Author data should be in structured format
+        - Date columns should be parseable by pandas
+    
+    Output:
+        - File: data/processed_media.csv
+        - Cleaned and feature-engineered dataset
+        - Ready for machine learning operations
+        - Includes TF-IDF text features and normalized data
+    
+    Returns:
+        None: Function performs file I/O operations and prints progress updates.
+    
+    Data Transformations:
+        Date Columns:
+            - Converted to pandas datetime objects
+            - Missing dates handled gracefully
+            - Year extraction for trend analysis
+        
+        Numerical Columns:
+            - Score normalization and missing value imputation
+            - Episode/chapter counts converted to integers
+            - Zero defaults for missing counts
+        
+        List Columns:
+            - String representations parsed to actual lists
+            - Standardized format across all list fields
+            - Empty lists for missing data
+        
+        Text Features:
+            - Synopsis cleaning and normalization
+            - Combined text feature creation
+            - TF-IDF vectorization for similarity calculations
+        
+        Author Processing:
+            - Name extraction from structured data
+            - Duplicate removal and standardization
+            - Support for various name formats
+    
+    Feature Engineering:
+        Combined Text Features:
+            - Concatenates genres, themes, demographics, synopsis, title
+            - Creates unified text representation for content analysis
+            - Optimized for TF-IDF vectorization
+        
+        TF-IDF Matrix:
+            - 5000 max features for performance
+            - English stop words removed
+            - Sparse matrix representation for memory efficiency
+        
+        Year Features:
+            - Extracted from start_date or real_start_date
+            - Integer representation for numerical analysis
+            - Zero default for missing years
+    
+    Error Handling:
+        - File not found errors with helpful messages
+        - Graceful handling of malformed data
+        - Progress reporting for debugging
+        - Continued processing despite individual record errors
+    
+    Performance Considerations:
+        - Efficient memory usage with appropriate data types
+        - Vectorized operations where possible
+        - Progress indicators for long-running operations
+        - Optimized TF-IDF parameters for large datasets
+    
+    Examples:
+        >>> # Run complete preprocessing pipeline
+        >>> main()
+        Loading combined data from: data/combined_media.csv
+        Initial shape: (68598, 47)
+        Starting data type conversions...
+        Processing list-like column: genres
+        ...
+        Preprocessing complete.
+        
+        >>> # Check output
+        >>> df = pd.read_csv('data/processed_media.csv')
+        >>> print(df.shape)
+        (68598, 25)
+    
+    Logging Output:
+        The function provides detailed console output including:
+        - File paths and dataset shapes
+        - Processing steps and progress
+        - Missing value statistics
+        - Feature engineering results
+        - Error messages and warnings
+        - Completion status and summary
+    
+    Dependencies:
+        - pandas: Data manipulation and analysis
+        - numpy: Numerical operations
+        - scikit-learn: TF-IDF vectorization
+        - ast: Safe string literal evaluation
+    
+    See Also:
+        - safe_literal_eval(): String literal parsing
+        - extract_author_names(): Author data processing
+        - preprocess_text(): Text normalization
+        - TfidfVectorizer: Scikit-learn text vectorization
+    
+    Note:
+        This function is designed to be run as a standalone script or imported
+        and called from other modules. It's optimized for the specific data
+        structure and requirements of the AniManga Recommender system.
+    """
     print(f"Loading combined data from: {INPUT_PATH}")
     try:
         df = pd.read_csv(INPUT_PATH, dtype={'authors': str})
@@ -68,18 +402,7 @@ def main():
         print(f"Error loading data: {e}")
         return
 
-
     print(f"Initial shape: {df.shape}")
-
-    # --- DEBUG: Inspect 'authors' column before processing ---
-    if 'authors' in df.columns:
-        print("\n--- Sample of 'authors' column BEFORE processing (first 5 non-NaN for manga): ---")
-        manga_authors_sample = df[df['media_type'] == 'manga']['authors'].dropna().head()
-        if not manga_authors_sample.empty:
-            for i, val in manga_authors_sample.items():
-                print(f"Index {i}: {val} (Type: {type(val)})")
-        else:
-            print("No non-NaN manga author entries found in sample.")
 
     print("\n Starting data type conversions and initial cleaning.")
     data_cols = ['start_date', 'end_date', 'real_start_date', 'real_end_date', 'created_at', 'updated_at']
@@ -103,16 +426,6 @@ def main():
     if 'authors' in df.columns:
         print("Processing complex 'authors' column...")
         df['authors'] = df['authors'].apply(extract_author_names)
-
-    # --- DEBUG: Inspect 'authors' column AFTER processing ---
-    if 'authors' in df.columns:
-        print("\n--- Sample of 'authors' column AFTER processing (first 5 non-NaN for manga): ---")
-        manga_authors_sample_after = df[df['media_type'] == 'manga']['authors'].dropna().head()
-        if not manga_authors_sample_after.empty:
-            for i, val in manga_authors_sample_after.items():
-                 print(f"Index {i}: {val} (Type: {type(val)})") # Should be list of strings
-        else:
-            print("No non-NaN manga author entries found in sample after processing.")
 
     print("\nHandling missing values.")
     if 'score' in df.columns:

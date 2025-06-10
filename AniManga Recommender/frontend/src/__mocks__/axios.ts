@@ -252,17 +252,12 @@ export const mockItemsResponse = (items: any[] = [], totalPages: number = 1, tot
     // Check for specific endpoint responses first
     const endpoints = Array.from(endpointResponses.entries());
     for (const [endpoint, endpointResponse] of endpoints) {
-      if (
-        normalizedUrl.includes(endpoint) &&
-        (!endpoint.includes("/items/") || normalizedUrl.match(/\/items\/[^\/\?]+/))
-      ) {
+      if (normalizedUrl.includes(endpoint)) {
         return Promise.resolve(endpointResponse);
       }
     }
 
-    if (normalizedUrl.includes("/items") && !normalizedUrl.match(/\/items\/[^\/\?]+/)) {
-      return Promise.resolve(response);
-    }
+    // Default handlers with fallbacks
     if (normalizedUrl.includes("/distinct-values")) {
       return Promise.resolve({
         data: {
@@ -278,6 +273,54 @@ export const mockItemsResponse = (items: any[] = [], totalPages: number = 1, tot
         },
       });
     }
+
+    if (normalizedUrl.includes("/items") && !normalizedUrl.match(/\/items\/[^\/\?]+/)) {
+      return Promise.resolve(response);
+    }
+
+    // Handle item detail endpoints (e.g., /items/123)
+    if (normalizedUrl.match(/\/items\/[^\/\?]+(?:\?|$)/)) {
+      return Promise.resolve({
+        data: {
+          uid: "test-uid-1",
+          title: "Test Anime Title",
+          media_type: "anime",
+          genres: ["Action", "Adventure"],
+          themes: ["School", "Military"],
+          demographics: ["Shounen"],
+          score: 8.5,
+          scored_by: 10000,
+          status: "Finished Airing",
+          episodes: 24,
+          start_date: "2020-01-01",
+          rating: "PG-13",
+          popularity: 100,
+          members: 50000,
+          favorites: 5000,
+          synopsis: "Test synopsis for anime",
+          producers: ["Test Producer"],
+          licensors: ["Test Licensor"],
+          studios: ["Test Studio"],
+          authors: [],
+          serializations: [],
+          image_url: "https://example.com/test-image.jpg",
+          title_synonyms: ["Alt Title"],
+        },
+      });
+    }
+
+    // Handle recommendations endpoints
+    if (normalizedUrl.includes("/recommendations/")) {
+      return Promise.resolve({
+        data: {
+          source_item_uid: "test-uid-1",
+          source_item_title: "Test Anime Title",
+          recommendations: [],
+        },
+      });
+    }
+
+    // Fallback for unknown endpoints
     return Promise.resolve({ data: {} });
   });
 };
@@ -297,6 +340,82 @@ export const mockDistinctValuesResponse = (values: any = {}) => {
   };
 
   endpointResponses.set("/distinct-values", { data: defaultValues });
+
+  // Update the mock implementation to handle the distinct-values endpoint
+  const originalImpl = mockAxios.get.getMockImplementation();
+  mockAxios.get.mockImplementation((url: string): Promise<any> => {
+    const normalizedUrl = url.replace(/^https?:\/\/[^\/]+/, "").replace(/^\/api/, "");
+
+    // Check for specific endpoint responses first
+    const endpoints = Array.from(endpointResponses.entries());
+    for (const [endpoint, endpointResponse] of endpoints) {
+      if (normalizedUrl.includes(endpoint)) {
+        return Promise.resolve(endpointResponse);
+      }
+    }
+
+    // Default handlers
+    if (normalizedUrl.includes("/distinct-values")) {
+      return Promise.resolve({ data: defaultValues });
+    }
+
+    if (normalizedUrl.includes("/items") && !normalizedUrl.match(/\/items\/[^\/\?]+/)) {
+      return Promise.resolve({
+        data: {
+          items: [],
+          total_items: 0,
+          total_pages: 1,
+          current_page: 1,
+          items_per_page: 30,
+        },
+      });
+    }
+
+    // Handle item detail endpoints (e.g., /items/123)
+    if (normalizedUrl.match(/\/items\/[^\/\?]+(?:\?|$)/)) {
+      return Promise.resolve({
+        data: {
+          uid: "test-uid-1",
+          title: "Test Anime Title",
+          media_type: "anime",
+          genres: ["Action", "Adventure"],
+          themes: ["School", "Military"],
+          demographics: ["Shounen"],
+          score: 8.5,
+          scored_by: 10000,
+          status: "Finished Airing",
+          episodes: 24,
+          start_date: "2020-01-01",
+          rating: "PG-13",
+          popularity: 100,
+          members: 50000,
+          favorites: 5000,
+          synopsis: "Test synopsis for anime",
+          producers: ["Test Producer"],
+          licensors: ["Test Licensor"],
+          studios: ["Test Studio"],
+          authors: [],
+          serializations: [],
+          image_url: "https://example.com/test-image.jpg",
+          title_synonyms: ["Alt Title"],
+        },
+      });
+    }
+
+    // Handle recommendations endpoints
+    if (normalizedUrl.includes("/recommendations/")) {
+      return Promise.resolve({
+        data: {
+          source_item_uid: "test-uid-1",
+          source_item_title: "Test Anime Title",
+          recommendations: [],
+        },
+      });
+    }
+
+    // Fallback for unknown endpoints
+    return Promise.resolve({ data: {} });
+  });
 };
 
 // Helper to mock error responses

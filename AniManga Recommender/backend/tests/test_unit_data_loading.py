@@ -63,7 +63,7 @@ class TestLoadDataAndTfidf:
             
             # Verify error message was printed
             print_calls = [str(call) for call in mock_print.call_args_list]
-            error_message_found = any('error loading data' in call.lower() 
+            error_message_found = any('error in load_data_and_tfidf_from_supabase' in call.lower() 
                                     for call in print_calls)
             assert error_message_found, f"Expected error message not found in: {print_calls}"
     
@@ -155,7 +155,7 @@ class TestLoadDataAndTfidf:
             
             # Should print error message
             print_calls = [str(call) for call in mock_print.call_args_list]
-            error_found = any('error loading data' in call.lower() for call in print_calls)
+            error_found = any('error in load_data_and_tfidf_from_supabase' in call.lower() for call in print_calls)
             assert error_found, f"Expected error message not found in: {print_calls}"
     
     @pytest.mark.unit
@@ -291,5 +291,5 @@ class TestDataLoadingIntegration:
             
             # Should handle connection error gracefully
             print_calls = [str(call) for call in mock_print.call_args_list]
-            error_found = any('error loading data' in call.lower() for call in print_calls)
+            error_found = any('error in load_data_and_tfidf_from_supabase' in call.lower() for call in print_calls)
             assert error_found, f"Expected error message not found in: {print_calls}" 

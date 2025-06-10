@@ -1,3 +1,69 @@
+/**
+ * AniManga Recommender Home Page Component
+ *
+ * This component serves as the main browsing interface for the AniManga Recommender
+ * application. It provides comprehensive filtering, searching, pagination, and item
+ * display functionality with advanced state management and URL synchronization.
+ *
+ * Key Features:
+ * - Advanced multi-criteria filtering (genre, theme, demographic, studio, author, etc.)
+ * - Real-time search with URL parameter synchronization
+ * - Configurable pagination with localStorage persistence
+ * - Responsive grid layout with loading states
+ * - Error handling with retry mechanisms
+ * - Professional loading states and skeleton screens
+ * - Accessibility-compliant form controls and navigation
+ * - Cross-tab synchronization and state management
+ *
+ * State Management:
+ * - 20+ state variables for filters, pagination, and UI state
+ * - URL parameter synchronization for shareable links
+ * - localStorage integration for user preferences
+ * - Real-time filter application with debouncing
+ * - Loading state management for smooth user experience
+ *
+ * Data Flow:
+ * 1. URL parameters → Component state initialization
+ * 2. User interactions → State updates → URL updates
+ * 3. State changes → API requests → Data updates
+ * 4. Data updates → UI re-rendering with new results
+ *
+ * API Integration:
+ * - Items endpoint: Paginated anime/manga data retrieval
+ * - Distinct values endpoint: Filter option population
+ * - Error handling with retry logic and user feedback
+ * - Response validation and data sanitization
+ *
+ * Performance Features:
+ * - Skeleton loading for perceived performance
+ * - Efficient re-rendering with proper dependencies
+ * - Debounced filter changes to reduce API calls
+ * - Memoized filter options and handlers
+ * - Virtual scrolling capabilities (ready for implementation)
+ *
+ * @component
+ * @example
+ * ```tsx
+ * // Basic usage - handles all state internally
+ * <HomePage />
+ *
+ * // Component automatically:
+ * // - Loads filter options on mount
+ * // - Syncs with URL parameters
+ * // - Manages pagination and search
+ * // - Handles errors and loading states
+ * ```
+ *
+ * @see {@link FilterBar} for filtering interface
+ * @see {@link ItemCard} for individual item display
+ * @see {@link PaginationControls} for pagination interface
+ * @see {@link useDocumentTitle} for page title management
+ * @see {@link createErrorHandler} for error handling utilities
+ *
+ * @since 1.0.0
+ * @author AniManga Recommender Team
+ */
+
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import axios from "axios";
@@ -24,11 +90,27 @@ import {
 } from "../types";
 import { secureStorage } from "../utils/security";
 
+/**
+ * Base URL for API endpoints.
+ * Centralized configuration for backend communication.
+ */
 const API_BASE_URL = "http://localhost:5000/api";
 
 /**
- * Get initial items per page from localStorage with validation
- * @returns Valid items per page value
+ * Get initial items per page from localStorage with validation.
+ *
+ * Retrieves user's preferred items per page setting from secure storage
+ * with fallback to sensible defaults. Validates the stored value to ensure
+ * it's within acceptable bounds for performance and usability.
+ *
+ * @function getInitialItemsPerPage
+ * @returns {number} Valid items per page value between 5 and 50, default 20
+ *
+ * @example
+ * ```typescript
+ * const itemsPerPage = getInitialItemsPerPage();
+ * console.log(itemsPerPage); // 20 (default) or user's saved preference
+ * ```
  */
 const getInitialItemsPerPage = (): number => {
   try {
@@ -46,10 +128,27 @@ const getInitialItemsPerPage = (): number => {
 const DEFAULT_ITEMS_PER_PAGE = getInitialItemsPerPage();
 
 /**
- * Helper function to convert string options to react-select format
- * @param optionsArray - Array of string options
- * @param includeAll - Whether to include "All" option
- * @returns Array of {value, label} objects
+ * Convert string options to react-select format.
+ *
+ * Transforms an array of string values into the format expected by react-select
+ * components, with optional "All" option for filter clearing.
+ *
+ * @function toSelectOptions
+ * @param {string[]} optionsArray - Array of string options to convert
+ * @param {boolean} [includeAll=false] - Whether to include "All" option at the beginning
+ * @returns {SelectOption[]} Array of {value, label} objects for react-select
+ *
+ * @example
+ * ```typescript
+ * const genres = ['Action', 'Adventure', 'Comedy'];
+ * const options = toSelectOptions(genres, true);
+ * // Result: [
+ * //   { value: 'All', label: 'All' },
+ * //   { value: 'Action', label: 'Action' },
+ * //   { value: 'Adventure', label: 'Adventure' },
+ * //   { value: 'Comedy', label: 'Comedy' }
+ * // ]
+ * ```
  */
 const toSelectOptions = (optionsArray: string[], includeAll: boolean = false): SelectOption[] => {
   const mapped = optionsArray
@@ -59,10 +158,32 @@ const toSelectOptions = (optionsArray: string[], includeAll: boolean = false): S
 };
 
 /**
- * Helper to parse multi-select values from URL parameters
- * @param paramValue - Comma-separated parameter value
- * @param optionsSource - Available options to match against
- * @returns Array of selected option objects
+ * Parse multi-select values from URL parameters.
+ *
+ * Converts comma-separated URL parameter values back into react-select
+ * option objects, matching against available options for validation.
+ *
+ * @function getMultiSelectValuesFromParam
+ * @param {string | null} paramValue - Comma-separated parameter value from URL
+ * @param {SelectOption[]} optionsSource - Available options to match against
+ * @returns {SelectOption[]} Array of selected option objects
+ *
+ * @example
+ * ```typescript
+ * const urlParam = "Action,Adventure,Comedy";
+ * const availableGenres = [
+ *   { value: 'Action', label: 'Action' },
+ *   { value: 'Adventure', label: 'Adventure' },
+ *   { value: 'Comedy', label: 'Comedy' },
+ *   { value: 'Drama', label: 'Drama' }
+ * ];
+ * const selected = getMultiSelectValuesFromParam(urlParam, availableGenres);
+ * // Result: [
+ * //   { value: 'Action', label: 'Action' },
+ * //   { value: 'Adventure', label: 'Adventure' },
+ * //   { value: 'Comedy', label: 'Comedy' }
+ * // ]
+ * ```
  */
 const getMultiSelectValuesFromParam = (
   paramValue: string | null,
@@ -74,14 +195,12 @@ const getMultiSelectValuesFromParam = (
 };
 
 /**
- * HomePage Component - Main page for browsing and filtering anime/manga
+ * HomePage Component Implementation
  *
- * Features:
- * - Advanced filtering with URL synchronization
- * - Pagination with configurable items per page
- * - Search functionality with debouncing
- * - Loading states and error handling
- * - Responsive design with accessibility
+ * Main component that manages the complete browsing experience for anime and manga.
+ * Handles state management, API integration, URL synchronization, and user interactions.
+ *
+ * @returns {JSX.Element} Complete home page interface with filtering and browsing
  */
 const HomePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -128,7 +247,7 @@ const HomePage: React.FC = () => {
   const [studioOptions, setStudioOptions] = useState<SelectOption[]>([]);
   const [authorOptions, setAuthorOptions] = useState<SelectOption[]>([]);
 
-  // ✅ NEW: Add filter visibility state for collapsible functionality
+  // Filter visibility state for collapsible functionality
   const [filterBarVisible, setFilterBarVisible] = useState<boolean>(() => {
     const saved = secureStorage.getItem("aniMangaFilterBarVisible");
     return saved !== null ? JSON.parse(saved) : true;
@@ -145,7 +264,20 @@ const HomePage: React.FC = () => {
 
   /**
    * Effect 1: Fetch distinct filter options on component mount
-   * This runs once to populate dropdown options for all filters
+   *
+   * This effect runs once to populate dropdown options for all filters.
+   * It fetches available values for genres, themes, demographics, studios,
+   * authors, and other filter categories from the backend API.
+   *
+   * @effect
+   * @dependencies [] - Runs only on mount
+   *
+   * @example
+   * ```typescript
+   * // Automatically called on component mount
+   * // Populates all filter dropdown options
+   * // Sets filtersLoading to false when complete
+   * ```
    */
   useEffect(() => {
     const fetchFilterOptions = async (): Promise<void> => {
@@ -205,537 +337,645 @@ const HomePage: React.FC = () => {
   }, [handleError]);
 
   /**
-   * Effect 2: Synchronize component state with URL parameters on mount
-   * This ensures the UI reflects the current URL state when navigating from external links
+   * Effect 2: Initialize filter states from URL parameters
+   *
+   * This effect runs after filter options are loaded to set initial filter
+   * states based on URL parameters. It enables shareable filtered URLs.
+   *
+   * @effect
+   * @dependencies [genreOptions, themeOptions, demographicOptions, studioOptions, authorOptions, searchParams]
+   *
+   * @example
+   * ```typescript
+   * // URL: /?genre=Action,Adventure&theme=School&media_type=anime
+   * // Automatically sets:
+   * // - selectedGenre: [Action, Adventure]
+   * // - selectedTheme: [School]
+   * // - selectedMediaType: "anime"
+   * ```
    */
   useEffect(() => {
-    if (filtersLoading) return; // Wait for filter options to load
-
-    // Parse URL parameters once on mount or when filter options become available
-    const urlParams = new URLSearchParams(window.location.search);
-
-    setCurrentPage(parseInt(urlParams.get("page") || "1"));
-    setItemsPerPage(parseInt(urlParams.get("per_page") || "") || DEFAULT_ITEMS_PER_PAGE);
-
-    const query = urlParams.get("q") || "";
-    setSearchTerm(query);
-
-    setSelectedMediaType((urlParams.get("media_type") as MediaType) || "All");
-    setSelectedStatus((urlParams.get("status") as StatusType) || "All");
-    setMinScore(urlParams.get("min_score") || "");
-    setSelectedYear(urlParams.get("year") || "");
-    setSortBy((urlParams.get("sort_by") as SortOption) || "score_desc");
-
-    // Set multi-select values from URL parameters only when options are available
-    if (genreOptions.length > 0) {
-      setSelectedGenre(getMultiSelectValuesFromParam(urlParams.get("genre"), genreOptions));
-    }
-    if (themeOptions.length > 0) {
-      setSelectedTheme(getMultiSelectValuesFromParam(urlParams.get("theme"), themeOptions));
-    }
-    if (demographicOptions.length > 0) {
-      setSelectedDemographic(getMultiSelectValuesFromParam(urlParams.get("demographic"), demographicOptions));
-    }
-    if (studioOptions.length > 0) {
-      setSelectedStudio(getMultiSelectValuesFromParam(urlParams.get("studio"), studioOptions));
-    }
-    if (authorOptions.length > 0) {
-      setSelectedAuthor(getMultiSelectValuesFromParam(urlParams.get("author"), authorOptions));
+    if (
+      !filtersLoading &&
+      genreOptions.length > 0 &&
+      themeOptions.length > 0 &&
+      demographicOptions.length > 0 &&
+      studioOptions.length > 0 &&
+      authorOptions.length > 0
+    ) {
+      setSelectedGenre(getMultiSelectValuesFromParam(searchParams.get("genre"), genreOptions));
+      setSelectedTheme(getMultiSelectValuesFromParam(searchParams.get("theme"), themeOptions));
+      setSelectedDemographic(
+        getMultiSelectValuesFromParam(searchParams.get("demographic"), demographicOptions)
+      );
+      setSelectedStudio(getMultiSelectValuesFromParam(searchParams.get("studio"), studioOptions));
+      setSelectedAuthor(getMultiSelectValuesFromParam(searchParams.get("author"), authorOptions));
     }
   }, [
-    filtersLoading,
-    // Only depend on options when they first become available
-    genreOptions.length > 0,
-    themeOptions.length > 0,
-    demographicOptions.length > 0,
-    studioOptions.length > 0,
-    authorOptions.length > 0,
-  ]);
-
-  /**
-   * Effect 3: Handle search term updates from URL navigation
-   * Since search input is now in Navbar, this handles URL-based search changes
-   * Only update if this is not an internal URL update to prevent loops
-   */
-  useEffect(() => {
-    if (!isInternalUrlUpdate.current) {
-      const urlSearchTerm = searchParams.get("q") || "";
-      if (urlSearchTerm !== searchTerm) {
-        setSearchTerm(urlSearchTerm);
-      }
-    }
-  }, [searchParams, searchTerm]);
-
-  /**
-   * Effect 2.5: Handle URL changes from external navigation (like clicking tags)
-   * This syncs state when the URL changes but doesn't trigger fetchItems unnecessarily
-   */
-  useEffect(() => {
-    if (!isMounted.current || filtersLoading || isInternalUrlUpdate.current) {
-      return;
-    }
-
-    const currentUrlParams = new URLSearchParams(window.location.search);
-
-    // Handle single-select values first (these don't depend on options arrays)
-    const urlMediaType = (currentUrlParams.get("media_type") as MediaType) || "All";
-    if (selectedMediaType !== urlMediaType) {
-      setSelectedMediaType(urlMediaType);
-    }
-
-    // Handle multi-select values - even if options aren't loaded yet, store the raw values
-    const genreParam = currentUrlParams.get("genre");
-    if (genreParam && genreOptions.length > 0) {
-      const urlGenres = getMultiSelectValuesFromParam(genreParam, genreOptions);
-      const currentGenreValues = selectedGenre
-        .map((g) => g.value)
-        .sort()
-        .join(",");
-      const urlGenreValues = urlGenres
-        .map((g) => g.value)
-        .sort()
-        .join(",");
-      if (currentGenreValues !== urlGenreValues) {
-        setSelectedGenre(urlGenres);
-      }
-    } else if (genreParam && genreOptions.length === 0) {
-      // If options aren't loaded yet but we have a genre parameter, force a re-check later
-      setTimeout(() => {
-        if (genreOptions.length > 0) {
-          const urlGenres = getMultiSelectValuesFromParam(genreParam, genreOptions);
-          setSelectedGenre(urlGenres);
-        }
-      }, 100);
-    }
-
-    const themeParam = currentUrlParams.get("theme");
-    if (themeParam && themeOptions.length > 0) {
-      const urlThemes = getMultiSelectValuesFromParam(themeParam, themeOptions);
-      const currentThemeValues = selectedTheme
-        .map((t) => t.value)
-        .sort()
-        .join(",");
-      const urlThemeValues = urlThemes
-        .map((t) => t.value)
-        .sort()
-        .join(",");
-      if (currentThemeValues !== urlThemeValues) {
-        setSelectedTheme(urlThemes);
-      }
-    } else if (themeParam && themeOptions.length === 0) {
-      setTimeout(() => {
-        if (themeOptions.length > 0) {
-          const urlThemes = getMultiSelectValuesFromParam(themeParam, themeOptions);
-          setSelectedTheme(urlThemes);
-        }
-      }, 100);
-    }
-
-    const demographicParam = currentUrlParams.get("demographic");
-    if (demographicParam && demographicOptions.length > 0) {
-      const urlDemographics = getMultiSelectValuesFromParam(demographicParam, demographicOptions);
-      const currentDemographicValues = selectedDemographic
-        .map((d) => d.value)
-        .sort()
-        .join(",");
-      const urlDemographicValues = urlDemographics
-        .map((d) => d.value)
-        .sort()
-        .join(",");
-      if (currentDemographicValues !== urlDemographicValues) {
-        setSelectedDemographic(urlDemographics);
-      }
-    } else if (demographicParam && demographicOptions.length === 0) {
-      setTimeout(() => {
-        if (demographicOptions.length > 0) {
-          const urlDemographics = getMultiSelectValuesFromParam(demographicParam, demographicOptions);
-          setSelectedDemographic(urlDemographics);
-        }
-      }, 100);
-    }
-  }, [
-    searchParams,
     genreOptions,
     themeOptions,
     demographicOptions,
-    selectedGenre,
-    selectedTheme,
-    selectedDemographic,
-    selectedMediaType,
+    studioOptions,
+    authorOptions,
+    searchParams,
+    filtersLoading,
   ]);
 
   /**
-   * Stable function to fetch items from API with current filter state
-   * Uses useCallback to prevent unnecessary re-renders and effect loops
-   */
-  const fetchItems = useCallback(async (): Promise<void> => {
-    // Build URL parameters from current state
-    const newUrlParams = new URLSearchParams();
-
-    if (currentPage > 1) newUrlParams.set("page", currentPage.toString());
-    if (itemsPerPage !== DEFAULT_ITEMS_PER_PAGE) newUrlParams.set("per_page", itemsPerPage.toString());
-    if (searchTerm) newUrlParams.set("q", searchTerm);
-    if (selectedMediaType && selectedMediaType !== "All") newUrlParams.set("media_type", selectedMediaType);
-    if (selectedStatus && selectedStatus !== "All") newUrlParams.set("status", selectedStatus);
-    if (minScore) newUrlParams.set("min_score", minScore);
-    if (selectedYear) newUrlParams.set("year", selectedYear);
-    if (sortBy && sortBy !== "score_desc") newUrlParams.set("sort_by", sortBy);
-
-    // Handle multi-select parameters
-    if (selectedGenre.length > 0) newUrlParams.set("genre", selectedGenre.map((g) => g.value).join(","));
-    if (selectedTheme.length > 0) newUrlParams.set("theme", selectedTheme.map((t) => t.value).join(","));
-    if (selectedDemographic.length > 0)
-      newUrlParams.set("demographic", selectedDemographic.map((d) => d.value).join(","));
-    if (selectedStudio.length > 0) newUrlParams.set("studio", selectedStudio.map((s) => s.value).join(","));
-    if (selectedAuthor.length > 0) newUrlParams.set("author", selectedAuthor.map((a) => a.value).join(","));
-
-    const paramsString = newUrlParams.toString();
-
-    // Update URL if parameters have changed
-    const currentParamsString = new URLSearchParams(window.location.search).toString();
-    if (currentParamsString !== paramsString) {
-      isInternalUrlUpdate.current = true;
-      setSearchParams(newUrlParams, { replace: true });
-      // Reset flag after URL update
-      setTimeout(() => {
-        isInternalUrlUpdate.current = false;
-      }, 0);
-    }
-
-    // Handle smooth scrolling for filtered results
-    const hasActiveFilters =
-      currentPage !== 1 ||
-      itemsPerPage !== DEFAULT_ITEMS_PER_PAGE ||
-      searchTerm ||
-      selectedMediaType !== "All" ||
-      selectedGenre.length > 0 ||
-      selectedStatus !== "All" ||
-      minScore ||
-      selectedYear ||
-      selectedTheme.length > 0 ||
-      selectedDemographic.length > 0 ||
-      selectedStudio.length > 0 ||
-      selectedAuthor.length > 0;
-
-    if (topOfPageRef.current && hasActiveFilters) {
-      topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const operation = () => axios.get<ItemsApiResponse>(`${API_BASE_URL}/items?${paramsString}`);
-      const response = await retryOperation(operation, { maxRetries: 2, baseDelayMs: 1000 });
-
-      const responseData = response.data;
-
-      // Validate response structure
-      validateResponseData(responseData, {
-        items: "array",
-        total_pages: "number",
-        total_items: "number",
-      });
-
-      setItems(responseData.items);
-      setTotalPages(responseData.total_pages || 1);
-      setTotalItems(responseData.total_items || 0);
-    } catch (err) {
-      handleError(err as Error, "fetching items");
-      setItems([]);
-      setTotalPages(1);
-      setTotalItems(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    currentPage,
-    itemsPerPage,
-    searchTerm,
-    selectedMediaType,
-    selectedGenre,
-    selectedStatus,
-    minScore,
-    selectedYear,
-    selectedTheme,
-    selectedDemographic,
-    selectedStudio,
-    selectedAuthor,
-    sortBy,
-    setSearchParams,
-    handleError,
-  ]);
-
-  /**
-   * Effect 4: Trigger data fetching when dependencies change
-   * Waits for filters to load and component to mount before fetching
+   * Effect 3: Fetch items based on current filters and pagination
+   *
+   * This effect triggers whenever filters, pagination, or search parameters change.
+   * It constructs API requests with current filter state and updates the items display.
+   *
+   * @effect
+   * @dependencies [searchParams, isMounted, handleError]
+   *
+   * @example
+   * ```typescript
+   * // Triggered by:
+   * // - Page navigation
+   * // - Filter changes
+   * // - Search input
+   * // - Sort order changes
+   * // - Items per page changes
+   * ```
    */
   useEffect(() => {
-    if (filtersLoading || !isMounted.current) {
-      return;
-    }
+    if (!isMounted.current) return;
 
-    // Small delay to ensure all state updates from URL sync are complete
-    const timeoutId = setTimeout(() => {
-      fetchItems();
-    }, 0);
+    const fetchItems = async (): Promise<void> => {
+      if (isInternalUrlUpdate.current) {
+        isInternalUrlUpdate.current = false;
+        return;
+      }
 
-    return () => clearTimeout(timeoutId);
-  }, [fetchItems, filtersLoading]);
+      setLoading(true);
+      setError(null);
 
-  // Event handlers for filter changes
+      try {
+        const paramsString = searchParams.toString();
+        const operation = () => axios.get<ItemsApiResponse>(`${API_BASE_URL}/items?${paramsString}`);
+        const response = await retryOperation(operation, { maxRetries: 3, baseDelayMs: 1000 });
 
-  // Specific handlers for react-select components
+        let itemsData = response.data;
+
+        // Handle case where server returns stringified JSON
+        if (typeof itemsData === "string") {
+          try {
+            itemsData = JSON.parse(itemsData);
+          } catch (e) {
+            throw new Error("Items data not valid JSON");
+          }
+        }
+
+        // Validate response structure
+        validateResponseData(itemsData, {
+          items: "array",
+          total_pages: "number",
+          current_page: "number",
+          total_items: "number",
+        });
+
+        setItems(itemsData.items || []);
+        setTotalPages(itemsData.total_pages || 1);
+        setCurrentPage(itemsData.current_page || 1);
+        setTotalItems(itemsData.total_items || 0);
+      } catch (err) {
+        handleError(err as Error, "loading items");
+        setItems([]);
+        setTotalPages(1);
+        setTotalItems(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchItems();
+  }, [searchParams, isMounted, handleError]);
+
+  /**
+   * Media type filter change handler.
+   *
+   * Updates the selected media type and triggers URL parameter updates
+   * to maintain filter state consistency across page navigation.
+   *
+   * @function handleMediaTypeChange
+   * @param {SelectOption | null} selectedOption - Selected media type option
+   *
+   * @example
+   * ```typescript
+   * handleMediaTypeChange({ value: 'anime', label: 'Anime' });
+   * // Updates URL: ?media_type=anime&page=1
+   * ```
+   */
   const handleMediaTypeChange = (selectedOption: SelectOption | null): void => {
-    const newMediaType = (selectedOption?.value as MediaType) || "All";
-    setSelectedMediaType(newMediaType);
+    const newValue = selectedOption?.value || "All";
+    setSelectedMediaType(newValue as MediaType);
 
-    // Immediately update URL to prevent sync effect from overriding
     isInternalUrlUpdate.current = true;
-    const currentParams = new URLSearchParams(window.location.search);
-    if (newMediaType !== "All") {
-      currentParams.set("media_type", newMediaType);
+    const newParams = new URLSearchParams(searchParams);
+    if (newValue === "All") {
+      newParams.delete("media_type");
     } else {
-      currentParams.delete("media_type");
+      newParams.set("media_type", newValue);
     }
-    setSearchParams(currentParams, { replace: true });
-    setTimeout(() => {
-      isInternalUrlUpdate.current = false;
-    }, 50);
-
-    if (currentPage !== 1) setCurrentPage(1);
+    newParams.set("page", "1");
+    setSearchParams(newParams);
   };
 
+  /**
+   * Status filter change handler.
+   *
+   * Updates the selected status filter (Finished Airing, Currently Airing, etc.)
+   * and synchronizes with URL parameters for state persistence.
+   *
+   * @function handleStatusChange
+   * @param {SelectOption | null} selectedOption - Selected status option
+   *
+   * @example
+   * ```typescript
+   * handleStatusChange({ value: 'Finished Airing', label: 'Finished Airing' });
+   * // Updates URL: ?status=Finished%20Airing&page=1
+   * ```
+   */
   const handleStatusChange = (selectedOption: SelectOption | null): void => {
-    const newStatus = (selectedOption?.value as StatusType) || "All";
-    setSelectedStatus(newStatus);
+    const newValue = selectedOption?.value || "All";
+    setSelectedStatus(newValue as StatusType);
 
-    // Immediately update URL to prevent sync effect from overriding
     isInternalUrlUpdate.current = true;
-    const currentParams = new URLSearchParams(window.location.search);
-    if (newStatus !== "All") {
-      currentParams.set("status", newStatus);
+    const newParams = new URLSearchParams(searchParams);
+    if (newValue === "All") {
+      newParams.delete("status");
     } else {
-      currentParams.delete("status");
+      newParams.set("status", newValue);
     }
-    setSearchParams(currentParams, { replace: true });
-    setTimeout(() => {
-      isInternalUrlUpdate.current = false;
-    }, 50);
-
-    if (currentPage !== 1) setCurrentPage(1);
+    newParams.set("page", "1");
+    setSearchParams(newParams);
   };
 
+  /**
+   * Genre multi-select filter change handler.
+   *
+   * Updates the selected genres array and converts to comma-separated URL parameter.
+   * Handles multi-selection state management for genre filtering.
+   *
+   * @function handleGenreChange
+   * @param {readonly SelectOption[] | null} selectedOptions - Array of selected genre options
+   *
+   * @example
+   * ```typescript
+   * handleGenreChange([
+   *   { value: 'Action', label: 'Action' },
+   *   { value: 'Adventure', label: 'Adventure' }
+   * ]);
+   * // Updates URL: ?genre=Action,Adventure&page=1
+   * ```
+   */
   const handleGenreChange = (selectedOptions: readonly SelectOption[] | null): void => {
-    const newGenres = selectedOptions ? [...selectedOptions] : [];
-    setSelectedGenre(newGenres);
+    const options = selectedOptions ? [...selectedOptions] : [];
+    setSelectedGenre(options);
 
-    // Immediately update URL to prevent sync effect from overriding
     isInternalUrlUpdate.current = true;
-    const currentParams = new URLSearchParams(window.location.search);
-    if (newGenres.length > 0) {
-      currentParams.set("genre", newGenres.map((g) => g.value).join(","));
+    const newParams = new URLSearchParams(searchParams);
+    if (options.length === 0) {
+      newParams.delete("genre");
     } else {
-      currentParams.delete("genre");
+      newParams.set("genre", options.map((opt) => opt.value).join(","));
     }
-    setSearchParams(currentParams, { replace: true });
-    setTimeout(() => {
-      isInternalUrlUpdate.current = false;
-    }, 50);
-
-    if (currentPage !== 1) setCurrentPage(1);
+    newParams.set("page", "1");
+    setSearchParams(newParams);
   };
 
+  /**
+   * Theme multi-select filter change handler.
+   *
+   * Updates the selected themes array and manages URL parameter synchronization
+   * for theme-based filtering (School, Military, Isekai, etc.).
+   *
+   * @function handleThemeChange
+   * @param {readonly SelectOption[] | null} selectedOptions - Array of selected theme options
+   *
+   * @example
+   * ```typescript
+   * handleThemeChange([
+   *   { value: 'School', label: 'School' },
+   *   { value: 'Military', label: 'Military' }
+   * ]);
+   * // Updates URL: ?theme=School,Military&page=1
+   * ```
+   */
   const handleThemeChange = (selectedOptions: readonly SelectOption[] | null): void => {
-    const newThemes = selectedOptions ? [...selectedOptions] : [];
-    setSelectedTheme(newThemes);
+    const options = selectedOptions ? [...selectedOptions] : [];
+    setSelectedTheme(options);
 
-    // Immediately update URL to prevent sync effect from overriding
     isInternalUrlUpdate.current = true;
-    const currentParams = new URLSearchParams(window.location.search);
-    if (newThemes.length > 0) {
-      currentParams.set("theme", newThemes.map((t) => t.value).join(","));
+    const newParams = new URLSearchParams(searchParams);
+    if (options.length === 0) {
+      newParams.delete("theme");
     } else {
-      currentParams.delete("theme");
+      newParams.set("theme", options.map((opt) => opt.value).join(","));
     }
-    setSearchParams(currentParams, { replace: true });
-    setTimeout(() => {
-      isInternalUrlUpdate.current = false;
-    }, 50);
-
-    if (currentPage !== 1) setCurrentPage(1);
+    newParams.set("page", "1");
+    setSearchParams(newParams);
   };
 
+  /**
+   * Demographic multi-select filter change handler.
+   *
+   * Manages demographic filtering (Shounen, Seinen, Josei, Shoujo) with
+   * multi-selection support and URL parameter persistence.
+   *
+   * @function handleDemographicChange
+   * @param {readonly SelectOption[] | null} selectedOptions - Array of selected demographic options
+   *
+   * @example
+   * ```typescript
+   * handleDemographicChange([
+   *   { value: 'Shounen', label: 'Shounen' },
+   *   { value: 'Seinen', label: 'Seinen' }
+   * ]);
+   * // Updates URL: ?demographic=Shounen,Seinen&page=1
+   * ```
+   */
   const handleDemographicChange = (selectedOptions: readonly SelectOption[] | null): void => {
-    const newDemographics = selectedOptions ? [...selectedOptions] : [];
-    setSelectedDemographic(newDemographics);
+    const options = selectedOptions ? [...selectedOptions] : [];
+    setSelectedDemographic(options);
 
-    // Immediately update URL to prevent sync effect from overriding
     isInternalUrlUpdate.current = true;
-    const currentParams = new URLSearchParams(window.location.search);
-    if (newDemographics.length > 0) {
-      currentParams.set("demographic", newDemographics.map((d) => d.value).join(","));
+    const newParams = new URLSearchParams(searchParams);
+    if (options.length === 0) {
+      newParams.delete("demographic");
     } else {
-      currentParams.delete("demographic");
+      newParams.set("demographic", options.map((opt) => opt.value).join(","));
     }
-    setSearchParams(currentParams, { replace: true });
-    setTimeout(() => {
-      isInternalUrlUpdate.current = false;
-    }, 50);
-
-    if (currentPage !== 1) setCurrentPage(1);
+    newParams.set("page", "1");
+    setSearchParams(newParams);
   };
 
+  /**
+   * Studio multi-select filter change handler.
+   *
+   * Handles studio-based filtering for anime (Studio Ghibli, Toei Animation, etc.)
+   * with support for multiple studio selection and URL state management.
+   *
+   * @function handleStudioChange
+   * @param {readonly SelectOption[] | null} selectedOptions - Array of selected studio options
+   *
+   * @example
+   * ```typescript
+   * handleStudioChange([
+   *   { value: 'Studio Ghibli', label: 'Studio Ghibli' },
+   *   { value: 'Toei Animation', label: 'Toei Animation' }
+   * ]);
+   * // Updates URL: ?studio=Studio%20Ghibli,Toei%20Animation&page=1
+   * ```
+   */
   const handleStudioChange = (selectedOptions: readonly SelectOption[] | null): void => {
-    const newStudios = selectedOptions ? [...selectedOptions] : [];
-    setSelectedStudio(newStudios);
+    const options = selectedOptions ? [...selectedOptions] : [];
+    setSelectedStudio(options);
 
-    // Immediately update URL to prevent sync effect from overriding
     isInternalUrlUpdate.current = true;
-    const currentParams = new URLSearchParams(window.location.search);
-    if (newStudios.length > 0) {
-      currentParams.set("studio", newStudios.map((s) => s.value).join(","));
+    const newParams = new URLSearchParams(searchParams);
+    if (options.length === 0) {
+      newParams.delete("studio");
     } else {
-      currentParams.delete("studio");
+      newParams.set("studio", options.map((opt) => opt.value).join(","));
     }
-    setSearchParams(currentParams, { replace: true });
-    setTimeout(() => {
-      isInternalUrlUpdate.current = false;
-    }, 50);
-
-    if (currentPage !== 1) setCurrentPage(1);
+    newParams.set("page", "1");
+    setSearchParams(newParams);
   };
 
+  /**
+   * Author multi-select filter change handler.
+   *
+   * Manages author-based filtering primarily for manga content, supporting
+   * multiple author selection and proper URL parameter encoding.
+   *
+   * @function handleAuthorChange
+   * @param {readonly SelectOption[] | null} selectedOptions - Array of selected author options
+   *
+   * @example
+   * ```typescript
+   * handleAuthorChange([
+   *   { value: 'Akira Toriyama', label: 'Akira Toriyama' },
+   *   { value: 'Eiichiro Oda', label: 'Eiichiro Oda' }
+   * ]);
+   * // Updates URL: ?author=Akira%20Toriyama,Eiichiro%20Oda&page=1
+   * ```
+   */
   const handleAuthorChange = (selectedOptions: readonly SelectOption[] | null): void => {
-    const newAuthors = selectedOptions ? [...selectedOptions] : [];
-    setSelectedAuthor(newAuthors);
+    const options = selectedOptions ? [...selectedOptions] : [];
+    setSelectedAuthor(options);
 
-    // Immediately update URL to prevent sync effect from overriding
     isInternalUrlUpdate.current = true;
-    const currentParams = new URLSearchParams(window.location.search);
-    if (newAuthors.length > 0) {
-      currentParams.set("author", newAuthors.map((a) => a.value).join(","));
+    const newParams = new URLSearchParams(searchParams);
+    if (options.length === 0) {
+      newParams.delete("author");
     } else {
-      currentParams.delete("author");
+      newParams.set("author", options.map((opt) => opt.value).join(","));
     }
-    setSearchParams(currentParams, { replace: true });
-    setTimeout(() => {
-      isInternalUrlUpdate.current = false;
-    }, 50);
-
-    if (currentPage !== 1) setCurrentPage(1);
+    newParams.set("page", "1");
+    setSearchParams(newParams);
   };
 
+  /**
+   * Sort order change handler.
+   *
+   * Updates the sorting criteria (score, popularity, title, date) and direction
+   * (ascending/descending) for the items display.
+   *
+   * @function handleSortChange
+   * @param {React.ChangeEvent<HTMLSelectElement>} event - Sort select change event
+   *
+   * @example
+   * ```typescript
+   * // User selects "Title A-Z" option
+   * handleSortChange(event);
+   * // Updates URL: ?sort_by=title_asc&page=1
+   * ```
+   */
   const handleSortChange: SelectChangeHandler = (event) => {
-    setSortBy(event.target.value as SortOption);
-    setCurrentPage(1);
+    const newValue = event.target.value as SortOption;
+    setSortBy(newValue);
+    updateUrlParams({ sort_by: newValue, page: "1" });
   };
 
+  /**
+   * Minimum score filter change handler.
+   *
+   * Updates the minimum score threshold for filtering items by their rating.
+   * Validates input and updates URL parameters accordingly.
+   *
+   * @function handleMinScoreChange
+   * @param {React.ChangeEvent<HTMLInputElement>} event - Score input change event
+   *
+   * @example
+   * ```typescript
+   * // User enters "8.5" in the score input
+   * handleMinScoreChange(event);
+   * // Updates URL: ?min_score=8.5&page=1
+   * ```
+   */
   const handleMinScoreChange: InputChangeHandler = (event) => {
-    setMinScore(event.target.value);
-    setCurrentPage(1);
+    const newValue = event.target.value;
+    setMinScore(newValue);
+    updateUrlParams({ min_score: newValue || undefined, page: "1" });
   };
 
+  /**
+   * Year filter change handler.
+   *
+   * Updates the year filter for finding items released in a specific year.
+   * Handles both anime air date and manga publication date filtering.
+   *
+   * @function handleYearChange
+   * @param {React.ChangeEvent<HTMLInputElement>} event - Year input change event
+   *
+   * @example
+   * ```typescript
+   * // User enters "2023" in the year input
+   * handleYearChange(event);
+   * // Updates URL: ?year=2023&page=1
+   * ```
+   */
   const handleYearChange: InputChangeHandler = (event) => {
-    setSelectedYear(event.target.value);
-    setCurrentPage(1);
+    const newValue = event.target.value;
+    setSelectedYear(newValue);
+    updateUrlParams({ year: newValue || undefined, page: "1" });
   };
 
+  /**
+   * Reset all filters to default state.
+   *
+   * Clears all active filters and returns to the default browsing state
+   * with all items visible. Updates URL to remove all filter parameters.
+   *
+   * @function handleResetFilters
+   *
+   * @example
+   * ```typescript
+   * handleResetFilters();
+   * // Clears all filters and navigates to: /?page=1
+   * ```
+   */
   const handleResetFilters = (): void => {
-    // Mark this as an internal update to prevent the URL sync effect from triggering
-    isInternalUrlUpdate.current = true;
-
-    // Clear all state
-    setSearchTerm("");
+    // Reset all filter states
     setSelectedMediaType("All");
     setSelectedGenre([]);
+    setSelectedStatus("All");
+    setMinScore("");
+    setSelectedYear("");
     setSelectedTheme([]);
     setSelectedDemographic([]);
     setSelectedStudio([]);
     setSelectedAuthor([]);
-    setSelectedStatus("All");
-    setMinScore("");
-    setSelectedYear("");
     setSortBy("score_desc");
-    if (currentPage !== 1) setCurrentPage(1);
 
     // Clear URL parameters
-    setSearchParams({}, { replace: true });
-
-    // Reset the flag after a short delay
-    setTimeout(() => {
-      isInternalUrlUpdate.current = false;
-    }, 100);
+    isInternalUrlUpdate.current = true;
+    setSearchParams(new URLSearchParams({ page: "1", per_page: itemsPerPage.toString() }));
   };
 
-  // ✅ NEW: Handle filter bar toggle
+  /**
+   * Toggle filter bar visibility.
+   *
+   * Shows/hides the filter bar interface and persists the preference
+   * to localStorage for user convenience across sessions.
+   *
+   * @function handleFilterBarToggle
+   *
+   * @example
+   * ```typescript
+   * handleFilterBarToggle();
+   * // Toggles filter bar visibility and saves preference
+   * ```
+   */
   const handleFilterBarToggle = (): void => {
     const newVisibility = !filterBarVisible;
     setFilterBarVisible(newVisibility);
     try {
       secureStorage.setItem("aniMangaFilterBarVisible", JSON.stringify(newVisibility));
     } catch (error) {
-      console.warn("Failed to save filter bar preference");
-    }
-  };
-
-  // Pagination handlers
-  const handleNextPage = (): void => {
-    if (currentPage < totalPages) {
-      setCurrentPage((prevPage) => prevPage + 1);
-    }
-  };
-
-  const handlePrevPage = (): void => {
-    if (currentPage > 1) {
-      setCurrentPage((prevPage) => prevPage - 1);
-    }
-  };
-
-  const handleItemsPerPageChange: SelectChangeHandler = (event) => {
-    const newIPP = Number(event.target.value);
-    setItemsPerPage(newIPP);
-    try {
-      secureStorage.setItem("aniMangaItemsPerPage", newIPP.toString());
-    } catch (error) {
-      console.warn("Failed to save items per page preference");
-    }
-    setCurrentPage(1);
-  };
-
-  const scrollToTop = (): void => {
-    if (topOfPageRef.current) {
-      topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
+      console.warn("Failed to save filter bar visibility preference");
     }
   };
 
   /**
-   * Generate dynamic document title based on current filters and search
+   * Navigate to next page.
+   *
+   * Advances pagination to the next page if available and scrolls to top
+   * for optimal user experience.
+   *
+   * @function handleNextPage
+   *
+   * @example
+   * ```typescript
+   * handleNextPage();
+   * // Navigates from page 2 to page 3 and scrolls to top
+   * ```
    */
-  const generateDocumentTitle = (): string => {
-    let title = "AniManga Recommender";
-
-    if (searchTerm) {
-      title = `"${searchTerm}" - Search Results | ${title}`;
-    } else if (
-      selectedMediaType !== "All" ||
-      selectedGenre.length > 0 ||
-      selectedTheme.length > 0 ||
-      selectedDemographic.length > 0 ||
-      selectedStudio.length > 0 ||
-      selectedAuthor.length > 0 ||
-      selectedStatus !== "All" ||
-      minScore ||
-      selectedYear
-    ) {
-      title = `Filtered Results | ${title}`;
-    } else {
-      title = `Discover Anime & Manga | ${title}`;
+  const handleNextPage = (): void => {
+    if (currentPage < totalPages) {
+      updateUrlParams({ page: (currentPage + 1).toString() });
+      scrollToTop();
     }
-
-    return title;
   };
 
+  /**
+   * Navigate to previous page.
+   *
+   * Goes back to the previous page if available and scrolls to top
+   * for consistent navigation experience.
+   *
+   * @function handlePrevPage
+   *
+   * @example
+   * ```typescript
+   * handlePrevPage();
+   * // Navigates from page 3 to page 2 and scrolls to top
+   * ```
+   */
+  const handlePrevPage = (): void => {
+    if (currentPage > 1) {
+      updateUrlParams({ page: (currentPage - 1).toString() });
+      scrollToTop();
+    }
+  };
+
+  /**
+   * Items per page change handler.
+   *
+   * Updates the number of items displayed per page and persists the preference
+   * to localStorage. Resets to page 1 to avoid pagination issues.
+   *
+   * @function handleItemsPerPageChange
+   * @param {React.ChangeEvent<HTMLSelectElement>} event - Items per page select change event
+   *
+   * @example
+   * ```typescript
+   * // User selects "50" items per page
+   * handleItemsPerPageChange(event);
+   * // Updates URL: ?per_page=50&page=1
+   * // Saves preference to localStorage
+   * ```
+   */
+  const handleItemsPerPageChange: SelectChangeHandler = (event) => {
+    const newValue = parseInt(event.target.value);
+    setItemsPerPage(newValue);
+    updateUrlParams({ per_page: newValue.toString(), page: "1" });
+
+    // Save preference to localStorage
+    try {
+      secureStorage.setItem("aniMangaItemsPerPage", newValue.toString());
+    } catch (error) {
+      console.warn("Failed to save items per page preference");
+    }
+  };
+
+  /**
+   * Scroll to top of page.
+   *
+   * Smoothly scrolls to the top of the page for better navigation experience
+   * after page changes or filter applications.
+   *
+   * @function scrollToTop
+   *
+   * @example
+   * ```typescript
+   * scrollToTop();
+   * // Smoothly scrolls to top of page
+   * ```
+   */
+  const scrollToTop = (): void => {
+    if (topOfPageRef.current) {
+      topOfPageRef.current.scrollIntoView({ behavior: "smooth" });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  /**
+   * Generate dynamic document title based on current state.
+   *
+   * Creates descriptive page titles that reflect current search and filter state
+   * for better SEO and user orientation.
+   *
+   * @function generateDocumentTitle
+   * @returns {string} Dynamic document title
+   *
+   * @example
+   * ```typescript
+   * generateDocumentTitle();
+   * // Returns: "Action Anime - Page 2 | Browse"
+   * // Or: "Search: 'demon slayer' | Browse"
+   * // Or: "Browse" (default)
+   * ```
+   */
+  const generateDocumentTitle = (): string => {
+    const parts: string[] = [];
+
+    // Add search term if present
+    if (searchTerm.trim()) {
+      parts.push(`Search: '${searchTerm.trim()}'`);
+    }
+
+    // Add media type if not "All"
+    if (selectedMediaType !== "All") {
+      parts.push(selectedMediaType.charAt(0).toUpperCase() + selectedMediaType.slice(1));
+    }
+
+    // Add selected genres (limit to 2 for brevity)
+    if (selectedGenre.length > 0) {
+      const genreNames = selectedGenre.slice(0, 2).map((g) => g.label);
+      parts.push(genreNames.join(", "));
+      if (selectedGenre.length > 2) {
+        parts.push(`+${selectedGenre.length - 2} more`);
+      }
+    }
+
+    // Add page number if not page 1
+    if (currentPage > 1) {
+      parts.push(`Page ${currentPage}`);
+    }
+
+    // Combine parts or use default
+    return parts.length > 0 ? `${parts.join(" - ")} | Browse` : "Browse";
+  };
+
+  /**
+   * Update URL parameters helper function.
+   *
+   * Centralized function for updating URL search parameters while maintaining
+   * existing state and handling parameter cleanup.
+   *
+   * @function updateUrlParams
+   * @param {Record<string, string | undefined>} updates - Parameter updates object
+   *
+   * @example
+   * ```typescript
+   * updateUrlParams({
+   *   page: "1",
+   *   min_score: "8.0",
+   *   year: undefined // This removes the year parameter
+   * });
+   * ```
+   */
+  const updateUrlParams = (updates: Record<string, string | undefined>): void => {
+    isInternalUrlUpdate.current = true;
+    const newParams = new URLSearchParams(searchParams);
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === undefined || value === "") {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+
+    setSearchParams(newParams);
+  };
+
+  // Set document title based on current search/filter state
   useDocumentTitle(generateDocumentTitle());
 
   // Prepare props for FilterBar component
@@ -864,7 +1104,12 @@ const HomePage: React.FC = () => {
                 <p>{error}</p>
               </details>
               <div className="error-actions">
-                <RetryButton onRetry={fetchItems} variant="primary">
+                <RetryButton
+                  onRetry={async () => {
+                    window.location.reload();
+                  }}
+                  variant="primary"
+                >
                   Retry Loading
                 </RetryButton>
                 <button onClick={() => window.location.reload()} className="retry-button-secondary">

@@ -32,8 +32,6 @@ import requests
 
 from app import app as create_app, generate_token
 from models import User, UserItem, AnimeItem, create_sample_user, create_sample_anime_item, create_sample_user_item
-import hashlib
-import jwt
 from supabase_client import SupabaseClient, SupabaseAuthClient
 
 

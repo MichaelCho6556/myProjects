@@ -1,3 +1,68 @@
+/**
+ * AniManga Recommender Item Detail Page Component
+ *
+ * This component provides a comprehensive detailed view of individual anime or manga items.
+ * It displays complete information including metadata, synopsis, ratings, media content,
+ * recommendations, and user interaction capabilities for authenticated users.
+ *
+ * Key Features:
+ * - Complete item metadata display (score, status, episodes/chapters, dates)
+ * - Rich media content (cover images, trailers for anime)
+ * - Interactive tag system with filtered navigation
+ * - Content-based recommendations engine integration
+ * - User list management for authenticated users (add/remove/update status)
+ * - Responsive design with proper accessibility
+ * - Error handling with graceful fallbacks
+ * - SEO-optimized with dynamic page titles
+ *
+ * Data Sources:
+ * - Item details API: `/api/items/{uid}` - Complete item information
+ * - Recommendations API: `/api/recommendations/{uid}` - Related content suggestions
+ * - User authentication context for personalized features
+ *
+ * Navigation Features:
+ * - Clickable tags for filtered browsing (genres, themes, demographics, etc.)
+ * - Back navigation with browser history support
+ * - External links to official sources
+ * - Related item navigation through recommendations
+ *
+ * Media Integration:
+ * - YouTube trailer embedding for anime content
+ * - High-quality cover image display with fallbacks
+ * - Responsive media containers for various screen sizes
+ *
+ * User Experience:
+ * - Loading states with proper accessibility
+ * - Error handling with actionable recovery options
+ * - Smooth transitions and professional UI
+ * - Mobile-responsive design
+ *
+ * @component
+ * @example
+ * ```tsx
+ * // Automatic routing integration
+ * <Route path="/item/:uid" element={<ItemDetailPage />} />
+ *
+ * // URL examples:
+ * // /item/anime_1 - Displays anime with ID 1
+ * // /item/manga_123 - Displays manga with ID 123
+ *
+ * // Component automatically:
+ * // - Extracts UID from URL parameters
+ * // - Loads item data and recommendations
+ * // - Handles loading and error states
+ * // - Updates document title dynamically
+ * ```
+ *
+ * @see {@link ItemCard} for item grid display
+ * @see {@link UserListActions} for user interaction features
+ * @see {@link useAuth} for authentication integration
+ * @see {@link useDocumentTitle} for dynamic page titles
+ *
+ * @since 1.0.0
+ * @author AniManga Recommender Team
+ */
+
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -9,11 +74,44 @@ import { AnimeItem } from "../types";
 import { useAuth } from "../context/AuthContext";
 import UserListActions from "../components/UserListActions";
 
+/**
+ * Base URL for API endpoints.
+ * Uses environment variable or defaults to localhost for development.
+ */
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+/**
+ * Default placeholder image path for items without cover images.
+ * Provides consistent fallback for missing or broken image URLs.
+ */
 const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
 
 /**
- * Extract YouTube video ID from URL
+ * Extract YouTube video ID from various YouTube URL formats.
+ *
+ * Supports multiple YouTube URL patterns including youtu.be, youtube.com/watch,
+ * embed URLs, and other common formats. Used for trailer embedding.
+ *
+ * @function getYouTubeID
+ * @param {string} [url] - YouTube URL to parse
+ * @returns {string | null} 11-character YouTube video ID or null if invalid
+ *
+ * @example
+ * ```typescript
+ * getYouTubeID('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+ * // Returns: 'dQw4w9WgXcQ'
+ *
+ * getYouTubeID('https://youtu.be/dQw4w9WgXcQ');
+ * // Returns: 'dQw4w9WgXcQ'
+ *
+ * getYouTubeID('invalid-url');
+ * // Returns: null
+ *
+ * getYouTubeID(undefined);
+ * // Returns: null
+ * ```
+ *
+ * @since 1.0.0
  */
 const getYouTubeID = (url?: string): string | null => {
   if (!url) return null;
@@ -23,8 +121,12 @@ const getYouTubeID = (url?: string): string | null => {
 };
 
 /**
- * ItemDetailPage Component
- * Displays detailed information about an anime or manga item
+ * ItemDetailPage Component Implementation
+ *
+ * Main component that renders detailed information for a specific anime or manga item.
+ * Handles data loading, user interactions, and comprehensive content display.
+ *
+ * @returns {JSX.Element} Complete item detail page with all features
  */
 const ItemDetailPage: React.FC = () => {
   const { uid } = useParams<{ uid: string }>();
@@ -35,7 +137,7 @@ const ItemDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
-  // Dynamic document title
+  // Dynamic document title based on item data
   useDocumentTitle(
     item
       ? `${item.title} - ${item.media_type?.toUpperCase() || "Details"}`
@@ -44,6 +146,54 @@ const ItemDetailPage: React.FC = () => {
       : "Item Details"
   );
 
+  /**
+   * Load item data and recommendations from the API.
+   *
+   * This function handles the complete data loading process including item details
+   * and content-based recommendations. It implements proper error handling and
+   * validates response data to ensure UI stability.
+   *
+   * Data Loading Process:
+   * 1. Validate UID parameter from URL
+   * 2. Fetch item details from `/api/items/{uid}`
+   * 3. Fetch recommendations from `/api/recommendations/{uid}`
+   * 4. Handle various error conditions and API response formats
+   * 5. Update component state with loaded data
+   *
+   * @async
+   * @function loadItemData
+   * @returns {Promise<void>} Promise that resolves when data loading is complete
+   *
+   * @throws {Error} When UID is invalid or missing
+   * @throws {Error} When item is not found (404)
+   * @throws {Error} When API requests fail
+   *
+   * @example
+   * ```typescript
+   * // Automatically called when component mounts or UID changes
+   * useEffect(() => {
+   *   loadItemData();
+   * }, [uid, loadItemData]);
+   *
+   * // Manual reload (e.g., after error)
+   * const handleRetry = () => {
+   *   loadItemData();
+   * };
+   * ```
+   *
+   * Error Handling:
+   * - Invalid UID: Sets error state with user-friendly message
+   * - 404 Not Found: Provides specific "item not found" feedback
+   * - Network errors: Generic error message with retry suggestions
+   * - Malformed responses: Graceful handling with console warnings
+   *
+   * Performance Considerations:
+   * - Parallel loading of item details and recommendations
+   * - Non-blocking recommendations (failures don't affect main content)
+   * - Proper loading state management for smooth UX
+   *
+   * @since 1.0.0
+   */
   const loadItemData = useCallback(async () => {
     if (!uid) {
       setError("Invalid item ID");
@@ -107,27 +257,147 @@ const ItemDetailPage: React.FC = () => {
     loadItemData();
   }, [uid, loadItemData]);
 
+  /**
+   * Navigate back to the previous page in browser history.
+   *
+   * Uses React Router's navigate(-1) to provide browser-native back navigation.
+   * This maintains user navigation context and provides expected behavior.
+   *
+   * @function handleBackClick
+   * @returns {void}
+   *
+   * @example
+   * ```typescript
+   * <button onClick={handleBackClick}>
+   *   ← Back
+   * </button>
+   * ```
+   *
+   * @since 1.0.0
+   */
   const handleBackClick = () => {
     navigate(-1);
   };
 
+  /**
+   * Format score value for display with proper fallbacks.
+   *
+   * Converts numerical scores to formatted strings with consistent decimal places.
+   * Handles null, undefined, and zero values with appropriate fallback text.
+   *
+   * @function formatScore
+   * @param {number | null} score - Raw score value to format
+   * @returns {string} Formatted score string or "N/A" for invalid values
+   *
+   * @example
+   * ```typescript
+   * formatScore(8.67);     // Returns: "8.67"
+   * formatScore(9);        // Returns: "9.00"
+   * formatScore(null);     // Returns: "N/A"
+   * formatScore(0);        // Returns: "N/A"
+   * formatScore(undefined); // Returns: "N/A"
+   * ```
+   *
+   * @since 1.0.0
+   */
   const formatScore = (score: number | null) => {
     if (!score || score === 0) return "N/A";
     return score.toFixed(2);
   };
 
+  /**
+   * Format "scored by" count for display with locale-appropriate number formatting.
+   *
+   * Converts user count numbers to localized string format with proper thousands
+   * separators. Handles null and undefined values gracefully.
+   *
+   * @function formatScoredBy
+   * @param {number | null} scoredBy - Number of users who scored the item
+   * @returns {string} Formatted number string with locale separators or empty string
+   *
+   * @example
+   * ```typescript
+   * formatScoredBy(156789);    // Returns: "156,789" (en-US locale)
+   * formatScoredBy(1234);      // Returns: "1,234"
+   * formatScoredBy(null);      // Returns: ""
+   * formatScoredBy(undefined); // Returns: ""
+   * ```
+   *
+   * @since 1.0.0
+   */
   const formatScoredBy = (scoredBy: number | null) => {
     if (scoredBy === null || scoredBy === undefined) return "";
     return scoredBy.toLocaleString();
   };
 
+  /**
+   * Get default placeholder image path.
+   *
+   * Returns the default image path for items without valid cover images.
+   * Provides centralized fallback image management.
+   *
+   * @function getDefaultImage
+   * @returns {string} Path to default placeholder image
+   *
+   * @example
+   * ```typescript
+   * const imageSrc = item.image_url || getDefaultImage();
+   * ```
+   *
+   * @since 1.0.0
+   */
   const getDefaultImage = () => DEFAULT_PLACEHOLDER_IMAGE;
 
+  /**
+   * Handle image loading errors by switching to placeholder.
+   *
+   * Event handler for image onError events that automatically replaces
+   * broken or missing images with the default placeholder image.
+   *
+   * @function handleImageError
+   * @param {React.SyntheticEvent<HTMLImageElement, Event>} event - Image error event
+   * @returns {void}
+   *
+   * @example
+   * ```tsx
+   * <img
+   *   src={item.image_url}
+   *   alt={item.title}
+   *   onError={handleImageError}
+   * />
+   * ```
+   *
+   * @since 1.0.0
+   */
   const handleImageError = (event: React.SyntheticEvent<HTMLImageElement, Event>): void => {
     const target = event.target as HTMLImageElement;
     target.src = DEFAULT_PLACEHOLDER_IMAGE;
   };
 
+  /**
+   * Handle user list status updates.
+   *
+   * Callback function triggered when user successfully updates their list status
+   * for the current item. Can be extended to show notifications or refresh data.
+   *
+   * @function handleStatusUpdate
+   * @returns {void}
+   *
+   * @example
+   * ```tsx
+   * <UserListActions
+   *   item={item}
+   *   onStatusUpdate={handleStatusUpdate}
+   * />
+   * ```
+   *
+   * Future Enhancement:
+   * - Add toast notifications for user feedback
+   * - Refresh item data if needed
+   * - Update local state for immediate UI feedback
+   *
+   * @since 1.0.0
+   */
   const handleStatusUpdate = () => {
     console.log("Status updated successfully!");
   };
