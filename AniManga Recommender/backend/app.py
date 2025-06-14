@@ -3152,5 +3152,37 @@ def get_item_details_simple(item_uid: str) -> dict:
         print(f"Error getting item details: {e}")
         return {}
 
+# === Admin Utilities =========================================================
+# NOTE: These administrative endpoints are intentionally unauthenticated for
+# local development convenience. If you plan to expose this API publicly you
+# **MUST** protect them with proper authentication / authorization (e.g. JWT
+# with admin claim or environment-protected secret key).
+# -----------------------------------------------------------------------------
+
+@app.route('/api/admin/reload-data', methods=['POST'])
+def admin_reload_data():
+    """Force reload dataset from Supabase
+
+    This endpoint allows tooling (e.g. the MAL discovery/import scripts) to
+    trigger a full in-memory reload **without** having to restart the Flask
+    process.  It rebuilds the processed pandas DataFrame *and* the TF-IDF
+    matrix so newly-imported items are immediately available to all search
+    and listing endpoints.
+
+    Returns
+    -------
+    JSON
+        { "status": "success", "total_items": int }
+        with HTTP 200 on success or { "error": str } with HTTP 500 on failure.
+    """
+    global df_raw, df_processed, tfidf_matrix, tfidf_vectorizer, _data_loading_attempted
+    try:
+        load_data_and_tfidf_from_supabase()
+        _data_loading_attempted = True  # avoids double-loading race conditions
+        total = 0 if df_processed is None else len(df_processed)
+        return jsonify({"status": "success", "total_items": total}), 200
+    except Exception as exc:
+        return jsonify({"error": f"Failed to reload data: {exc}"}), 500
+
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)

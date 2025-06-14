@@ -94,7 +94,7 @@ import { secureStorage } from "../utils/security";
  * Base URL for API endpoints.
  * Centralized configuration for backend communication.
  */
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 /**
  * Get initial items per page from localStorage with validation.
@@ -220,7 +220,7 @@ const HomePage: React.FC = () => {
   const [totalItems, setTotalItems] = useState<number>(0);
 
   // Search and filter states
-  const [searchTerm, setSearchTerm] = useState<string>(searchParams.get("q") || "");
+  const [searchTerm] = useState<string>(searchParams.get("q") || "");
   const [selectedMediaType, setSelectedMediaType] = useState<MediaType>(
     (searchParams.get("media_type") as MediaType) || "All"
   );
@@ -283,7 +283,7 @@ const HomePage: React.FC = () => {
     const fetchFilterOptions = async (): Promise<void> => {
       setFiltersLoading(true);
       try {
-        const operation = () => axios.get<DistinctValuesApiResponse>(`${API_BASE_URL}/distinct-values`);
+        const operation = () => axios.get<DistinctValuesApiResponse>(`${API_BASE_URL}/api/distinct-values`);
         const response = await retryOperation(operation, { maxRetries: 3, baseDelayMs: 1000 });
 
         let distinctData = response.data;
@@ -330,11 +330,56 @@ const HomePage: React.FC = () => {
       } finally {
         setFiltersLoading(false);
         isMounted.current = true;
+
+        // Trigger initial items fetch after filters are loaded
+        const fetchInitialItems = async (): Promise<void> => {
+          setLoading(true);
+          setError(null);
+
+          try {
+            const paramsString = searchParams.toString();
+            const operation = () => axios.get<ItemsApiResponse>(`${API_BASE_URL}/api/items?${paramsString}`);
+            const response = await retryOperation(operation, { maxRetries: 3, baseDelayMs: 1000 });
+
+            let itemsData = response.data;
+
+            // Handle case where server returns stringified JSON
+            if (typeof itemsData === "string") {
+              try {
+                itemsData = JSON.parse(itemsData);
+              } catch (e) {
+                throw new Error("Items data not valid JSON");
+              }
+            }
+
+            // Validate response structure
+            validateResponseData(itemsData, {
+              items: "array",
+              total_pages: "number",
+              page: "number",
+              total_items: "number",
+            });
+
+            setItems(itemsData.items || []);
+            setTotalPages(itemsData.total_pages || 1);
+            setCurrentPage(itemsData.page || 1); // API returns "page", not "current_page"
+            setTotalItems(itemsData.total_items || 0);
+          } catch (err) {
+            handleError(err as Error, "loading items");
+            setItems([]);
+            setTotalPages(1);
+            setTotalItems(0);
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        fetchInitialItems();
       }
     };
 
     fetchFilterOptions();
-  }, [handleError]);
+  }, [handleError, searchParams]);
 
   /**
    * Effect 2: Initialize filter states from URL parameters
@@ -388,7 +433,7 @@ const HomePage: React.FC = () => {
    * It constructs API requests with current filter state and updates the items display.
    *
    * @effect
-   * @dependencies [searchParams, isMounted, handleError]
+   * @dependencies [searchParams, handleError]
    *
    * @example
    * ```typescript
@@ -401,20 +446,21 @@ const HomePage: React.FC = () => {
    * ```
    */
   useEffect(() => {
-    if (!isMounted.current) return;
-
-    const fetchItems = async (): Promise<void> => {
+    // Skip if filters haven't loaded yet or if this is an internal URL update
+    if (!isMounted.current || isInternalUrlUpdate.current) {
       if (isInternalUrlUpdate.current) {
         isInternalUrlUpdate.current = false;
-        return;
       }
+      return;
+    }
 
+    const fetchItems = async (): Promise<void> => {
       setLoading(true);
       setError(null);
 
       try {
         const paramsString = searchParams.toString();
-        const operation = () => axios.get<ItemsApiResponse>(`${API_BASE_URL}/items?${paramsString}`);
+        const operation = () => axios.get<ItemsApiResponse>(`${API_BASE_URL}/api/items?${paramsString}`);
         const response = await retryOperation(operation, { maxRetries: 3, baseDelayMs: 1000 });
 
         let itemsData = response.data;
@@ -432,13 +478,13 @@ const HomePage: React.FC = () => {
         validateResponseData(itemsData, {
           items: "array",
           total_pages: "number",
-          current_page: "number",
+          page: "number",
           total_items: "number",
         });
 
         setItems(itemsData.items || []);
         setTotalPages(itemsData.total_pages || 1);
-        setCurrentPage(itemsData.current_page || 1);
+        setCurrentPage(itemsData.page || 1); // API returns "page", not "current_page"
         setTotalItems(itemsData.total_items || 0);
       } catch (err) {
         handleError(err as Error, "loading items");
@@ -451,7 +497,7 @@ const HomePage: React.FC = () => {
     };
 
     fetchItems();
-  }, [searchParams, isMounted, handleError]);
+  }, [searchParams, handleError]);
 
   /**
    * Media type filter change handler.
