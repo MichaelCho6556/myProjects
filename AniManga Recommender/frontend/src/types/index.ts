@@ -126,8 +126,9 @@ export interface ItemsApiResponse {
   items: AnimeItem[];
   total_items: number;
   total_pages: number;
-  current_page: number;
-  items_per_page: number;
+  page: number; // API returns "page", not "current_page"
+  per_page: number; // API returns "per_page", not "items_per_page"
+  sort_by: string;
 }
 
 /**
