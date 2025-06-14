@@ -89,9 +89,10 @@ class SupabaseClient:
         Raises:
             ValueError: If required environment variables are not set
         """
-        self.base_url = os.getenv('SUPABASE_URL')
-        self.api_key = os.getenv('SUPABASE_KEY')
-        self.service_key = os.getenv('SUPABASE_SERVICE_KEY')
+        # Strip whitespace/new-line characters that can sneak in when keys are copied
+        self.base_url = (os.getenv('SUPABASE_URL') or '').strip().rstrip('/')
+        self.api_key = (os.getenv('SUPABASE_KEY') or '').strip()
+        self.service_key = (os.getenv('SUPABASE_SERVICE_KEY') or '').strip()
         
         if not self.base_url or not self.api_key:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in .env")
@@ -144,8 +145,9 @@ class SupabaseClient:
         url = f"{self.base_url}/rest/v1/{endpoint}"
         
         headers = {
-            'apikey': self.api_key,
-            'Authorization': f'Bearer {self.api_key}',
+            # Prefer service role key if provided to avoid permission or header issues
+            'apikey': self.service_key or self.api_key,
+            'Authorization': f'Bearer {self.service_key or self.api_key}',
             'Content-Type': 'application/json',
             'Prefer': 'return=representation',  # Ensure we get response data back
             'Accept-Encoding': 'gzip, deflate',  # Accept compressed responses
@@ -1488,6 +1490,47 @@ class SupabaseClient:
             import traceback
             traceback.print_exc()
             return {'success': False, 'error': str(e)}
+
+    def upsert_entity(self, table: str, data: Dict) -> Optional[Dict]:
+        """
+        Upsert an entity (genre, studio, author) handling duplicate key conflicts gracefully.
+        
+        Args:
+            table (str): Table name ('genres', 'studios', 'authors')
+            data (Dict): Data to upsert
+            
+        Returns:
+            Optional[Dict]: The entity data if successful, None if failed
+        """
+        try:
+            # Try to insert first
+            url = f"{self.base_url}/rest/v1/{table}"
+            headers = {
+                'apikey': self.api_key,
+                'Authorization': f'Bearer {self.api_key}',
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            }
+            
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            
+            if response.status_code == 201:
+                # Successfully inserted
+                return response.json()[0] if response.json() else None
+            elif response.status_code == 409:
+                # Conflict - entity already exists, fetch it
+                name = data.get('name', '')
+                existing_response = self._make_request('GET', table, params={'select': '*', 'name': f'eq.{name}'})
+                existing_data = existing_response.json()
+                return existing_data[0] if existing_data else None
+            else:
+                # Other error
+                print(f"⚠️  Unexpected status code {response.status_code} for {table} upsert")
+                return None
+                
+        except Exception as e:
+            print(f"⚠️  Error upserting {table}: {e}")
+            return None
 
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
