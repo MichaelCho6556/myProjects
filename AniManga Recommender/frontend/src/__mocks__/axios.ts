@@ -342,7 +342,6 @@ export const mockDistinctValuesResponse = (values: any = {}) => {
   endpointResponses.set("/distinct-values", { data: defaultValues });
 
   // Update the mock implementation to handle the distinct-values endpoint
-  const originalImpl = mockAxios.get.getMockImplementation();
   mockAxios.get.mockImplementation((url: string): Promise<any> => {
     const normalizedUrl = url.replace(/^https?:\/\/[^\/]+/, "").replace(/^\/api/, "");
 

@@ -39,9 +39,19 @@ License: MIT
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file for development
-load_dotenv()
+# Load environment variables based on environment
+if os.getenv('LOCAL_DEVELOPMENT') == 'True':
+    load_dotenv('.env.local')
+    print("🔧 Loading LOCAL development environment variables")
+else:
+    load_dotenv()
+    print("☁️ Loading PRODUCTION environment variables")
 
+# Supabase configuration
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
+SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY')
 
 class Config:
     """
@@ -137,3 +147,33 @@ class Config:
     # Public API key for Supabase authentication and client operations
     # Safe for frontend use but should be secured in production
     SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+    
+    # MAL API Configuration
+    MAL_CLIENT_ID = os.getenv('MAL_CLIENT_ID')
+    MAL_CLIENT_SECRET = os.getenv('MAL_CLIENT_SECRET')
+    
+    # Development flags
+    LOCAL_DEVELOPMENT = os.getenv('LOCAL_DEVELOPMENT', 'False').lower() == 'true'
+    USE_LOCAL_SUPABASE = os.getenv('USE_LOCAL_SUPABASE', 'False').lower() == 'true'
+    
+    @classmethod
+    def is_local_development(cls):
+        return cls.LOCAL_DEVELOPMENT and cls.USE_LOCAL_SUPABASE
+    
+    @classmethod
+    def get_environment_info(cls):
+        """Get current environment information"""
+        if cls.is_local_development():
+            return {
+                'environment': 'LOCAL',
+                'supabase_url': cls.SUPABASE_URL,
+                'database_type': 'Local PostgreSQL',
+                'mal_configured': bool(cls.MAL_CLIENT_ID),
+            }
+        else:
+            return {
+                'environment': 'PRODUCTION',
+                'supabase_url': cls.SUPABASE_URL,
+                'database_type': 'Supabase Cloud',
+                'mal_configured': bool(cls.MAL_CLIENT_ID),
+            }
