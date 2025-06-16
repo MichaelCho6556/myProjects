@@ -42,7 +42,7 @@ describe("LoadingBanner Component", () => {
     });
 
     it("displays provided loading message", () => {
-      const message = "Loading your recommendations...";
+      const message = "Loading your related items...";
       render(<LoadingBanner message={message} isVisible={true} />);
 
       expect(screen.getByText(message)).toBeInTheDocument();

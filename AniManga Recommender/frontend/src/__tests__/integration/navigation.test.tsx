@@ -91,7 +91,7 @@ const renderWithRouter = (initialEntries = ["/"], component = <App />) => {
 };
 
 // Enhanced mock API responses setup
-const setupMockResponses = (testItem: any, recommendations: any[] = []) => {
+const setupMockResponses = (testItem: any, relatedItems: any[] = []) => {
   // Clear previous mocks
   jest.clearAllMocks();
 
@@ -119,10 +119,10 @@ const setupMockResponses = (testItem: any, recommendations: any[] = []) => {
       });
     }
 
-    // Handle recommendations endpoint
+    // Handle related items endpoint
     if (normalizedUrl.includes(`/recommendations/${testItem.uid}`)) {
       return Promise.resolve({
-        data: recommendations,
+        data: relatedItems,
       });
     }
 
