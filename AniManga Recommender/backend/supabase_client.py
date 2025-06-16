@@ -1168,11 +1168,13 @@ class SupabaseClient:
         return all_items
 
     def _get_all_relations(self, table_name: str) -> List[Dict]:
-        """Get ALL relations from a table efficiently with larger batches"""
+        """Get ALL relations from a table efficiently with proper Supabase pagination"""
         
         all_relations = []
         offset = 0
-        batch_size = 10000  # Larger batches for relations
+        batch_size = 1000  # Supabase maximum per request
+        
+        print(f"   📋 Loading {table_name} relations...")
         
         while True:
             try:
@@ -1185,18 +1187,24 @@ class SupabaseClient:
                 batch = response.json()
                 
                 if not batch:
+                    print(f"   ✅ {table_name}: No more data at offset {offset}")
                     break
                     
                 all_relations.extend(batch)
-                offset += batch_size
+                print(f"   📦 {table_name}: Loaded {len(batch)} relations (total: {len(all_relations)})")
+                offset += len(batch)  # Use actual batch length instead of batch_size
                 
-                if len(batch) < batch_size:  # Last batch
+                # Continue if we got a full batch (there might be more)
+                # Only stop if we get less than the maximum possible (1000)
+                if len(batch) < 1000:  # Supabase hard limit
+                    print(f"   🏁 {table_name}: Last batch ({len(batch)} records)")
                     break
                     
             except Exception as e:
                 print(f"⚠️  Error loading {table_name} at offset {offset}: {e}")
                 break
         
+        print(f"   ✅ {table_name}: Total loaded: {len(all_relations)} relations")
         return all_relations
 
     def _build_relations_from_cache(self, items: List[Dict], all_relations: Dict[str, List[Dict]]) -> None:
@@ -1228,11 +1236,14 @@ class SupabaseClient:
                 
                 for rel in item_relations:
                     relation_name = relation_type.replace('item_', '').rstrip('s')  # item_genres -> genre
-                    related_id = rel.get(f'{relation_name}_id') or rel.get(f'{relation_name}s_id')
+                    related_id = rel.get(f'{relation_name}_id')
                     
-                    if related_id and related_id in self._lookup_cache[f'{relation_name}s']:
+                    # Fix lookup for plural form (genres, themes, demographics, studios, authors)
+                    lookup_table_name = f'{relation_name}s'
+                    
+                    if related_id and lookup_table_name in self._lookup_cache and related_id in self._lookup_cache[lookup_table_name]:
                         item[relation_type].append({
-                            f'{relation_name}s': {'name': self._lookup_cache[f'{relation_name}s'][related_id]}
+                            lookup_table_name: {'name': self._lookup_cache[lookup_table_name][related_id]}
                         })
 
     def _get_relations_for_items(self, table_name: str, item_ids: List[int]) -> List[Dict]:

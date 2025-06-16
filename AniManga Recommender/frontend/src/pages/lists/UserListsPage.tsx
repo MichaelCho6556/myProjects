@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { UserItem } from "../../types";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
+import { sanitizeSearchInput } from "../../utils/security"; // ✅ NEW: Import search sanitization
 import Spinner from "../../components/Spinner";
 import "./UserListsPage.css";
 
@@ -344,7 +345,9 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
       e.preventDefault();
       const formData = new FormData(e.currentTarget);
       const query = formData.get("search") as string | null;
-      updateParams({ q: (query || "").trim() });
+      // ✅ FIXED: Use search-specific sanitization that preserves spaces
+      const sanitizedQuery = query ? sanitizeSearchInput(query) : "";
+      updateParams({ q: sanitizedQuery.trim() });
     },
     [updateParams]
   );
