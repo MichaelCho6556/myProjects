@@ -54,6 +54,7 @@ import StatisticsCards from "../components/dashboard/StatisticsCards";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
 import ItemLists from "../components/dashboard/ItemLists";
 import QuickActions from "../components/dashboard/QuickActions";
+import PersonalizedRecommendations from "../components/dashboard/PersonalizedRecommendations";
 import DashboardSkeleton from "../components/Loading/DashboardSkeleton";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import "./DashboardPage.css";
@@ -307,6 +308,8 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
               onStatusUpdate={handleStatusUpdate}
               onItemDeleted={fetchDashboardData}
             />
+
+            <PersonalizedRecommendations onRefresh={fetchDashboardData} />
 
             <QuickActions onRefresh={fetchDashboardData} />
           </div>
