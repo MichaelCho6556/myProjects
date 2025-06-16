@@ -43,7 +43,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onRefresh }) => {
           <span className="action-text">Browse Manga</span>
         </Link>
 
-        {/* Random Recommendation */}
+        {/* Random Pick */}
         <Link to="/?sort_by=random" className="action-button random">
           <span className="action-icon">🎲</span>
           <span className="action-text">Random Pick</span>
@@ -68,7 +68,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onRefresh }) => {
         <ul>
           <li>💡 Use filters to find exactly what you're looking for</li>
           <li>🔖 Add items to your list to track your progress</li>
-          <li>⭐ Rate items to get better recommendations</li>
+          <li>⭐ Rate items to get better related suggestions</li>
           <li>🎯 Set goals to maintain your viewing streak</li>
         </ul>
       </div>

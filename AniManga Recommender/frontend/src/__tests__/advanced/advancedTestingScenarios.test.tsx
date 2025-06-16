@@ -981,7 +981,7 @@ describe("Advanced Testing Scenarios - Phase D2", () => {
       }
 
       // Should have feature explanations
-      const features = [/track/i, /discover/i, /recommend/i];
+      const features = [/track/i, /discover/i, /related/i];
 
       features.forEach((feature) => {
         const featureElement = screen.queryByText(feature);
