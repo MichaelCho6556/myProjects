@@ -978,3 +978,574 @@
     padding: 1rem 1.5rem;
   }
 }
+
+/* ================================
+   Phase 2: Interactive Features CSS
+   ================================ */
+
+/* Card wrapper with actions */
+.recommendation-card-wrapper {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.recommendation-card-wrapper:hover {
+  transform: translateY(-4px);
+}
+
+.recommendation-card-wrapper:hover .recommendation-actions {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Interactive action buttons positioned on top of card */
+.recommendation-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 5px;
+  z-index: 10;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.action-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(5px);
+}
+
+.action-btn:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: scale(1.1);
+}
+
+.not-interested-btn:hover {
+  background: rgba(220, 38, 38, 0.9);
+}
+
+.info-btn:hover {
+  background: rgba(59, 130, 246, 0.9);
+}
+
+.add-to-list-btn:hover {
+  background: rgba(34, 197, 94, 0.9);
+}
+
+/* Tooltip container */
+.tooltip-container {
+  position: relative;
+}
+
+.recommendation-tooltip {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  width: 280px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: all 0.3s ease;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.tooltip-container:hover .recommendation-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.tooltip-content {
+  padding: 1rem;
+}
+
+.tooltip-content h4 {
+  margin: 0 0 0.5rem 0;
+  color: var(--accent-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.tooltip-content p {
+  margin: 0.3rem 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.tooltip-content strong {
+  color: var(--text-muted);
+}
+
+/* Add to list dropdown */
+.add-to-list-container {
+  position: relative;
+}
+
+.add-dropdown {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  min-width: 160px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: all 0.3s ease;
+  z-index: 100;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.add-to-list-container:hover .add-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.dropdown-option {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dropdown-option:hover {
+  background: var(--bg-card);
+}
+
+.dropdown-option:active {
+  background: var(--accent-primary);
+  color: white;
+}
+
+/* Predicted rating badge */
+.predicted-rating {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(34, 197, 94, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  backdrop-filter: blur(5px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Section refresh button */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.section-title-group h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.section-title-group p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.section-refresh-btn {
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.section-refresh-btn:hover:not(:disabled) {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.section-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Mobile responsive adjustments for interactive features */
+@media (max-width: 768px) {
+  .recommendation-actions {
+    opacity: 1;
+    visibility: visible;
+    position: static;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+  }
+
+  .action-btn {
+    width: 35px;
+    height: 35px;
+    font-size: 18px;
+  }
+
+  .recommendation-tooltip {
+    width: 250px;
+    right: -10px;
+  }
+
+  .add-dropdown {
+    right: -10px;
+    min-width: 140px;
+  }
+
+  .section-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .section-refresh-btn {
+    align-self: flex-end;
+    width: fit-content;
+  }
+}
+
+@media (max-width: 480px) {
+  .recommendation-actions {
+    gap: 3px;
+  }
+
+  .action-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .recommendation-tooltip {
+    width: 200px;
+    right: -20px;
+  }
+
+  .add-dropdown {
+    right: -20px;
+    min-width: 120px;
+  }
+
+  .dropdown-option {
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+}
+
+/* Rating Modal Styles */
+.rating-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+}
+
+.rating-modal {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.rating-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 2rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.rating-modal-header h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.rating-modal-content {
+  padding: 1.5rem 2rem 2rem;
+}
+
+.item-title {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-card);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.item-title strong {
+  color: var(--accent-primary);
+  font-size: 1.1rem;
+}
+
+.rating-section {
+  margin-bottom: 1.5rem;
+}
+
+.rating-section label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.rating-input-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.rating-input {
+  width: 120px;
+  padding: 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.rating-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.1);
+}
+
+.rating-input::-webkit-outer-spin-button,
+.rating-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.rating-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.rating-suffix {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.rating-help {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+.notes-section {
+  margin-bottom: 1.5rem;
+}
+
+.notes-section label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.notes-section textarea {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color 0.2s ease;
+}
+
+.notes-section textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.1);
+}
+
+.notes-section textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.character-count {
+  text-align: right;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
+.cancel-button,
+.submit-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.cancel-button {
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.cancel-button:hover {
+  background: var(--bg-deep-dark);
+  color: var(--text-primary);
+}
+
+.submit-button {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.submit-button:hover {
+  background: var(--accent-secondary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
+}
+
+/* Mobile responsive adjustments for modal */
+@media (max-width: 768px) {
+  .rating-modal {
+    width: 95%;
+    margin: 1rem;
+  }
+
+  .rating-modal-header,
+  .rating-modal-content {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+
+  .star {
+    font-size: 1.3rem;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .cancel-button,
+  .submit-button {
+    width: 100%;
+  }
+}
+
+/* ================================
+   Personalized Recommendations Styles - Phase 1: Card Layout
+   ================================ */
