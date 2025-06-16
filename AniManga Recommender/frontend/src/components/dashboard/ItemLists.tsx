@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { UserItem } from "../../types";
+import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 
 interface ItemListsProps {
   inProgress?: UserItem[];
@@ -8,6 +9,7 @@ interface ItemListsProps {
   onHold?: UserItem[];
   completedRecently?: UserItem[];
   onStatusUpdate: (itemUid: string, newStatus: string, additionalData?: any) => void;
+  onItemDeleted?: () => void;
 }
 
 const ItemLists: React.FC<ItemListsProps> = ({
@@ -16,8 +18,11 @@ const ItemLists: React.FC<ItemListsProps> = ({
   onHold = [],
   completedRecently = [],
   onStatusUpdate,
+  onItemDeleted,
 }) => {
   const [activeTab, setActiveTab] = useState<string>("watching");
+  const [deletingItems, setDeletingItems] = useState<Set<string>>(new Set());
+  const { removeUserItem } = useAuthenticatedApi();
 
   const statusOptions = [
     { value: "watching", label: "Watching" },
@@ -30,6 +35,32 @@ const ItemLists: React.FC<ItemListsProps> = ({
   const handleStatusChange = (itemUid: string, newStatus: string) => {
     const additionalData = newStatus === "completed" ? { completion_date: new Date().toISOString() } : {};
     onStatusUpdate(itemUid, newStatus, additionalData);
+  };
+
+  const handleDeleteItem = async (itemUid: string, itemTitle: string) => {
+    if (!confirm(`Remove "${itemTitle}" from your list?`)) {
+      return;
+    }
+
+    setDeletingItems((prev) => new Set(prev).add(itemUid));
+
+    try {
+      await removeUserItem(itemUid);
+
+      // Notify parent component to refresh data
+      if (onItemDeleted) {
+        onItemDeleted();
+      }
+    } catch (error: any) {
+      console.error("Failed to delete item:", error);
+      alert(`Failed to remove item: ${error.message || "Unknown error"}`);
+    } finally {
+      setDeletingItems((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(itemUid);
+        return newSet;
+      });
+    }
   };
 
   const getViewAllLink = () => {
@@ -84,6 +115,7 @@ const ItemLists: React.FC<ItemListsProps> = ({
                   value={userItem.status}
                   onChange={(e) => handleStatusChange(userItem.item_uid, e.target.value)}
                   className="status-select"
+                  disabled={deletingItems.has(userItem.item_uid)}
                 >
                   {statusOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -91,6 +123,15 @@ const ItemLists: React.FC<ItemListsProps> = ({
                     </option>
                   ))}
                 </select>
+
+                <button
+                  onClick={() => handleDeleteItem(userItem.item_uid, userItem.item?.title || "Unknown")}
+                  disabled={deletingItems.has(userItem.item_uid)}
+                  className="delete-button"
+                  title="Remove from list"
+                >
+                  {deletingItems.has(userItem.item_uid) ? "⟳" : "🗑️"}
+                </button>
               </div>
             </div>
           </div>

@@ -47,6 +47,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // ✅ ADDED: Prevent multiple submissions
+    if (loading) return;
+
     setLoading(true);
     setError("");
 
@@ -57,11 +61,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
       }
 
       // ✅ NEW: Input sanitization
-      const sanitizedEmail = sanitizeInput(email);
-      const sanitizedDisplayName = sanitizeInput(displayName);
+      const sanitizedEmail = sanitizeInput(email.trim());
+      const sanitizedDisplayName = sanitizeInput(displayName.trim());
+
+      // ✅ ADDED: Basic email validation
+      if (!sanitizedEmail || !sanitizedEmail.includes("@")) {
+        throw new Error("Please enter a valid email address");
+      }
+
+      // ✅ ADDED: Password validation
+      if (!password || password.length < 8) {
+        throw new Error("Password must be at least 8 characters long");
+      }
 
       // ✅ NEW: Password strength validation for signup
       if (mode === "signup") {
+        if (!sanitizedDisplayName) {
+          throw new Error("Display name is required");
+        }
+
         const passwordValidation = passwordUtils.validateStrength(password);
         if (!passwordValidation.isValid) {
           throw new Error("Password does not meet security requirements");
@@ -77,12 +95,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
         });
         if (error) throw error;
       }
+
+      // ✅ ADDED: Clear form on success
+      setEmail("");
+      setPassword("");
+      setDisplayName("");
+      setError("");
+
       onClose();
     } catch (err: any) {
       // ✅ UPDATED: More secure error handling
-      const errorMessage = err.message || "An error occurred. Please try again.";
+      let errorMessage = "An error occurred. Please try again.";
+
+      if (err.message) {
+        // ✅ ADDED: Handle specific Supabase auth errors
+        if (err.message.includes("Invalid login credentials")) {
+          errorMessage = "Invalid email or password. Please try again.";
+        } else if (err.message.includes("User already registered")) {
+          errorMessage = "An account with this email already exists. Please sign in instead.";
+        } else if (err.message.includes("Password")) {
+          errorMessage = err.message;
+        } else if (err.message.includes("Email")) {
+          errorMessage = err.message;
+        } else if (err.message.includes("Display name")) {
+          errorMessage = err.message;
+        } else if (err.message.includes("security token")) {
+          errorMessage = err.message;
+        } else {
+          errorMessage = err.message;
+        }
+      }
+
       setError(errorMessage);
-      console.warn("Auth error occurred:", err.code); // ✅ UPDATED: Only log error code, not full details
+      console.warn("Auth error occurred:", err.code || "unknown"); // ✅ UPDATED: Only log error code, not full details
     } finally {
       setLoading(false);
     }

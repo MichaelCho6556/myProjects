@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthModal } from "./Auth/AuthModal";
-import { csrfUtils, sanitizeInput } from "../utils/security"; // ✅ NEW: Import security utilities
+import { csrfUtils, sanitizeInput, sanitizeSearchInput } from "../utils/security"; // ✅ NEW: Import security utilities
 import ConnectionIndicator from "./Feedback/ConnectionIndicator";
 import "./Navbar.css";
 
@@ -55,6 +55,7 @@ import "./Navbar.css";
  * @see {@link AuthModal} for authentication modal functionality
  * @see {@link csrfUtils} for CSRF token management
  * @see {@link sanitizeInput} for input security utilities
+ * @see {@link sanitizeSearchInput} for search-specific sanitization
  *
  * @returns {JSX.Element} The complete navigation bar with all features
  *
@@ -99,8 +100,16 @@ const Navbar: React.FC = () => {
       return;
     }
 
-    // ✅ NEW: Input sanitization
-    const sanitizedSearchValue = sanitizeInput(navSearchValue);
+    // ✅ FIXED: Apply the same sanitization for form submission
+    const sanitizedSearchValue = navSearchValue
+      .replace(/[<>]/g, "") // Remove < and > to prevent basic XSS
+      .replace(/javascript:/gi, "") // Remove javascript: protocol
+      .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
+      .replace(/\.\.\//g, "") // Block path traversal attacks
+      .replace(/\{\{.*?\}\}/g, "") // Block template injection
+      .replace(/\$\{.*?\}/g, "") // Block expression injection
+      .replace(/;\s*(echo|cat|ls|rm|curl|wget|nc|bash|sh)/gi, "") // Block command injection
+      .replace(/(DROP|DELETE|INSERT|UPDATE|CREATE|ALTER)\s+(TABLE|DATABASE)/gi, ""); // Block SQL injection
 
     if (sanitizedSearchValue.trim()) {
       // Navigate to homepage with search term
@@ -112,8 +121,21 @@ const Navbar: React.FC = () => {
   };
 
   const handleNavSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    // ✅ NEW: Input sanitization on change
-    const sanitizedValue = sanitizeInput(event.target.value);
+    // ✅ FIXED: Apply sanitization that preserves spaces for search
+    const rawValue = event.target.value;
+
+    // ✅ ENHANCED: More careful sanitization that preserves search functionality
+    const sanitizedValue = rawValue
+      .replace(/[<>]/g, "") // Remove < and > to prevent basic XSS
+      .replace(/javascript:/gi, "") // Remove javascript: protocol
+      .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
+      .replace(/\.\.\//g, "") // Block path traversal attacks
+      .replace(/\{\{.*?\}\}/g, "") // Block template injection
+      .replace(/\$\{.*?\}/g, "") // Block expression injection
+      .replace(/;\s*(echo|cat|ls|rm|curl|wget|nc|bash|sh)/gi, "") // Block command injection
+      .replace(/(DROP|DELETE|INSERT|UPDATE|CREATE|ALTER)\s+(TABLE|DATABASE)/gi, ""); // Block SQL injection
+    // Note: Removed the space normalization that might have been causing issues
+
     setNavSearchValue(sanitizedValue);
   };
 
@@ -127,7 +149,7 @@ const Navbar: React.FC = () => {
       user.user_metadata?.full_name ||
       user.email?.split("@")[0];
 
-    // ✅ NEW: Sanitize display name
+    // ✅ UPDATED: Use regular sanitizeInput for display names (keep strict)
     return sanitizeInput(displayName || "");
   };
 

@@ -871,6 +871,33 @@ def get_items():
         else:
             # Fallback to title sorting if score column doesn't exist
             data_subset = data_subset.sort_values('title', ascending=True, na_position='last')
+    elif sort_by == 'popularity_desc':
+        # Sort by popularity (lower popularity number = more popular)
+        # But put unranked items (popularity = 0) at the end
+        if 'popularity' in data_subset.columns:
+            # Create a custom sort key: items with popularity > 0 first, then by popularity rank
+            # Items with popularity = 0 go to the end
+            data_subset = data_subset.copy()
+            data_subset['sort_key'] = data_subset['popularity'].apply(lambda x: 999999 if x == 0 else x)
+            data_subset = data_subset.sort_values('sort_key', ascending=True, na_position='last')
+            data_subset = data_subset.drop('sort_key', axis=1)
+        else:
+            # Fallback to score sorting if popularity column doesn't exist
+            data_subset = data_subset.sort_values('score', ascending=False, na_position='last')
+    elif sort_by == 'start_date_desc':
+        # Sort by release date (newest first)
+        if 'start_date' in data_subset.columns:
+            data_subset = data_subset.sort_values('start_date', ascending=False, na_position='last')
+        else:
+            # Fallback to title sorting if start_date column doesn't exist
+            data_subset = data_subset.sort_values('title', ascending=True, na_position='last')
+    elif sort_by == 'start_date_asc':
+        # Sort by release date (oldest first)
+        if 'start_date' in data_subset.columns:
+            data_subset = data_subset.sort_values('start_date', ascending=True, na_position='last')
+        else:
+            # Fallback to title sorting if start_date column doesn't exist
+            data_subset = data_subset.sort_values('title', ascending=True, na_position='last')
     elif sort_by == 'title_asc':
         data_subset = data_subset.sort_values('title', ascending=True, na_position='last')
     elif sort_by == 'title_desc':
@@ -1068,35 +1095,35 @@ def get_item_details(item_uid):
 @app.route('/api/recommendations/<item_uid>')
 def get_recommendations(item_uid):
     """
-    Generate content-based recommendations for a specific anime or manga item.
+    Generate content-based related items for a specific anime or manga item.
     
     This endpoint uses TF-IDF vectorization and cosine similarity to find similar
     items based on content features like genres, synopsis, themes, and metadata.
-    The recommendation engine provides personalized suggestions for discovery.
+    The related items engine provides content-similar suggestions for discovery.
     
     Args:
-        item_uid (str): Unique identifier of the source item for recommendations
+        item_uid (str): Unique identifier of the source item for related items
         
     Query Parameters:
-        n (int, optional): Number of recommendations to return (default: 10, max: 50)
+        n (int, optional): Number of related items to return (default: 10, max: 50)
         
     Returns:
         JSON Response containing:
             - source_item_uid (str): Original item identifier
             - source_item_title (str): Title of the source item
-            - recommendations (list): Array of similar items with metadata
+            - recommendations (list): Array of related items with metadata (field name kept for API compatibility)
             
-    Recommendation Algorithm:
+    Related Items Algorithm:
         1. Retrieves TF-IDF vector for source item
         2. Calculates cosine similarity with all other items
         3. Ranks items by similarity score (excluding source item)
         4. Returns top N most similar items with essential metadata
         
     HTTP Status Codes:
-        200: Success - Recommendations generated
+        200: Success - Related items generated
         404: Item not found - Invalid source item_uid
-        500: Server Error - Recommendation calculation failed
-        503: Service Unavailable - Recommendation system not ready
+        500: Server Error - Related items calculation failed
+        503: Service Unavailable - Related items system not ready
         
     Example Request:
         GET /api/recommendations/anime_1?n=5
@@ -1120,21 +1147,22 @@ def get_recommendations(item_uid):
         
     Performance Notes:
         - Uses pre-computed TF-IDF matrix for fast similarity calculation
-        - Recommendation generation typically completes in <100ms
+        - Related items generation typically completes in <100ms
         - Results are deterministic based on content similarity
         
     Note:
         Requires loaded dataset and TF-IDF matrix. Field names are mapped
         for frontend compatibility. Image URLs fallback to main_picture if needed.
+        API endpoint and response field names maintained for backward compatibility.
     """
     # Ensure data is loaded (but respect test mocking)
     ensure_data_loaded()
     
     if df_processed is None or tfidf_matrix_global is None or uid_to_idx is None:
-        return jsonify({"error": "Recommendation system not ready. Data or TF-IDF matrix missing."}), 503
+        return jsonify({"error": "Related items system not ready. Data or TF-IDF matrix missing."}), 503
 
     if item_uid not in uid_to_idx.index:
-        return jsonify({"error": "Target item for recommendations not found."}), 404
+        return jsonify({"error": "Target item for related items not found."}), 404
     
     try:
         item_idx = uid_to_idx[item_uid]
@@ -1146,34 +1174,34 @@ def get_recommendations(item_uid):
         sim_scores = list(enumerate(sim_scores_for_item[0]))
         sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
         
-        num_recommendations = request.args.get('n', 10, type=int)
-        top_n_indices = [i[0] for i in sim_scores[1:num_recommendations+1]]
+        num_related = request.args.get('n', 10, type=int)
+        top_n_indices = [i[0] for i in sim_scores[1:num_related+1]]
 
-        recommended_items_df = df_processed.loc[top_n_indices].copy()
-        recommended_items_for_json = recommended_items_df.replace({np.nan: None})
+        related_items_df = df_processed.loc[top_n_indices].copy()
+        related_items_for_json = related_items_df.replace({np.nan: None})
         
         # Use main_picture if image_url doesn't exist (for compatibility)
         columns_to_select = ['uid', 'title', 'media_type', 'score', 'genres', 'synopsis']
-        if 'image_url' in recommended_items_for_json.columns:
+        if 'image_url' in related_items_for_json.columns:
             columns_to_select.append('image_url')
-        elif 'main_picture' in recommended_items_for_json.columns:
+        elif 'main_picture' in related_items_for_json.columns:
             columns_to_select.append('main_picture')
         
-        recommended_list_of_dicts = recommended_items_for_json[columns_to_select].to_dict(orient='records')
+        related_list_of_dicts = related_items_for_json[columns_to_select].to_dict(orient='records')
         
         # Map field names for frontend compatibility
-        recommended_mapped = map_records_for_frontend(recommended_list_of_dicts)
+        related_mapped = map_records_for_frontend(related_list_of_dicts)
 
         return jsonify({
             "source_item_uid": item_uid,
             "source_item_title": cleaned_source_title,
-            "recommendations": recommended_mapped
+            "recommendations": related_mapped  # Field name kept for API compatibility
         })
     except Exception as e:
-        print(f"❌ Recommendation error: {str(e)}")
+        print(f"❌ Related items error: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({"error": f"Could not generate recommendations: {str(e)}"}), 500
+        return jsonify({"error": f"Could not generate related items: {str(e)}"}), 500
 
 @app.route('/api/auth/profile', methods=['GET'])
 @require_auth
@@ -2096,6 +2124,115 @@ def force_refresh_statistics():
             
     except Exception as e:
         print(f"Error force refreshing statistics: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/cleanup-orphaned-items', methods=['POST'])
+@require_auth
+def cleanup_orphaned_user_items():
+    """
+    Clean up orphaned user items that reference non-existent anime/manga.
+    
+    This endpoint identifies and removes user items that reference item_uid values
+    that no longer exist in the anime or manga tables. This typically happens
+    after database resets or data migrations.
+    
+    Authentication:
+        Required: Bearer JWT token with valid user_id claim
+        
+    Returns:
+        JSON Response containing:
+            - success (bool): True if cleanup completed successfully
+            - removed_count (int): Number of orphaned items removed
+            - remaining_count (int): Number of valid items remaining
+            
+    HTTP Status Codes:
+        200: Success - Cleanup completed successfully
+        400: Bad Request - Invalid token or missing user ID
+        500: Server Error - Failed to perform cleanup
+        
+    Example Response:
+        {
+            "success": true,
+            "removed_count": 8,
+            "remaining_count": 15,
+            "message": "Removed 8 orphaned items, 15 valid items remaining"
+        }
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        # Get all user items
+        user_items_response = requests.get(
+            f"{auth_client.base_url}/rest/v1/user_items",
+            headers=auth_client.headers,
+            params={'user_id': f'eq.{user_id}'}
+        )
+        
+        if user_items_response.status_code != 200:
+            return jsonify({'error': 'Failed to fetch user items'}), 500
+        
+        user_items = user_items_response.json()
+        orphaned_items = []
+        valid_items = []
+        
+        # Check each user item against anime/manga tables
+        for item in user_items:
+            item_uid = item['item_uid']
+            
+            # Check if item exists in anime table
+            anime_response = requests.get(
+                f"{auth_client.base_url}/rest/v1/anime",
+                headers=auth_client.headers,
+                params={'uid': f'eq.{item_uid}', 'select': 'uid'}
+            )
+            
+            # Check if item exists in manga table
+            manga_response = requests.get(
+                f"{auth_client.base_url}/rest/v1/manga",
+                headers=auth_client.headers,
+                params={'uid': f'eq.{item_uid}', 'select': 'uid'}
+            )
+            
+            # If item doesn't exist in either table, it's orphaned
+            anime_exists = anime_response.status_code == 200 and len(anime_response.json()) > 0
+            manga_exists = manga_response.status_code == 200 and len(manga_response.json()) > 0
+            
+            if not anime_exists and not manga_exists:
+                orphaned_items.append(item)
+                print(f"🗑️ Found orphaned item: {item_uid}")
+            else:
+                valid_items.append(item)
+        
+        # Remove orphaned items
+        removed_count = 0
+        for orphaned_item in orphaned_items:
+            delete_response = requests.delete(
+                f"{auth_client.base_url}/rest/v1/user_items",
+                headers=auth_client.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'item_uid': f'eq.{orphaned_item["item_uid"]}'
+                }
+            )
+            
+            if delete_response.status_code == 204:
+                removed_count += 1
+                print(f"✅ Removed orphaned item: {orphaned_item['item_uid']}")
+        
+        # Invalidate cache to force statistics refresh
+        invalidate_user_statistics_cache(user_id)
+        
+        return jsonify({
+            'success': True,
+            'removed_count': removed_count,
+            'remaining_count': len(valid_items),
+            'message': f'Removed {removed_count} orphaned items, {len(valid_items)} valid items remaining'
+        })
+        
+    except Exception as e:
+        print(f"Error cleaning up orphaned items: {e}")
         return jsonify({'error': str(e)}), 500
 
 #helper functions

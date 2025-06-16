@@ -473,6 +473,8 @@ button.btn-primary:disabled,
 /* ✅ Grid Area Assignments */
 .filter-bar > .filter-group.sort-by-selector {
   grid-area: sort;
+  position: relative; /* ✅ ADDED: Ensure proper positioning context */
+  z-index: 10; /* ✅ ADDED: Higher z-index for dropdown visibility */
 }
 .filter-bar > .filter-group:nth-child(2) {
   grid-area: type;
@@ -1656,4 +1658,56 @@ div[class*="react-select__menu-portal"] {
   min-width: 16px !important;
   text-align: center !important;
   display: none !important; /* Hidden by default, can be shown via JS */
+}
+
+/* ✅ FIXED: Sort by selector specific positioning and visibility */
+.filter-bar > .filter-group.sort-by-selector {
+  grid-area: sort;
+  position: relative; /* ✅ ADDED: Ensure proper positioning context */
+  z-index: 10; /* ✅ ADDED: Higher z-index for dropdown visibility */
+}
+
+.filter-bar > .filter-group.sort-by-selector select {
+  width: 100%;
+  height: 45px !important;
+  padding: 0 16px !important;
+  background: var(--bg-deep-dark);
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: relative; /* ✅ ADDED: Proper positioning */
+  z-index: 11; /* ✅ ADDED: Ensure dropdown appears above other elements */
+  cursor: pointer; /* ✅ ADDED: Show pointer cursor */
+}
+
+/* ✅ FIXED: Sort dropdown focus and hover states */
+.filter-bar > .filter-group.sort-by-selector select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+  z-index: 12; /* ✅ ADDED: Even higher z-index when focused */
+}
+
+.filter-bar > .filter-group.sort-by-selector select:hover {
+  border-color: var(--accent-secondary);
+  background: var(--bg-dark);
+  transform: translateY(-0.5px);
+}
+
+/* ✅ ADDED: Ensure sort dropdown options are visible */
+.filter-bar > .filter-group.sort-by-selector select option {
+  background: var(--bg-deep-dark);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border: none;
+}
+
+.filter-bar > .filter-group.sort-by-selector select option:hover,
+.filter-bar > .filter-group.sort-by-selector select option:focus {
+  background: var(--bg-overlay);
+  color: var(--accent-primary);
 }

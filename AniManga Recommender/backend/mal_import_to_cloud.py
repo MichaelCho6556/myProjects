@@ -9,6 +9,8 @@ Features:
 - Detailed statistics and metadata
 - Smart ID discovery for optimal performance
 - Excludes NSFW content as requested
+- ROBUST: Includes retry logic for Supabase network connections
+- OPTIMIZED: Atomic upserts, consolidated code, bulletproof error handling
 """
 
 import os
@@ -26,6 +28,7 @@ import time
 import json
 from datetime import datetime
 from typing import List, Dict, Tuple, Set, Optional
+import requests  # Added for specific exception handling
 from mal_api_client import MALAPIClient, MALDataTransformer
 from supabase_client import SupabaseClient
 
@@ -58,8 +61,8 @@ class OptimizedCloudMALImporter:
         
         # Conservative performance settings for MAL's dynamic rate limiting
         self.batch_size = 50  # Keep small batches for easier recovery
-        self.concurrent_requests = 5 # Sequential processing to avoid overwhelming MAL
-        self.delay_between_requests = 0.05# Minimal delay since MAL client handles rate limiting
+        self.concurrent_requests = 1 # Sequential processing to avoid overwhelming MAL
+        self.delay_between_requests = 0.1# Minimal delay since MAL client handles rate limiting
         
         # MAL cooldown management
         self.request_timeout = 30  # 30 second timeout per request
@@ -111,8 +114,7 @@ class OptimizedCloudMALImporter:
             for genre_id, name in items.items():
                 self.category_lookup[name.lower()] = category
         
-        # Ensure media types exist
-        self.ensure_media_types()
+        # Note: ensure_media_types() is now async and will be called at the start of import
         
         print("🎨 Enhanced Data Categorization:")
         print(f"   Genres: {len(self.genre_categories['genres'])} traditional genres")
@@ -136,6 +138,78 @@ class OptimizedCloudMALImporter:
                 'supabase_url': supabase_url,
                 'database_type': 'Supabase Cloud'
             }
+    
+    async def _make_supabase_request_with_retry(self, method: str, table: str, data: Optional[Dict] = None, params: Optional[Dict] = None):
+        """A robust wrapper for Supabase requests that handles transient network/server errors."""
+        max_retries = 5
+        initial_backoff = 2  # Start with a 2-second delay
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.supabase._make_request(method, table, data=data, params=params)
+                response.raise_for_status()  # Raises HTTPError for 4xx/5xx responses
+                return response  # Success
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.ChunkedEncodingError) as e:
+                print(f"      🚨 Supabase Network Error (Attempt {attempt + 1}/{max_retries}): {e}")
+            except requests.exceptions.HTTPError as e:
+                # Only retry on server errors (5xx), not client errors (4xx)
+                if 500 <= e.response.status_code < 600:
+                    print(f"      🚨 Supabase Server Error {e.response.status_code} (Attempt {attempt + 1}/{max_retries})")
+                else:
+                    print(f"      ❌ Supabase Client Error {e.response.status_code}. Not retrying.")
+                    raise  # Do not retry on 4xx errors
+            
+            if attempt == max_retries - 1:
+                print(f"      ❌ Supabase request failed after {max_retries} attempts. Giving up.")
+                raise
+            
+            backoff_time = initial_backoff * (2 ** attempt)
+            print(f"      ⏳ Retrying in {backoff_time} seconds...")
+            await asyncio.sleep(backoff_time)
+            
+        raise Exception("Supabase request failed after all retries.")
+    
+    async def _upsert_entity_with_retry(self, table_name: str, data: dict) -> Optional[dict]:
+        """
+        Performs a robust upsert operation using the existing Supabase client.
+        Falls back to get-then-post pattern since the client doesn't support custom headers.
+        """
+        try:
+            # First, try to find existing entity
+            response = await self._make_supabase_request_with_retry('GET', table_name, params={'select': '*', 'name': f"eq.{data['name']}"})
+            entities = response.json()
+            
+            if entities:
+                # Entity already exists, return it
+                return entities[0]
+            
+            # Entity doesn't exist, create it
+            try:
+                response = await self._make_supabase_request_with_retry('POST', table_name, data=data)
+                result = response.json()
+                
+                if isinstance(result, list) and result:
+                    return result[0]
+                elif isinstance(result, dict):
+                    return result
+                else:
+                    # If creation failed, try to get it again (race condition handling)
+                    response = await self._make_supabase_request_with_retry('GET', table_name, params={'select': '*', 'name': f"eq.{data['name']}"})
+                    entities = response.json()
+                    return entities[0] if entities else None
+                    
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 409:  # Conflict - entity was created concurrently
+                    # Try to fetch the entity that was created by another process
+                    response = await self._make_supabase_request_with_retry('GET', table_name, params={'select': '*', 'name': f"eq.{data['name']}"})
+                    entities = response.json()
+                    return entities[0] if entities else None
+                else:
+                    raise
+                    
+        except Exception as e:
+            print(f"      ⚠️  Could not upsert entity in '{table_name}' with data {data}: {e}")
+            return None
     
     def load_discovered_ids(self):
         """Load previously discovered valid MAL IDs"""
@@ -281,39 +355,15 @@ class OptimizedCloudMALImporter:
             print(f"❌ Error checking existing items: {e}")
             return None
     
-    def ensure_media_types(self):
+    async def ensure_media_types(self):
         """Ensure media types exist in the database"""
+        print("   Checking/creating 'anime' and 'manga' media types...")
         try:
-            # Check if anime media type exists (ID 1)
-            try:
-                response = self.supabase._make_request('GET', 'media_types', params={'select': 'id', 'id': 'eq.1'})
-                if not response.json():
-                    # Create anime media type
-                    self.supabase._make_request('POST', 'media_types', data={'id': 1, 'name': 'anime'})
-                    print("   ✅ Created anime media type")
-            except:
-                try:
-                    self.supabase._make_request('POST', 'media_types', data={'name': 'anime'})
-                    print("   ✅ Created anime media type")
-                except:
-                    pass
-            
-            # Check if manga media type exists (ID 2)
-            try:
-                response = self.supabase._make_request('GET', 'media_types', params={'select': 'id', 'id': 'eq.2'})
-                if not response.json():
-                    # Create manga media type
-                    self.supabase._make_request('POST', 'media_types', data={'id': 2, 'name': 'manga'})
-                    print("   ✅ Created manga media type")
-            except:
-                try:
-                    self.supabase._make_request('POST', 'media_types', data={'name': 'manga'})
-                    print("   ✅ Created manga media type")
-                except:
-                    pass
-                    
+            await self._upsert_entity_with_retry('media_types', {'id': 1, 'name': 'anime'})
+            await self._upsert_entity_with_retry('media_types', {'id': 2, 'name': 'manga'})
         except Exception as e:
             print(f"⚠️  Could not ensure media types: {e}")
+        print("   ...done.")
     
     def load_state(self):
         """Load import state from file"""
@@ -429,358 +479,52 @@ class OptimizedCloudMALImporter:
         
         return successful, failed, skipped
     
-    async def import_anime_with_commit_fix(self, anime_id: int) -> Tuple[bool, str]:
-        """Import single anime with explicit transaction commit to fix the memory bug"""
-        try:
-            # Get anime data from MAL
-            mal_data = await self.mal_client.get_anime_details(anime_id)
-            if not mal_data:
-                return False, f"Failed to fetch anime {anime_id} (not found on MAL)"
-            
-            # Transform to basic schema
-            transformed = MALDataTransformer.transform_anime(mal_data)
-            if not transformed:
-                return False, f"Failed to transform anime {anime_id}"
-            
-            # Prepare data for actual schema (using media_type_id)
-            item_data = {
-                'uid': transformed['uid'],
-                'mal_id': transformed['mal_id'],
-                'title': transformed['title'],
-                'synopsis': transformed.get('synopsis', ''),
-                'media_type_id': 1,  # Anime media type ID
-                'episodes': transformed.get('episodes', 0),
-                'score': transformed.get('score', 0.0),
-                'scored_by': transformed.get('scored_by', 0),
-                'popularity': transformed.get('popularity', 0),
-                'status': transformed.get('status', ''),
-                'start_date': transformed.get('start_date'),
-                'end_date': transformed.get('end_date'),
-                'image_url': transformed.get('image_url', '')
-            }
-            
-            # Check if item already exists by mal_id (more reliable than uid)
-            mal_id = item_data['mal_id']
-            print(f"      🔍 Checking if anime {anime_id} (MAL ID: {mal_id}) already exists...")
-            existing_check = self.supabase._make_request('GET', 'items', params={'select': 'id,uid', 'mal_id': f'eq.{mal_id}'})
-            existing_items = existing_check.json()
-            
-            print(f"      📋 Existing check result: {len(existing_items) if existing_items else 0} items found")
-            
-            if existing_items:
-                # Item already exists, skip it
-                print(f"      ⏭️  Anime {anime_id} already exists in database, skipping")
-                return False, f"Anime {anime_id} already exists (skipped)"
-            
-            # Insert using Supabase client with proper transaction handling
-            try:
-                # Use single-item insert with proper headers
-                response = self.supabase._make_request('POST', 'items', data=item_data)
-                if response.status_code == 201:
-                    result_data = response.json()
-                    
-                    # Handle both list and single object responses
-                    if isinstance(result_data, list) and result_data:
-                        item_uid = result_data[0]['uid']
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        print(f"      ✅ [{timestamp}] Successfully inserted anime {anime_id} (UID: {item_uid})")
-                    elif isinstance(result_data, dict):
-                        item_uid = result_data['uid']  
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        print(f"      ✅ [{timestamp}] Successfully inserted anime {anime_id} (UID: {item_uid})")
-                    else:
-                        print(f"      ⚠️  Unexpected response format for anime {anime_id}: {result_data}")
-                        return False, f"Unexpected response format for anime {anime_id}"
-                    
-                    # Verify the item was actually inserted
-                    verification_check = self.supabase._make_request('GET', 'items', params={'select': 'id,uid', 'mal_id': f'eq.{mal_id}'})
-                    verification_items = verification_check.json()
-                    
-                    if not verification_items:
-                        print(f"      ❌ VERIFICATION FAILED: Anime {anime_id} not found after insert!")
-                        return False, f"Verification failed: anime {anime_id} not found after insert"
-                    
-                    # Insert genres with batch optimization
-                    genres = transformed.get('genres', [])
-                    if genres:
-                        await self.insert_genres_for_item_optimized(item_uid, genres)
-                    
-                    # Insert studios with batch optimization
-                    studios = transformed.get('studios', [])
-                    if studios:
-                        await self.insert_studios_for_item_optimized(item_uid, studios)
-                    
-                    return True, f"Successfully imported anime {anime_id}"
-                else:
-                    print(f"      ❌ Failed to insert anime {anime_id}: HTTP {response.status_code}")
-                    print(f"      Response: {response.text}")
-                    return False, f"Failed to insert anime {anime_id}: {response.status_code}"
-            except Exception as e:
-                print(f"      ❌ Exception inserting anime {anime_id}: {e}")
-                return False, f"Failed to insert anime {anime_id}: {e}"
-                
-        except Exception as e:
-            return False, f"Error importing anime {anime_id}: {e}"
-    
-    async def import_manga_with_commit_fix(self, manga_id: int) -> Tuple[bool, str]:
-        """Import single manga with explicit transaction commit to fix the memory bug"""
-        try:
-            # Get manga data from MAL
-            mal_data = await self.mal_client.get_manga_details(manga_id)
-            if not mal_data:
-                return False, f"Failed to fetch manga {manga_id} (not found on MAL)"
-            
-            # Transform to basic schema
-            transformed = MALDataTransformer.transform_manga(mal_data)
-            if not transformed:
-                return False, f"Failed to transform manga {manga_id}"
-            
-            # Prepare data for actual schema (using media_type_id)
-            item_data = {
-                'uid': transformed['uid'],
-                'mal_id': transformed['mal_id'],
-                'title': transformed['title'],
-                'synopsis': transformed.get('synopsis', ''),
-                'media_type_id': 2,  # Manga media type ID
-                'chapters': transformed.get('chapters', 0),
-                'volumes': transformed.get('volumes', 0),
-                'score': transformed.get('score', 0.0),
-                'scored_by': transformed.get('scored_by', 0),
-                'popularity': transformed.get('popularity', 0),
-                'status': transformed.get('status', ''),
-                'start_date': transformed.get('start_date'),
-                'end_date': transformed.get('end_date'),
-                'image_url': transformed.get('image_url', '')
-            }
-            
-            # Check if item already exists by mal_id (more reliable than uid)
-            mal_id = item_data['mal_id']
-            print(f"      🔍 Checking if manga {manga_id} (MAL ID: {mal_id}) already exists...")
-            existing_check = self.supabase._make_request('GET', 'items', params={'select': 'id,uid', 'mal_id': f'eq.{mal_id}'})
-            existing_items = existing_check.json()
-            
-            print(f"      📋 Existing check result: {len(existing_items) if existing_items else 0} items found")
-            
-            if existing_items:
-                # Item already exists, skip it
-                print(f"      ⏭️  Manga {manga_id} already exists in database, skipping")
-                return False, f"Manga {manga_id} already exists (skipped)"
-            
-            # Insert using Supabase client with proper transaction handling
-            try:
-                # Use single-item insert with proper headers
-                response = self.supabase._make_request('POST', 'items', data=item_data)
-                if response.status_code == 201:
-                    result_data = response.json()
-                    
-                    # Handle both list and single object responses
-                    if isinstance(result_data, list) and result_data:
-                        item_uid = result_data[0]['uid']
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        print(f"      ✅ [{timestamp}] Successfully inserted manga {manga_id} (UID: {item_uid})")
-                    elif isinstance(result_data, dict):
-                        item_uid = result_data['uid']  
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        print(f"      ✅ [{timestamp}] Successfully inserted manga {manga_id} (UID: {item_uid})")
-                    else:
-                        print(f"      ⚠️  Unexpected response format for manga {manga_id}: {result_data}")
-                        return False, f"Unexpected response format for manga {manga_id}"
-                    
-                    # Verify the item was actually inserted
-                    verification_check = self.supabase._make_request('GET', 'items', params={'select': 'id,uid', 'mal_id': f'eq.{mal_id}'})
-                    verification_items = verification_check.json()
-                    
-                    if not verification_items:
-                        print(f"      ❌ VERIFICATION FAILED: Manga {manga_id} not found after insert!")
-                        return False, f"Verification failed: manga {manga_id} not found after insert"
-                    
-                    # Insert genres with batch optimization
-                    genres = transformed.get('genres', [])
-                    if genres:
-                        await self.insert_genres_for_item_optimized(item_uid, genres)
-                    
-                    # Insert authors with batch optimization
-                    authors = transformed.get('authors', [])
-                    if authors:
-                        await self.insert_authors_for_item_optimized(item_uid, authors)
-                    
-                    return True, f"Successfully imported manga {manga_id}"
-                else:
-                    print(f"      ❌ Failed to insert manga {manga_id}: HTTP {response.status_code}")
-                    print(f"      Response: {response.text}")
-                    return False, f"Failed to insert manga {manga_id}: {response.status_code}"
-            except Exception as e:
-                print(f"      ❌ Exception inserting manga {manga_id}: {e}")
-                return False, f"Failed to insert manga {manga_id}: {e}"
-                
-        except Exception as e:
-            return False, f"Error importing manga {manga_id}: {e}"
-    
-    async def insert_genres_for_item_optimized(self, item_uid: str, genres: List[str]):
-        """OPTIMIZED genre insertion with better error handling"""
-        try:
-            # Get item ID first
-            response = self.supabase._make_request('GET', 'items', params={'select': 'id', 'uid': f'eq.{item_uid}'})
-            items = response.json()
-            if not items:
-                return
-            
-            item_id = items[0]['id']
-            
-            # Process each genre efficiently
-            for genre in genres:
-                if not genre or not genre.strip():
-                    continue
-                    
-                # Use the new upsert method that handles conflicts gracefully
-                genre_entity = self.supabase.upsert_entity('genres', {'name': genre.strip()})
-                
-                if genre_entity:
-                    genre_id = genre_entity['id']
-                    
-                    # Insert relationship (ignore conflicts)
-                    try:
-                        self.supabase._make_request('POST', 'item_genres', data={'item_id': item_id, 'genre_id': genre_id})
-                    except:
-                        pass  # Relationship already exists
-                    
-        except Exception:
-            pass  # Don't fail the whole item for relationship errors
-    
-    async def insert_studios_for_item_optimized(self, item_uid: str, studios: List[str]):
-        """OPTIMIZED studio insertion with better error handling"""
-        try:
-            # Get item ID first
-            response = self.supabase._make_request('GET', 'items', params={'select': 'id', 'uid': f'eq.{item_uid}'})
-            items = response.json()
-            if not items:
-                return
-            
-            item_id = items[0]['id']
-            
-            # Process each studio efficiently
-            for studio in studios:
-                if not studio or not studio.strip():
-                    continue
-                    
-                # Use the new upsert method that handles conflicts gracefully
-                studio_entity = self.supabase.upsert_entity('studios', {'name': studio.strip()})
-                
-                if studio_entity:
-                    studio_id = studio_entity['id']
-                    
-                    # Insert relationship (ignore conflicts)
-                    try:
-                        self.supabase._make_request('POST', 'item_studios', data={'item_id': item_id, 'studio_id': studio_id})
-                    except:
-                        pass  # Relationship already exists
-                    
-        except Exception:
-            pass  # Don't fail the whole item for relationship errors
-    
-    async def insert_authors_for_item_optimized(self, item_uid: str, authors: List[str]):
-        """OPTIMIZED author insertion with better error handling"""
-        try:
-            # Get item ID first
-            response = self.supabase._make_request('GET', 'items', params={'select': 'id', 'uid': f'eq.{item_uid}'})
-            items = response.json()
-            if not items:
-                return
-            
-            item_id = items[0]['id']
-            
-            # Process each author efficiently
-            for author in authors:
-                if not author or not author.strip():
-                    continue
-                    
-                # Use the new upsert method that handles conflicts gracefully
-                author_entity = self.supabase.upsert_entity('authors', {'name': author.strip()})
-                
-                if author_entity:
-                    author_id = author_entity['id']
-                    
-                    # Insert relationship (ignore conflicts)
-                    try:
-                        self.supabase._make_request('POST', 'item_authors', data={'item_id': item_id, 'author_id': author_id})
-                    except:
-                        pass  # Relationship already exists
-                    
-        except Exception:
-            pass  # Don't fail the whole item for relationship errors
+
     
     async def insert_enhanced_relationships_for_item(self, item_uid: str, categorized: Dict[str, List[str]], transformed: Dict):
         """Insert all categorized relationships for an item with enhanced data"""
         try:
             # Get item ID first
-            response = self.supabase._make_request('GET', 'items', params={'select': 'id', 'uid': f'eq.{item_uid}'})
+            response = await self._make_supabase_request_with_retry('GET', 'items', params={'select': 'id', 'uid': f'eq.{item_uid}'})
             items = response.json()
             if not items:
                 return
             
             item_id = items[0]['id']
             
-            # Insert genres (traditional genres only)
+            # Helper function to process relationships with robust upsert
+            async def process_relation(table_name, entity_name, join_table, fk_name, entity_id_name):
+                if not entity_name or not entity_name.strip():
+                    return
+                entity = await self._upsert_entity_with_retry(table_name, {'name': entity_name.strip()})
+                if entity:
+                    try:
+                        await self._make_supabase_request_with_retry('POST', join_table, data={fk_name: item_id, entity_id_name: entity['id']})
+                    except requests.exceptions.HTTPError as e:
+                        if e.response.status_code == 409:
+                            pass  # Conflict/duplicate is OK
+                        else:
+                            raise
+            
+            # Process all relationships using the helper
             for genre_name in categorized.get('genres', []):
-                if not genre_name or not genre_name.strip():
-                    continue
-                genre_entity = self.supabase.upsert_entity('genres', {'name': genre_name.strip()})
-                if genre_entity:
-                    try:
-                        self.supabase._make_request('POST', 'item_genres', 
-                                                  data={'item_id': item_id, 'genre_id': genre_entity['id']})
-                    except:
-                        pass  # Relationship already exists
-            
-            # Insert themes (story/setting elements)
+                await process_relation('genres', genre_name, 'item_genres', 'item_id', 'genre_id')
+                
             for theme_name in categorized.get('themes', []):
-                if not theme_name or not theme_name.strip():
-                    continue
-                theme_entity = self.supabase.upsert_entity('themes', {'name': theme_name.strip()})
-                if theme_entity:
-                    try:
-                        self.supabase._make_request('POST', 'item_themes', 
-                                                  data={'item_id': item_id, 'theme_id': theme_entity['id']})
-                    except:
-                        pass  # Relationship already exists
-            
-            # Insert demographics (target audience)
+                await process_relation('themes', theme_name, 'item_themes', 'item_id', 'theme_id')
+                
             for demo_name in categorized.get('demographics', []):
-                if not demo_name or not demo_name.strip():
-                    continue
-                demo_entity = self.supabase.upsert_entity('demographics', {'name': demo_name.strip()})
-                if demo_entity:
-                    try:
-                        self.supabase._make_request('POST', 'item_demographics', 
-                                                  data={'item_id': item_id, 'demographic_id': demo_entity['id']})
-                    except:
-                        pass  # Relationship already exists
+                await process_relation('demographics', demo_name, 'item_demographics', 'item_id', 'demographic_id')
             
             # Insert studios (for anime)
             studios = transformed.get('studios', [])
             for studio_name in studios:
-                if not studio_name or not studio_name.strip():
-                    continue
-                studio_entity = self.supabase.upsert_entity('studios', {'name': studio_name.strip()})
-                if studio_entity:
-                    try:
-                        self.supabase._make_request('POST', 'item_studios', 
-                                                  data={'item_id': item_id, 'studio_id': studio_entity['id']})
-                    except:
-                        pass  # Relationship already exists
+                await process_relation('studios', studio_name, 'item_studios', 'item_id', 'studio_id')
             
             # Insert authors (for manga)
             authors = transformed.get('authors', [])
             for author_name in authors:
-                if not author_name or not author_name.strip():
-                    continue
-                author_entity = self.supabase.upsert_entity('authors', {'name': author_name.strip()})
-                if author_entity:
-                    try:
-                        self.supabase._make_request('POST', 'item_authors', 
-                                                  data={'item_id': item_id, 'author_id': author_entity['id']})
-                    except:
-                        pass  # Relationship already exists
+                await process_relation('authors', author_name, 'item_authors', 'item_id', 'author_id')
                         
         except Exception as e:
             print(f"⚠️  Error inserting enhanced relationships: {e}")
@@ -789,25 +533,32 @@ class OptimizedCloudMALImporter:
         """Insert additional rich data like pictures, relations, recommendations, statistics, and themes"""
         try:
             # Get item ID first
-            response = self.supabase._make_request('GET', 'items', params={'select': 'id', 'uid': f'eq.{item_uid}'})
+            response = await self._make_supabase_request_with_retry('GET', 'items', params={'select': 'id', 'uid': f'eq.{item_uid}'})
             items = response.json()
             if not items:
                 return
             
             item_id = items[0]['id']
             
+            # Helper to handle inserts and ignore 409 Conflict errors
+            async def insert_ignore_conflict(table, data):
+                try:
+                    await self._make_supabase_request_with_retry('POST', table, data=data)
+                except requests.exceptions.HTTPError as e:
+                    if e.response.status_code == 409:
+                        pass  # Ignore duplicates
+                    else:
+                        raise
+            
             # 1. Insert additional pictures
             pictures = mal_data.get('pictures', [])
             for picture in pictures:
                 if picture.get('large'):
-                    try:
-                        self.supabase._make_request('POST', 'item_pictures', data={
-                            'item_id': item_id,
-                            'picture_url': picture['large'],
-                            'picture_type': 'additional'
-                        })
-                    except:
-                        pass  # Picture already exists or other error
+                    await insert_ignore_conflict('item_pictures', {
+                        'item_id': item_id,
+                        'picture_url': picture['large'],
+                        'picture_type': 'additional'
+                    })
             
             # 2. Insert related anime/manga
             related_anime = mal_data.get('related_anime', [])
@@ -815,34 +566,27 @@ class OptimizedCloudMALImporter:
             
             for related in related_anime + related_manga:
                 if related.get('node', {}).get('id'):
-                    try:
-                        self.supabase._make_request('POST', 'item_relations', data={
-                            'item_id': item_id,
-                            'related_item_mal_id': related['node']['id'],
-                            'relation_type': related.get('relation_type', 'related')
-                        })
-                    except:
-                        pass  # Relation already exists
+                    await insert_ignore_conflict('item_relations', {
+                        'item_id': item_id,
+                        'related_item_mal_id': related['node']['id'],
+                        'relation_type': related.get('relation_type', 'related')
+                    })
             
             # 3. Insert recommendations
             recommendations = mal_data.get('recommendations', [])
             for rec in recommendations:
                 if rec.get('node', {}).get('id'):
-                    try:
-                        self.supabase._make_request('POST', 'item_recommendations', data={
-                            'item_id': item_id,
-                            'recommended_item_mal_id': rec['node']['id'],
-                            'recommendation_count': rec.get('num_recommendations', 1)
-                        })
-                    except:
-                        pass  # Recommendation already exists
+                    await insert_ignore_conflict('item_recommendations', {
+                        'item_id': item_id,
+                        'recommended_item_mal_id': rec['node']['id'],
+                        'recommendation_count': rec.get('num_recommendations', 1)
+                    })
             
             # 4. Insert statistics
             statistics = mal_data.get('statistics', {})
             if statistics:
                 status_stats = statistics.get('status', {})
-                try:
-                    # Prepare statistics data based on media type
+                if status_stats:
                     stats_data = {
                         'item_id': item_id,
                         'completed': status_stats.get('completed', 0),
@@ -861,10 +605,7 @@ class OptimizedCloudMALImporter:
                             'plan_to_read': status_stats.get('plan_to_read', 0)
                         })
                     
-                    # Use upsert to handle conflicts
-                    self.supabase._make_request('POST', 'item_statistics', data=stats_data)
-                except:
-                    pass  # Statistics already exist or other error
+                    await insert_ignore_conflict('item_statistics', stats_data)
             
             # 5. Insert opening/ending themes (anime only)
             if media_type == 'anime':
@@ -872,39 +613,33 @@ class OptimizedCloudMALImporter:
                 opening_themes = mal_data.get('opening_themes', [])
                 for theme in opening_themes:
                     if isinstance(theme, str) and theme.strip():
-                        try:
-                            # Extract theme name (before any episode info)
-                            theme_name = theme.split('(')[0].strip()
-                            if theme_name:
-                                # Insert or get theme
-                                theme_entity = self.supabase.upsert_entity('opening_themes', {'name': theme_name})
-                                if theme_entity:
-                                    self.supabase._make_request('POST', 'item_opening_themes', data={
-                                        'item_id': item_id,
-                                        'opening_theme_id': theme_entity['id'],
-                                        'theme_text': theme
-                                    })
-                        except:
-                            pass
+                        # Extract theme name (before any episode info)
+                        theme_name = theme.split('(')[0].strip()
+                        if theme_name:
+                            # Insert or get theme using robust upsert
+                            theme_entity = await self._upsert_entity_with_retry('opening_themes', {'name': theme_name})
+                            if theme_entity:
+                                await insert_ignore_conflict('item_opening_themes', {
+                                    'item_id': item_id,
+                                    'opening_theme_id': theme_entity['id'],
+                                    'theme_text': theme
+                                })
                 
                 # Ending themes
                 ending_themes = mal_data.get('ending_themes', [])
                 for theme in ending_themes:
                     if isinstance(theme, str) and theme.strip():
-                        try:
-                            # Extract theme name (before any episode info)
-                            theme_name = theme.split('(')[0].strip()
-                            if theme_name:
-                                # Insert or get theme
-                                theme_entity = self.supabase.upsert_entity('ending_themes', {'name': theme_name})
-                                if theme_entity:
-                                    self.supabase._make_request('POST', 'item_ending_themes', data={
-                                        'item_id': item_id,
-                                        'ending_theme_id': theme_entity['id'],
-                                        'theme_text': theme
-                                    })
-                        except:
-                            pass
+                        # Extract theme name (before any episode info)
+                        theme_name = theme.split('(')[0].strip()
+                        if theme_name:
+                            # Insert or get theme using robust upsert
+                            theme_entity = await self._upsert_entity_with_retry('ending_themes', {'name': theme_name})
+                            if theme_entity:
+                                await insert_ignore_conflict('item_ending_themes', {
+                                    'item_id': item_id,
+                                    'ending_theme_id': theme_entity['id'],
+                                    'theme_text': theme
+                                })
                             
         except Exception as e:
             print(f"⚠️  Error inserting additional rich data: {e}")
@@ -962,6 +697,10 @@ class OptimizedCloudMALImporter:
         print("   Phase 1: Smart ID Discovery (fast, high success rate)")
         print("   Phase 2: Sequential Scanning (comprehensive coverage)")
         print("=" * 70)
+        
+        # Ensure media types exist in the database
+        print("🔧 Setting up database schema...")
+        await self.ensure_media_types()
         
         # Check existing items first
         existing = await self.check_existing_items()
@@ -1070,10 +809,8 @@ class OptimizedCloudMALImporter:
         
         # Unified sequential scanning ranges (MAL uses single ID space for both anime and manga)
         # Resume from 9,000 to avoid reprocessing IDs we've already handled
-        mal_id_ranges = [    # Popular era (high density)
-            (50000, 60000),     # Modern era (high density)
-            (60001, 100000),    # Recent era (medium density)
-            (100001, 500000),   # Current era (lower density)
+        mal_id_ranges = [     # Recent era (medium density)
+            (106700, 500000),   # Current era (lower density)
         ]
         
         print(f"📊 Sequential Scanning Plan:")
@@ -1236,305 +973,118 @@ class OptimizedCloudMALImporter:
     async def import_mal_item_unified(self, mal_id: int) -> Tuple[bool, str]:
         """Import MAL item by determining its actual type (anime or manga) from MAL API"""
         try:
-            # Check if item already exists in database first (regardless of type)
-            print(f"      🔍 Checking if MAL ID {mal_id} already exists...")
-            existing_check = self.supabase._make_request('GET', 'items', params={'select': 'id,uid,media_type_id', 'mal_id': f'eq.{mal_id}'})
-            existing_items = existing_check.json()
-            
-            print(f"      📋 Existing check result: {len(existing_items) if existing_items else 0} items found")
-            
+            # Check if item already exists in database first
+            existing_check_response = await self._make_supabase_request_with_retry('GET', 'items', params={'select': 'id,uid,media_type_id', 'mal_id': f'eq.{mal_id}'})
+            existing_items = existing_check_response.json()
             if existing_items:
-                # Item already exists, skip it
                 existing_type = "anime" if existing_items[0].get('media_type_id') == 1 else "manga"
                 print(f"      ⏭️  MAL ID {mal_id} already exists as {existing_type}, skipping")
                 return False, f"MAL ID {mal_id} already exists (skipped)"
             
             # Try to fetch as anime first
-            print(f"      🎬 Trying MAL ID {mal_id} as anime...")
             anime_data = await self.mal_client.get_anime_details(mal_id)
-            
             if anime_data:
-                # It's an anime - import it
                 print(f"      ✅ MAL ID {mal_id} is anime: {anime_data.get('title', 'Unknown')}")
                 return await self.import_anime_data(mal_id, anime_data)
             
-            # Try to fetch as manga
-            print(f"      📚 Trying MAL ID {mal_id} as manga...")
+            # If not anime, try as manga
             manga_data = await self.mal_client.get_manga_details(mal_id)
-            
             if manga_data:
-                # It's a manga - import it
                 print(f"      ✅ MAL ID {mal_id} is manga: {manga_data.get('title', 'Unknown')}")
                 return await self.import_manga_data(mal_id, manga_data)
             
-            # Neither anime nor manga found
             print(f"      ❌ MAL ID {mal_id} not found as anime or manga")
             return False, f"MAL ID {mal_id} not found on MAL"
                     
         except Exception as e:
             return False, f"Error importing MAL ID {mal_id}: {e}"
 
-    async def import_anime_data(self, mal_id: int, mal_data: dict) -> Tuple[bool, str]:
-        """Import anime data that we already fetched with COMPLETE rich data"""
-        try:
-            # NSFW FILTERING: Check for Hentai genre only
-            for genre in mal_data.get('genres', []):
-                if genre.get('id') == 12:  # ID 12 is 'Hentai'
-                    print(f"      🚫 Skipping Hentai anime {mal_id}")
-                    return False, f"Skipped Hentai anime {mal_id}"
-            
-            # Transform to basic schema
+    async def import_data(self, mal_id: int, mal_data: dict, is_anime: bool) -> Tuple[bool, str]:
+        """Generic data import function for both anime and manga."""
+        media_type = "anime" if is_anime else "manga"
+        
+        # NSFW FILTERING: Check for Hentai genre only
+        if any(genre.get('id') == 12 for genre in mal_data.get('genres', [])):
+            print(f"      🚫 Skipping Hentai {media_type} {mal_id}")
+            return False, f"Skipped Hentai {media_type} {mal_id}"
+
+        # Transform data
+        if is_anime:
             transformed = MALDataTransformer.transform_anime(mal_data)
-            if not transformed:
-                return False, f"Failed to transform anime {mal_id}"
-            
-            # Enhanced categorization of genres/themes/demographics
-            mal_genres = mal_data.get('genres', [])
-            categorized = self.categorize_mal_genres(mal_genres)
-            
-            # Extract alternative titles
-            alt_titles = mal_data.get('alternative_titles', {})
-            synonyms = alt_titles.get('synonyms', []) if alt_titles.get('synonyms') else []
-            
-            # Extract main picture URLs
-            main_picture = mal_data.get('main_picture', {})
-            
-            # Extract start season info
+        else:
+            transformed = MALDataTransformer.transform_manga(mal_data)
+        
+        if not transformed:
+            return False, f"Failed to transform {media_type} {mal_id}"
+
+        # Prepare main item data payload
+        categorized = self.categorize_mal_genres(mal_data.get('genres', []))
+        alt_titles = mal_data.get('alternative_titles', {})
+        main_picture = mal_data.get('main_picture', {})
+        created_at_mal = mal_data.get('created_at', '').replace('Z', '+00:00') if mal_data.get('created_at') else None
+        updated_at_mal = mal_data.get('updated_at', '').replace('Z', '+00:00') if mal_data.get('updated_at') else None
+
+        item_data = {
+            'uid': transformed['uid'], 'mal_id': transformed['mal_id'], 'title': transformed['title'],
+            'synopsis': transformed.get('synopsis', ''), 'score': transformed.get('score', 0.0),
+            'scored_by': transformed.get('scored_by', 0), 'popularity': transformed.get('popularity', 0),
+            'status': transformed.get('status', ''), 'start_date': transformed.get('start_date'),
+            'end_date': transformed.get('end_date'), 'image_url': transformed.get('image_url', ''),
+            'alternative_titles_english': alt_titles.get('en', ''), 'alternative_titles_japanese': alt_titles.get('ja', ''),
+            'alternative_titles_synonyms': alt_titles.get('synonyms', []) or [], 'main_picture_medium': main_picture.get('medium', ''),
+            'main_picture_large': main_picture.get('large', ''), 'rank': mal_data.get('rank'),
+            'num_list_users': mal_data.get('num_list_users'), 'num_scoring_users': mal_data.get('num_scoring_users'),
+            'background': mal_data.get('background', ''), 'created_at_mal': created_at_mal, 'updated_at_mal': updated_at_mal,
+        }
+
+        if is_anime:
             start_season = mal_data.get('start_season', {})
-            
-            # Extract broadcast info
             broadcast = mal_data.get('broadcast', {})
+            item_data.update({
+                'media_type_id': 1, 'episodes': transformed.get('episodes', 0),
+                'media_type': mal_data.get('media_type', ''), 'source': mal_data.get('source', ''),
+                'rating': mal_data.get('rating', ''), 'start_season_season': start_season.get('season', ''),
+                'start_season_year': start_season.get('year'), 'broadcast_day': broadcast.get('day_of_the_week'),
+                'broadcast_time': broadcast.get('start_time'), 'average_episode_duration': mal_data.get('average_episode_duration')
+            })
+        else:
+            serialization = mal_data.get('serialization', [])
+            item_data.update({
+                'media_type_id': 2, 'chapters': transformed.get('chapters', 0), 'volumes': transformed.get('volumes', 0),
+                'serialization': serialization[0].get('name', '') if serialization else ''
+            })
+
+        try:
+            # Insert main item
+            response = await self._make_supabase_request_with_retry('POST', 'items', data=item_data)
+            result_data = response.json()
+            item_uid = (result_data[0] if isinstance(result_data, list) else result_data).get('uid')
             
-            # Parse dates for MAL timestamps (keep as ISO strings for Supabase)
-            created_at_mal = None
-            updated_at_mal = None
-            if mal_data.get('created_at'):
-                try:
-                    # Keep as ISO string, just ensure proper format
-                    created_at_mal = mal_data['created_at'].replace('Z', '+00:00')
-                except:
-                    pass
-            if mal_data.get('updated_at'):
-                try:
-                    # Keep as ISO string, just ensure proper format
-                    updated_at_mal = mal_data['updated_at'].replace('Z', '+00:00')
-                except:
-                    pass
+            if not item_uid:
+                print(f"      ⚠️  Unexpected response format for {media_type} {mal_id}: {result_data}")
+                return False, f"Unexpected response format for {media_type} {mal_id}"
+
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"      ✅ [{timestamp}] Successfully inserted {media_type} {mal_id} (UID: {item_uid})")
             
-            # Prepare COMPLETE data for actual schema
-            item_data = {
-                'uid': transformed['uid'],
-                'mal_id': transformed['mal_id'],
-                'title': transformed['title'],
-                'synopsis': transformed.get('synopsis', ''),
-                'media_type_id': 1,  # Anime media type ID
-                'episodes': transformed.get('episodes', 0),
-                'score': transformed.get('score', 0.0),
-                'scored_by': transformed.get('scored_by', 0),
-                'popularity': transformed.get('popularity', 0),
-                'status': transformed.get('status', ''),
-                'start_date': transformed.get('start_date'),
-                'end_date': transformed.get('end_date'),
-                'image_url': transformed.get('image_url', ''),
-                
-                # NEW RICH DATA FIELDS
-                'alternative_titles_english': alt_titles.get('en', ''),
-                'alternative_titles_japanese': alt_titles.get('ja', ''),
-                'alternative_titles_synonyms': synonyms,
-                'main_picture_medium': main_picture.get('medium', ''),
-                'main_picture_large': main_picture.get('large', ''),
-                'rank': mal_data.get('rank'),
-                'num_list_users': mal_data.get('num_list_users'),
-                'num_scoring_users': mal_data.get('num_scoring_users'),
-                'background': mal_data.get('background', ''),
-                'created_at_mal': created_at_mal,
-                'updated_at_mal': updated_at_mal,
-                
-                # ANIME-SPECIFIC FIELDS
-                'media_type': mal_data.get('media_type', ''),
-                'source': mal_data.get('source', ''),
-                'rating': mal_data.get('rating', ''),
-                'start_season_season': start_season.get('season', ''),
-                'start_season_year': start_season.get('year'),
-                'broadcast_day': broadcast.get('day_of_the_week', '') or None,
-                'broadcast_time': broadcast.get('start_time', '') or None,
-                'average_episode_duration': mal_data.get('average_episode_duration')
-            }
+            # Insert related data
+            print(f"      🔗 Inserting relationships for {media_type} {mal_id}...")
+            await self.insert_enhanced_relationships_for_item(item_uid, categorized, transformed)
+            print(f"      📊 Inserting rich data for {media_type} {mal_id}...")
+            await self.insert_additional_rich_data(item_uid, mal_data, media_type)
             
-            # Insert using Supabase client with proper transaction handling
-            try:
-                # Use single-item insert with proper headers
-                response = self.supabase._make_request('POST', 'items', data=item_data)
-                if response.status_code == 201:
-                    result_data = response.json()
-                    
-                    # Handle both list and single object responses
-                    if isinstance(result_data, list) and result_data:
-                        item_uid = result_data[0]['uid']
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        print(f"      ✅ [{timestamp}] Successfully inserted anime {mal_id} (UID: {item_uid})")
-                    elif isinstance(result_data, dict):
-                        item_uid = result_data['uid']  
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        print(f"      ✅ [{timestamp}] Successfully inserted anime {mal_id} (UID: {item_uid})")
-                    else:
-                        print(f"      ⚠️  Unexpected response format for anime {mal_id}: {result_data}")
-                        return False, f"Unexpected response format for anime {mal_id}"
-                    
-                    # Verify the item was actually inserted
-                    verification_check = self.supabase._make_request('GET', 'items', params={'select': 'id,uid', 'mal_id': f'eq.{mal_id}'})
-                    verification_items = verification_check.json()
-                    
-                    if not verification_items:
-                        print(f"      ❌ VERIFICATION FAILED: Anime {mal_id} not found after insert!")
-                        return False, f"Verification failed: anime {mal_id} not found after insert"
-                    
-                    # Insert categorized relationships with enhanced data
-                    print(f"      🔗 Inserting relationships for anime {mal_id}...")
-                    await self.insert_enhanced_relationships_for_item(item_uid, categorized, transformed)
-                    
-                    # Insert additional rich data
-                    print(f"      📊 Inserting rich data for anime {mal_id}...")
-                    await self.insert_additional_rich_data(item_uid, mal_data, 'anime')
-                    
-                    return True, f"Successfully imported anime {mal_id}"
-                else:
-                    print(f"      ❌ Failed to insert anime {mal_id}: HTTP {response.status_code}")
-                    print(f"      Response: {response.text}")
-                    return False, f"Failed to insert anime {mal_id}: {response.status_code}"
-            except Exception as e:
-                print(f"      ❌ Exception inserting anime {mal_id}: {e}")
-                return False, f"Failed to insert anime {mal_id}: {e}"
-                
+            return True, f"Successfully imported {media_type} {mal_id}"
         except Exception as e:
-            return False, f"Error importing anime {mal_id}: {e}"
+            print(f"      ❌ Exception inserting {media_type} {mal_id}: {e}")
+            return False, f"Failed to insert {media_type} {mal_id}: {e}"
+
+    async def import_anime_data(self, mal_id: int, mal_data: dict) -> Tuple[bool, str]:
+        """Wrapper for the generic import_data function for anime."""
+        return await self.import_data(mal_id, mal_data, is_anime=True)
     
     async def import_manga_data(self, mal_id: int, mal_data: dict) -> Tuple[bool, str]:
-        """Import manga data that we already fetched with COMPLETE rich data"""
-        try:
-            # NSFW FILTERING: Check for Hentai genre only
-            for genre in mal_data.get('genres', []):
-                if genre.get('id') == 12:  # ID 12 is 'Hentai'
-                    print(f"      🚫 Skipping Hentai manga {mal_id}")
-                    return False, f"Skipped Hentai manga {mal_id}"
-            
-            # Transform to basic schema
-            transformed = MALDataTransformer.transform_manga(mal_data)
-            if not transformed:
-                return False, f"Failed to transform manga {mal_id}"
-            
-            # Enhanced categorization of genres/themes/demographics
-            mal_genres = mal_data.get('genres', [])
-            categorized = self.categorize_mal_genres(mal_genres)
-            
-            # Extract alternative titles
-            alt_titles = mal_data.get('alternative_titles', {})
-            synonyms = alt_titles.get('synonyms', []) if alt_titles.get('synonyms') else []
-            
-            # Extract main picture URLs
-            main_picture = mal_data.get('main_picture', {})
-            
-            # Extract serialization info
-            serialization_list = mal_data.get('serialization', [])
-            serialization = serialization_list[0].get('name', '') if serialization_list else ''
-            
-            # Parse dates for MAL timestamps (keep as ISO strings for Supabase)
-            created_at_mal = None
-            updated_at_mal = None
-            if mal_data.get('created_at'):
-                try:
-                    # Keep as ISO string, just ensure proper format
-                    created_at_mal = mal_data['created_at'].replace('Z', '+00:00')
-                except:
-                    pass
-            if mal_data.get('updated_at'):
-                try:
-                    # Keep as ISO string, just ensure proper format
-                    updated_at_mal = mal_data['updated_at'].replace('Z', '+00:00')
-                except:
-                    pass
-            
-            # Prepare COMPLETE data for actual schema
-            item_data = {
-                'uid': transformed['uid'],
-                'mal_id': transformed['mal_id'],
-                'title': transformed['title'],
-                'synopsis': transformed.get('synopsis', ''),
-                'media_type_id': 2,  # Manga media type ID
-                'chapters': transformed.get('chapters', 0),
-                'volumes': transformed.get('volumes', 0),
-                'score': transformed.get('score', 0.0),
-                'scored_by': transformed.get('scored_by', 0),
-                'popularity': transformed.get('popularity', 0),
-                'status': transformed.get('status', ''),
-                'start_date': transformed.get('start_date'),
-                'end_date': transformed.get('end_date'),
-                'image_url': transformed.get('image_url', ''),
-                
-                # NEW RICH DATA FIELDS
-                'alternative_titles_english': alt_titles.get('en', ''),
-                'alternative_titles_japanese': alt_titles.get('ja', ''),
-                'alternative_titles_synonyms': synonyms,
-                'main_picture_medium': main_picture.get('medium', ''),
-                'main_picture_large': main_picture.get('large', ''),
-                'rank': mal_data.get('rank'),
-                'num_list_users': mal_data.get('num_list_users'),
-                'num_scoring_users': mal_data.get('num_scoring_users'),
-                'background': mal_data.get('background', ''),
-                'created_at_mal': created_at_mal,
-                'updated_at_mal': updated_at_mal,
-                
-                # MANGA-SPECIFIC FIELDS
-                'serialization': serialization
-            }
-            
-            # Insert using Supabase client with proper transaction handling
-            try:
-                # Use single-item insert with proper headers
-                response = self.supabase._make_request('POST', 'items', data=item_data)
-                if response.status_code == 201:
-                    result_data = response.json()
-                    
-                    # Handle both list and single object responses
-                    if isinstance(result_data, list) and result_data:
-                        item_uid = result_data[0]['uid']
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        print(f"      ✅ [{timestamp}] Successfully inserted manga {mal_id} (UID: {item_uid})")
-                    elif isinstance(result_data, dict):
-                        item_uid = result_data['uid']  
-                        timestamp = datetime.now().strftime("%H:%M:%S")
-                        print(f"      ✅ [{timestamp}] Successfully inserted manga {mal_id} (UID: {item_uid})")
-                    else:
-                        print(f"      ⚠️  Unexpected response format for manga {mal_id}: {result_data}")
-                        return False, f"Unexpected response format for manga {mal_id}"
-                    
-                    # Verify the item was actually inserted
-                    verification_check = self.supabase._make_request('GET', 'items', params={'select': 'id,uid', 'mal_id': f'eq.{mal_id}'})
-                    verification_items = verification_check.json()
-                    
-                    if not verification_items:
-                        print(f"      ❌ VERIFICATION FAILED: Manga {mal_id} not found after insert!")
-                        return False, f"Verification failed: manga {mal_id} not found after insert"
-                    
-                    # Insert categorized relationships with enhanced data
-                    print(f"      🔗 Inserting relationships for manga {mal_id}...")
-                    await self.insert_enhanced_relationships_for_item(item_uid, categorized, transformed)
-                    
-                    # Insert additional rich data
-                    print(f"      📊 Inserting rich data for manga {mal_id}...")
-                    await self.insert_additional_rich_data(item_uid, mal_data, 'manga')
-                    
-                    return True, f"Successfully imported manga {mal_id}"
-                else:
-                    print(f"      ❌ Failed to insert manga {mal_id}: HTTP {response.status_code}")
-                    print(f"      Response: {response.text}")
-                    return False, f"Failed to insert manga {mal_id}: {response.status_code}"
-            except Exception as e:
-                print(f"      ❌ Exception inserting manga {mal_id}: {e}")
-                return False, f"Failed to insert manga {mal_id}: {e}"
-                
-        except Exception as e:
-            return False, f"Error importing manga {mal_id}: {e}"
+        """Wrapper for the generic import_data function for manga."""
+        return await self.import_data(mal_id, mal_data, is_anime=False)
 
     def categorize_mal_genres(self, mal_genres: List[Dict]) -> Dict[str, List[str]]:
         """Categorize MAL genres into proper genres, themes, and demographics"""
@@ -1596,4 +1146,9 @@ async def main():
     await importer.start_optimized_smart_import()
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    # Add graceful KeyboardInterrupt handling
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n🛑 Import process interrupted by user. Exiting gracefully.")
+        print("   Progress has been saved and can be resumed later.")

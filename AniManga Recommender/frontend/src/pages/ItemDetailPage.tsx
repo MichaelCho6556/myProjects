@@ -3,13 +3,13 @@
  *
  * This component provides a comprehensive detailed view of individual anime or manga items.
  * It displays complete information including metadata, synopsis, ratings, media content,
- * recommendations, and user interaction capabilities for authenticated users.
+ * related content, and user interaction capabilities for authenticated users.
  *
  * Key Features:
  * - Complete item metadata display (score, status, episodes/chapters, dates)
  * - Rich media content (cover images, trailers for anime)
  * - Interactive tag system with filtered navigation
- * - Content-based recommendations engine integration
+ * - Content-based related items engine integration
  * - User list management for authenticated users (add/remove/update status)
  * - Responsive design with proper accessibility
  * - Error handling with graceful fallbacks
@@ -17,14 +17,14 @@
  *
  * Data Sources:
  * - Item details API: `/api/items/{uid}` - Complete item information
- * - Recommendations API: `/api/recommendations/{uid}` - Related content suggestions
+ * - Related Items API: `/api/recommendations/{uid}` - Related content suggestions
  * - User authentication context for personalized features
  *
  * Navigation Features:
  * - Clickable tags for filtered browsing (genres, themes, demographics, etc.)
  * - Back navigation with browser history support
  * - External links to official sources
- * - Related item navigation through recommendations
+ * - Related item navigation through similar content
  *
  * Media Integration:
  * - YouTube trailer embedding for anime content
@@ -49,7 +49,7 @@
  *
  * // Component automatically:
  * // - Extracts UID from URL parameters
- * // - Loads item data and recommendations
+ * // - Loads item data and related items
  * // - Handles loading and error states
  * // - Updates document title dynamically
  * ```
@@ -132,7 +132,7 @@ const ItemDetailPage: React.FC = () => {
   const { uid } = useParams<{ uid: string }>();
   const navigate = useNavigate();
   const [item, setItem] = useState<AnimeItem | null>(null);
-  const [recommendations, setRecommendations] = useState<AnimeItem[]>([]);
+  const [related, setRelated] = useState<AnimeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
@@ -147,16 +147,16 @@ const ItemDetailPage: React.FC = () => {
   );
 
   /**
-   * Load item data and recommendations from the API.
+   * Load item data and related items from the API.
    *
    * This function handles the complete data loading process including item details
-   * and content-based recommendations. It implements proper error handling and
+   * and content-based related items. It implements proper error handling and
    * validates response data to ensure UI stability.
    *
    * Data Loading Process:
    * 1. Validate UID parameter from URL
    * 2. Fetch item details from `/api/items/{uid}`
-   * 3. Fetch recommendations from `/api/recommendations/{uid}`
+   * 3. Fetch related items from `/api/recommendations/{uid}`
    * 4. Handle various error conditions and API response formats
    * 5. Update component state with loaded data
    *
@@ -188,8 +188,8 @@ const ItemDetailPage: React.FC = () => {
    * - Malformed responses: Graceful handling with console warnings
    *
    * Performance Considerations:
-   * - Parallel loading of item details and recommendations
-   * - Non-blocking recommendations (failures don't affect main content)
+   * - Parallel loading of item details and related items
+   * - Non-blocking related items (failures don't affect main content)
    * - Proper loading state management for smooth UX
    *
    * @since 1.0.0
@@ -217,25 +217,25 @@ const ItemDetailPage: React.FC = () => {
 
       setItem(itemData);
 
-      // Fetch recommendations in parallel
+      // Fetch related items in parallel
       try {
-        const recommendationsResponse = await axios.get(`${API_BASE_URL}/api/recommendations/${uid}?n=10`);
+        const relatedResponse = await axios.get(`${API_BASE_URL}/api/recommendations/${uid}?n=10`);
 
         if (
-          recommendationsResponse.data &&
-          recommendationsResponse.data.recommendations &&
-          Array.isArray(recommendationsResponse.data.recommendations)
+          relatedResponse.data &&
+          relatedResponse.data.recommendations &&
+          Array.isArray(relatedResponse.data.recommendations)
         ) {
-          setRecommendations(recommendationsResponse.data.recommendations);
-        } else if (recommendationsResponse.data && Array.isArray(recommendationsResponse.data)) {
-          setRecommendations(recommendationsResponse.data);
+          setRelated(relatedResponse.data.recommendations);
+        } else if (relatedResponse.data && Array.isArray(relatedResponse.data)) {
+          setRelated(relatedResponse.data);
         } else {
-          console.warn("Unexpected recommendations response format:", recommendationsResponse.data);
-          setRecommendations([]);
+          console.warn("Unexpected related items response format:", relatedResponse.data);
+          setRelated([]);
         }
       } catch (error) {
-        console.warn("Failed to load recommendations:", error);
-        setRecommendations([]);
+        console.warn("Failed to load related items:", error);
+        setRelated([]);
       }
     } catch (error) {
       const errorObj = error as any;
@@ -711,13 +711,16 @@ const ItemDetailPage: React.FC = () => {
           </div>
         )}
 
-        {/* Recommendations Section */}
-        {recommendations.length > 0 && (
-          <div className="recommendations-section">
-            <h3>Recommendations</h3>
-            <div className="recommendations-list item-list">
-              {recommendations.map((recItem) => (
-                <ItemCard key={recItem.uid} item={recItem} />
+        {/* Related Items Section */}
+        {related.length > 0 && (
+          <div className="related-section">
+            <h3>
+              Related{" "}
+              {item?.media_type === "anime" ? "Anime" : item?.media_type === "manga" ? "Manga" : "Items"}
+            </h3>
+            <div className="related-list item-list">
+              {related.map((relatedItem) => (
+                <ItemCard key={relatedItem.uid} item={relatedItem} />
               ))}
             </div>
           </div>
