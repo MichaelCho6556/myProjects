@@ -506,14 +506,14 @@ export const mockItemDetailResponse = (item: any) => {
   });
 };
 
-// Helper for recommendations responses
-export const mockRecommendationsResponse = (recommendations: any[] = []) => {
-  // Store recommendations in our endpoint map with correct backend format
+// Helper for related items responses (API still uses "recommendations" field for compatibility)
+export const mockRelatedItemsResponse = (relatedItems: any[] = []) => {
+  // Store related items in our endpoint map with correct backend format
   endpointResponses.set("/recommendations/", {
     data: {
       source_item_uid: "test-uid-1",
       source_item_title: "Test Anime Title",
-      recommendations: recommendations,
+      recommendations: relatedItems, // Keep API field name for compatibility
     },
   });
 };

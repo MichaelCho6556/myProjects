@@ -162,7 +162,7 @@ describe("QuickActions Component", () => {
       expect(screen.getByText("Quick Tips")).toBeInTheDocument();
       expect(screen.getByText(/Use filters to find exactly what you're looking for/)).toBeInTheDocument();
       expect(screen.getByText(/Add items to your list to track your progress/)).toBeInTheDocument();
-      expect(screen.getByText(/Rate items to get better recommendations/)).toBeInTheDocument();
+      expect(screen.getByText(/Rate items to get better related suggestions/)).toBeInTheDocument();
       expect(screen.getByText(/Set goals to maintain your viewing streak/)).toBeInTheDocument();
     });
 

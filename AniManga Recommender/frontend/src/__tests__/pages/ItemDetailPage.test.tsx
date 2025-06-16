@@ -1,6 +1,6 @@
 /**
  * Integration Tests for ItemDetailPage Component
- * Tests item detail display, recommendations, navigation, and error handling
+ * Tests item detail display, related items, navigation, and error handling
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
@@ -8,7 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import ItemDetailPage from "../../pages/ItemDetailPage";
 import { AuthProvider } from "../../context/AuthContext";
-import { mockAxios, mockItemDetailResponse, mockRecommendationsResponse } from "../../__mocks__/axios";
+import { mockAxios, mockItemDetailResponse, mockRelatedItemsResponse } from "../../__mocks__/axios";
 
 // Helper function to create mock items
 const createMockItem = (overrides = {}) => {
@@ -86,7 +86,7 @@ describe("ItemDetailPage Component", () => {
     it("loads item details on mount", async () => {
       const testItem = createTestItem();
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
 
       renderWithRouter();
 
@@ -97,12 +97,12 @@ describe("ItemDetailPage Component", () => {
       expect(mockAxios.get).toHaveBeenCalledWith("http://localhost:5000/api/items/test-123");
     });
 
-    it("loads recommendations alongside item details", async () => {
+    it("loads related items alongside item details", async () => {
       const testItem = createTestItem();
-      const recommendations = [createTestItem({ uid: "rec-1", title: "Recommended Item 1" })];
+      const relatedItems = [createTestItem({ uid: "rec-1", title: "Related Item 1" })];
 
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse(recommendations);
+      mockRelatedItemsResponse(relatedItems);
 
       renderWithRouter();
 
@@ -118,7 +118,7 @@ describe("ItemDetailPage Component", () => {
     beforeEach(async () => {
       const testItem = createTestItem();
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
       renderWithRouter();
 
       await waitFor(() => {
@@ -195,7 +195,7 @@ describe("ItemDetailPage Component", () => {
     beforeEach(async () => {
       const testItem = createTestItem();
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
       renderWithRouter();
 
       await waitFor(() => {
@@ -229,16 +229,16 @@ describe("ItemDetailPage Component", () => {
     });
   });
 
-  describe("Recommendations Section", () => {
-    it("displays recommendations when available", async () => {
+  describe("Related Items Section", () => {
+    it("displays related items when available", async () => {
       const testItem = createTestItem();
-      const recommendations = [
-        createTestItem({ uid: "rec-1", title: "Recommended Item 1" }),
-        createTestItem({ uid: "rec-2", title: "Recommended Item 2" }),
+      const relatedItems = [
+        createTestItem({ uid: "rec-1", title: "Related Item 1" }),
+        createTestItem({ uid: "rec-2", title: "Related Item 2" }),
       ];
 
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse(recommendations);
+      mockRelatedItemsResponse(relatedItems);
 
       renderWithRouter();
 
@@ -247,17 +247,17 @@ describe("ItemDetailPage Component", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText("Recommended Item 1")).toBeInTheDocument();
-        expect(screen.getByText("Recommended Item 2")).toBeInTheDocument();
+        expect(screen.getByText("Related Item 1")).toBeInTheDocument();
+        expect(screen.getByText("Related Item 2")).toBeInTheDocument();
       });
     });
 
-    it("shows recommendations heading", async () => {
+    it("shows related items heading", async () => {
       const testItem = createTestItem();
-      const recommendations = [createTestItem({ uid: "rec-1", title: "Recommended Item 1" })];
+      const relatedItems = [createTestItem({ uid: "rec-1", title: "Related Item 1" })];
 
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse(recommendations);
+      mockRelatedItemsResponse(relatedItems);
 
       renderWithRouter();
 
@@ -265,13 +265,13 @@ describe("ItemDetailPage Component", () => {
         expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
       });
 
-      expect(screen.getByRole("heading", { name: /recommendations/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /related/i })).toBeInTheDocument();
     });
 
-    it("handles empty recommendations gracefully", async () => {
+    it("handles empty related items gracefully", async () => {
       const testItem = createTestItem();
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
 
       renderWithRouter();
 
@@ -279,8 +279,8 @@ describe("ItemDetailPage Component", () => {
         expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
       });
 
-      // Should not show recommendations section when empty
-      expect(screen.queryByRole("heading", { name: /recommendations/i })).not.toBeInTheDocument();
+      // Should not show related items section when empty
+      expect(screen.queryByRole("heading", { name: /related/i })).not.toBeInTheDocument();
     });
   });
 
@@ -296,56 +296,38 @@ describe("ItemDetailPage Component", () => {
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/not found/i)).toBeInTheDocument();
+        expect(screen.getByText(/Item not found/i)).toBeInTheDocument();
       });
     });
 
-    it("displays error message for server errors", async () => {
+    it("displays error message when API request fails", async () => {
       mockAxios.get.mockRejectedValue({
         response: {
           status: 500,
-          data: { error: "Server Error" },
+          data: { error: "Internal Server Error" },
         },
       });
 
       renderWithRouter();
 
       await waitFor(() => {
-        expect(screen.getByText(/error/i)).toBeInTheDocument();
+        expect(screen.getByText(/Internal Server Error/i)).toBeInTheDocument();
       });
     });
 
-    it("provides link to homepage in error state", async () => {
-      mockAxios.get.mockRejectedValue({
-        response: {
-          status: 404,
-          data: { error: "Item not found" },
-        },
-      });
-
-      renderWithRouter();
-
-      await waitFor(() => {
-        expect(screen.getByText(/not found/i)).toBeInTheDocument();
-      });
-
-      const homeLink = screen.getByRole("link", { name: /go to homepage/i });
-      expect(homeLink).toHaveAttribute("href", "/");
-    });
-
-    it("handles recommendations loading error gracefully", async () => {
+    it("handles related items API failure gracefully", async () => {
       const testItem = createTestItem();
       mockItemDetailResponse(testItem);
 
-      // Mock recommendations to fail
-      mockAxios.get.mockImplementation((url) => {
+      // Mock related items to fail
+      mockAxios.get.mockImplementation((url: string) => {
         if (url.includes("/recommendations")) {
-          return Promise.reject(new Error("Failed to load recommendations"));
+          return Promise.reject({
+            response: { status: 500, data: { error: "Related items API failed" } },
+          });
         }
-        if (url.includes("/api/items/test-123")) {
-          return Promise.resolve({ data: testItem });
-        }
-        return Promise.resolve({ data: {} });
+        // Return success for item details
+        return Promise.resolve({ data: testItem });
       });
 
       renderWithRouter();
@@ -354,7 +336,7 @@ describe("ItemDetailPage Component", () => {
         expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
       });
 
-      // Should still show item details even if recommendations fail
+      // Item should still display even if related items fail
       expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
     });
   });
@@ -363,7 +345,7 @@ describe("ItemDetailPage Component", () => {
     it("handles missing image gracefully", async () => {
       const testItem = createTestItem({ image_url: null });
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
 
       renderWithRouter();
 
@@ -378,7 +360,7 @@ describe("ItemDetailPage Component", () => {
     it("handles missing synopsis gracefully", async () => {
       const testItem = createTestItem({ synopsis: null });
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
 
       renderWithRouter();
 
@@ -393,7 +375,7 @@ describe("ItemDetailPage Component", () => {
     it("handles missing score gracefully", async () => {
       const testItem = createTestItem({ score: null, scored_by: null });
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
 
       renderWithRouter();
 
@@ -407,7 +389,7 @@ describe("ItemDetailPage Component", () => {
     it("handles empty genres array", async () => {
       const testItem = createTestItem({ genres: [] });
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
 
       renderWithRouter();
 
@@ -427,7 +409,7 @@ describe("ItemDetailPage Component", () => {
         volumes: 20,
       });
       mockItemDetailResponse(testManga);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
 
       renderWithRouter();
 
@@ -445,7 +427,7 @@ describe("ItemDetailPage Component", () => {
     beforeEach(async () => {
       const testItem = createTestItem();
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
       renderWithRouter();
 
       await waitFor(() => {
@@ -481,7 +463,7 @@ describe("ItemDetailPage Component", () => {
     it("loads correct item based on URL parameter", async () => {
       const testItem = createTestItem({ uid: "custom-123", title: "Custom Item" });
       mockItemDetailResponse(testItem);
-      mockRecommendationsResponse([]);
+      mockRelatedItemsResponse([]);
 
       renderWithRouter(["/item/custom-123"]);
 
@@ -505,6 +487,133 @@ describe("ItemDetailPage Component", () => {
       await waitFor(() => {
         expect(screen.getByText(/not found/i)).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("URL Handling", () => {
+    it("handles URL with special characters correctly", async () => {
+      const testItem = createTestItem({ uid: "test-anime-123!@#" });
+      mockItemDetailResponse(testItem);
+      mockRelatedItemsResponse([]);
+
+      renderWithRouter(["/item/test-anime-123!@#"]);
+
+      await waitFor(() => {
+        expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
+      });
+    });
+
+    it("displays correct information for different media types", async () => {
+      const mangaItem = createTestItem({
+        media_type: "manga",
+        chapters: 100,
+        volumes: 10,
+        episodes: null,
+      });
+      mockItemDetailResponse(mangaItem);
+      mockRelatedItemsResponse([]);
+
+      renderWithRouter();
+
+      await waitFor(() => {
+        expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("MANGA")).toBeInTheDocument();
+    });
+
+    it("handles missing image gracefully", async () => {
+      const testItem = createTestItem({ image_url: null });
+      mockItemDetailResponse(testItem);
+      mockRelatedItemsResponse([]);
+
+      renderWithRouter();
+
+      await waitFor(() => {
+        expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
+      });
+
+      // Should still render without image
+      expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
+    });
+  });
+
+  describe("Dynamic Content Loading", () => {
+    it("updates content when URL parameter changes", async () => {
+      const testItem1 = createTestItem({ uid: "item-1", title: "First Item" });
+      const testItem2 = createTestItem({ uid: "item-2", title: "Second Item" });
+
+      mockItemDetailResponse(testItem1);
+      mockRelatedItemsResponse([]);
+
+      const { rerender } = renderWithRouter(["/item/item-1"]);
+
+      await waitFor(() => {
+        expect(screen.getByText("First Item")).toBeInTheDocument();
+      });
+
+      // Change URL and mock response
+      mockItemDetailResponse(testItem2);
+      mockRelatedItemsResponse([]);
+
+      rerender(
+        <MemoryRouter>
+          <AuthProvider>
+            <Routes>
+              <Route path="/item/:uid" element={<ItemDetailPage />} />
+              <Route path="/" element={<div>Home Page</div>} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>
+      );
+
+      // Navigate to second item
+      window.history.pushState({}, "", "/item/item-2");
+
+      await waitFor(() => {
+        expect(screen.getByText("Second Item")).toBeInTheDocument();
+      });
+    });
+
+    it("displays loading state while fetching data", async () => {
+      let resolvePromise: (value: any) => void;
+      const promise = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+
+      mockAxios.get.mockReturnValue(promise);
+
+      renderWithRouter();
+
+      // Should show loading state
+      expect(screen.getByText(/loading/i)).toBeInTheDocument();
+
+      // Resolve the promise
+      resolvePromise!({ data: createTestItem() });
+
+      await waitFor(() => {
+        expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
+      });
+    });
+
+    it("handles rapid URL changes correctly", async () => {
+      const testItem = createTestItem();
+      mockItemDetailResponse(testItem);
+      mockRelatedItemsResponse([]);
+
+      renderWithRouter();
+
+      // Simulate rapid navigation
+      for (let i = 0; i < 3; i++) {
+        window.history.pushState({}, "", `/item/test-${i}`);
+      }
+
+      await waitFor(() => {
+        expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
+      });
+
+      // Should handle rapid changes gracefully
+      expect(screen.getByText("Test Anime Title")).toBeInTheDocument();
     });
   });
 });

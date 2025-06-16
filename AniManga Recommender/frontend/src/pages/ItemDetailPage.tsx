@@ -221,14 +221,17 @@ const ItemDetailPage: React.FC = () => {
       try {
         const relatedResponse = await axios.get(`${API_BASE_URL}/api/recommendations/${uid}?n=10`);
 
+        // Access related items from API response
+        // Note: Backend still uses "recommendations" field name for API compatibility,
+        // but frontend treats these as "related" items for improved user clarity
         if (
           relatedResponse.data &&
           relatedResponse.data.recommendations &&
           Array.isArray(relatedResponse.data.recommendations)
         ) {
-          setRelated(relatedResponse.data.recommendations);
+          setRelated(relatedResponse.data.recommendations); // Store as 'related' items for frontend
         } else if (relatedResponse.data && Array.isArray(relatedResponse.data)) {
-          setRelated(relatedResponse.data);
+          setRelated(relatedResponse.data); // Handle alternative response format
         } else {
           console.warn("Unexpected related items response format:", relatedResponse.data);
           setRelated([]);

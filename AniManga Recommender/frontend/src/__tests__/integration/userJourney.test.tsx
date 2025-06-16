@@ -6,7 +6,7 @@
  * - New user signup to first item addition complete journey
  * - Search, filtering, and adding items to lists workflow
  * - Item status updates and dashboard reflection workflow
- * - Recommendation generation and interaction flow
+ * - Related items generation and interaction flow
  * - Multi-list management and status transitions
  * - Cross-page navigation and state persistence
  * - Error recovery during multi-step workflows
@@ -991,31 +991,31 @@ describe("Complete User Journey Integration Tests", () => {
     });
   });
 
-  describe("Recommendation Generation and Interaction Flow", () => {
-    test("completes recommendation workflow based on user preferences", async () => {
+  describe("Related Items Generation and Interaction Flow", () => {
+    test("completes related items workflow based on user preferences", async () => {
       setupAuthenticatedUser();
 
-      const mockRecommendations = [
+      const mockRelatedItems = [
         {
           ...mockAnimeItems[0],
           uid: "rec-1",
           title: "Demon Slayer",
-          recommendation_score: 95,
+          related_score: 95,
           reason: "Similar action themes and high ratings",
         },
         {
           ...mockAnimeItems[1],
           uid: "rec-2",
           title: "My Hero Academia",
-          recommendation_score: 88,
+          related_score: 88,
           reason: "Popular among users with similar preferences",
         },
       ];
 
-      // Mock recommendations API
+      // Mock related items API
       (axios.get as jest.Mock).mockImplementation((url) => {
         if (url.includes("recommendations")) {
-          return Promise.resolve({ data: { items: mockRecommendations } });
+          return Promise.resolve({ data: { items: mockRelatedItems } });
         }
         return Promise.resolve({
           data: {
@@ -1035,7 +1035,7 @@ describe("Complete User Journey Integration Tests", () => {
         expect(screen.getByText("Test User")).toBeInTheDocument();
       });
 
-      // 1. Test basic dashboard functionality (recommendations not currently implemented)
+      // 1. Test basic dashboard functionality (related items not currently implemented)
       // Verify user can access dashboard
       expect(screen.getByText("Test User")).toBeInTheDocument();
 
