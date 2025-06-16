@@ -2,16 +2,20 @@
  * PersonalizedRecommendations Component
  *
  * Displays personalized anime/manga recommendations by calling the API endpoint
- * implemented in Task 1.2. Shows a placeholder if no recommendations are available.
+ * implemented in Task 1.2. Shows recommendations in a proper card grid layout
+ * with responsive design and consistent styling.
  *
  * @component
  */
 
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { PersonalizedRecommendationsProps } from "../../types";
 import Spinner from "../Spinner";
+
+const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
 
 /**
  * PersonalizedRecommendations component that fetches and displays recommendations
@@ -56,6 +60,108 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
     if (onRefresh) {
       onRefresh();
     }
+  };
+
+  /**
+   * Handle image load error by falling back to default placeholder
+   */
+  const handleImageError = (event: React.SyntheticEvent<HTMLImageElement, Event>): void => {
+    const target = event.target as HTMLImageElement;
+    target.src = DEFAULT_PLACEHOLDER_IMAGE;
+  };
+
+  /**
+   * Render individual recommendation card
+   */
+  const renderRecommendationCard = (item: any, itemIndex: number) => {
+    // Extract the actual anime/manga data from the nested structure
+    const animeData = item.item; // The actual anime/manga data is in item.item
+    const title = animeData?.title || animeData?.name || "Unknown Title";
+    const reasoning = item.reasoning || "No reasoning provided";
+    const score = item.recommendation_score || 0;
+    const mediaType = animeData?.media_type || animeData?.mediaType || "Unknown";
+    const genres = animeData?.genres || [];
+    const rating = animeData?.rating || animeData?.score || "N/A";
+
+    // Fix image URL extraction - handle multiple possible field names
+    let imageUrl = animeData?.image_url || animeData?.imageUrl || animeData?.main_picture;
+
+    // Additional fallback checks
+    if (!imageUrl && animeData) {
+      // Check for nested image structures that might exist
+      imageUrl =
+        animeData.images?.jpg?.image_url ||
+        animeData.images?.large_image_url ||
+        animeData.picture?.large ||
+        animeData.picture?.medium;
+    }
+
+    // Final fallback to placeholder
+    if (!imageUrl) {
+      imageUrl = DEFAULT_PLACEHOLDER_IMAGE;
+    }
+
+    const itemUid = animeData?.uid || item.uid;
+
+    // Debug logging to understand the data structure
+    console.log("🔍 Recommendation item debug:", {
+      title,
+      imageUrl,
+      animeData: animeData ? Object.keys(animeData) : "no animeData",
+      hasImageUrl: !!animeData?.image_url,
+      hasImageUrlAlt: !!animeData?.imageUrl,
+      hasMainPicture: !!animeData?.main_picture,
+      fullItem: item,
+    });
+
+    return (
+      <Link
+        key={itemIndex}
+        to={`/item/${itemUid}`}
+        className="recommendation-card-link"
+        aria-label={`View details for ${title} - ${mediaType} with score ${rating}`}
+      >
+        <article className="recommendation-card">
+          <div className="recommendation-image-container">
+            <img
+              src={imageUrl}
+              alt={`Cover for ${title}`}
+              loading="lazy"
+              onError={handleImageError}
+              className="recommendation-image"
+            />
+          </div>
+
+          <div className="recommendation-content">
+            <h4 className="recommendation-title">{title}</h4>
+
+            <div className="recommendation-meta">
+              <span className="recommendation-type">{mediaType.toUpperCase()}</span>
+              <span className="recommendation-rating">★ {rating}/10</span>
+            </div>
+
+            <div className="recommendation-reason">
+              <p>{reasoning}</p>
+            </div>
+
+            {genres.length > 0 && (
+              <div className="recommendation-genres">
+                {genres.slice(0, 3).map((genre: string, idx: number) => (
+                  <span key={idx} className="genre-tag">
+                    {genre}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="recommendation-score">
+              <span className="score-label">Match:</span>
+              <span className="score-value">{(score * 100).toFixed(0)}%</span>
+            </div>
+          </div>
+        </article>
+      </Link>
+    );
   };
 
   if (loading) {
@@ -141,43 +247,22 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
       <div className="recommendations-content">
         {sections.map((section, index) => (
           <div key={index} className="recommendation-section">
-            <h3>{section.title}</h3>
-            <p>{section.subtitle}</p>
-            <div className="recommendation-items">
-              {section.items.map((item: any, itemIndex: number) => {
-                // Extract the actual anime/manga data from the nested structure
-                const animeData = item.item; // The actual anime/manga data is in item.item
-                const title = animeData?.title || animeData?.name || "Unknown Title";
-                const reasoning = item.reasoning || "No reasoning provided";
-                const score = item.recommendation_score || 0;
-                const mediaType = animeData?.media_type || "Unknown";
-                const genres = animeData?.genres || [];
-                const rating = animeData?.rating || animeData?.score || "N/A";
-
-                return (
-                  <div key={itemIndex} className="recommendation-item">
-                    <div className="item-header">
-                      <h4>{title}</h4>
-                      <span className="item-type">{mediaType}</span>
-                    </div>
-                    <p className="item-reasoning">{reasoning}</p>
-                    <div className="item-details">
-                      <span className="item-rating">📊 {rating}/10</span>
-                      <span className="item-score">🎯 {score.toFixed(2)}</span>
-                    </div>
-                    {genres.length > 0 && (
-                      <div className="item-genres">
-                        {genres.slice(0, 3).map((genre: string, idx: number) => (
-                          <span key={idx} className="genre-tag">
-                            {genre}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            <div className="section-header">
+              <h3>{section.title}</h3>
+              <p className="section-subtitle">{section.subtitle}</p>
             </div>
+
+            {section.items.length > 0 ? (
+              <div className="recommendation-grid">
+                {section.items.map((item: any, itemIndex: number) =>
+                  renderRecommendationCard(item, itemIndex)
+                )}
+              </div>
+            ) : (
+              <div className="section-empty">
+                <p>No recommendations available in this category yet.</p>
+              </div>
+            )}
           </div>
         ))}
       </div>
