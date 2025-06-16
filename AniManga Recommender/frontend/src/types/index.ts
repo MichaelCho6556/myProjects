@@ -442,4 +442,80 @@ export enum LocalStorageKeys {
   ITEMS_PER_PAGE = "aniMangaItemsPerPage",
   USER_PREFERENCES = "aniMangaUserPreferences",
   THEME = "aniMangaTheme",
+  RECOMMENDATION_SECTIONS_COLLAPSED = "aniManga_rec_sections_collapsed",
+}
+
+// ================================
+// Personalized Recommendations Types
+// ================================
+
+/**
+ * Individual recommendation item with reasoning and prediction scores
+ */
+export interface RecommendationItem {
+  uid: string;
+  title: string;
+  media_type: "anime" | "manga";
+  image_url: string;
+  score: number;
+  reason: string; // e.g., "Because you liked Death Note"
+  predicted_rating?: number;
+  recommendation_score: number;
+  genres?: string[];
+  themes?: string[];
+  synopsis?: string;
+  year?: number;
+  episodes?: number;
+  chapters?: number;
+}
+
+/**
+ * Recommendation section containing multiple items with common reasoning
+ */
+export interface RecommendationSection {
+  section_type: "based_on_completed" | "trending_genres" | "hidden_gems";
+  title: string;
+  subtitle: string;
+  items: RecommendationItem[];
+  reasoning?: string;
+}
+
+/**
+ * Complete API response for personalized recommendations
+ */
+export interface PersonalizedRecommendationsResponse {
+  user_id: string;
+  generated_at: string;
+  sections: RecommendationSection[];
+  cache_info: {
+    cached: boolean;
+    expires_at: string;
+  };
+}
+
+/**
+ * Props for PersonalizedRecommendations component
+ */
+export interface PersonalizedRecommendationsProps {
+  onRefresh?: () => void;
+  className?: string;
+}
+
+/**
+ * User feedback on recommendations for improving future suggestions
+ */
+export interface RecommendationFeedback {
+  item_uid: string;
+  action: "not_interested" | "added_to_list" | "rated" | "clicked";
+  reason?: "already_seen" | "not_my_genre" | "low_quality" | "other";
+  section_type: "based_on_completed" | "trending_genres" | "hidden_gems";
+  rating?: number;
+  list_status?: "plan_to_watch" | "watching" | "completed" | "on_hold" | "dropped";
+}
+
+/**
+ * Collapsed sections state for localStorage persistence
+ */
+export interface CollapsedSectionsState {
+  [sectionType: string]: boolean;
 }
