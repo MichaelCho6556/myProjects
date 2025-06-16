@@ -427,7 +427,12 @@ def _calculate_completion_rate_from_prefs(user_preferences: Dict[str, Any]) -> f
         
         # Estimate based on rating patterns (users who rate tend to complete more)
         rating_count = user_preferences.get('rating_patterns', {}).get('rating_count', 0)
-        estimated_completion_rate = min(0.95, (rating_count / total_items) * 1.2)
+        
+        # Safe division check
+        if total_items > 0:
+            estimated_completion_rate = min(0.95, (rating_count / total_items) * 1.2)
+        else:
+            estimated_completion_rate = 0.0
         
         return round(estimated_completion_rate, 2)
     except Exception:
