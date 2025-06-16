@@ -3,21 +3,18 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthModal } from "./Auth/AuthModal";
 import { csrfUtils, sanitizeInput, sanitizeSearchInput } from "../utils/security"; // ✅ NEW: Import security utilities
-import ConnectionIndicator from "./Feedback/ConnectionIndicator";
 import "./Navbar.css";
 
 /**
  * Enhanced Navigation Bar Component with integrated search and authentication.
  *
  * This component provides the main navigation interface for the AniManga Recommender,
- * featuring secure search functionality, user authentication controls, connection
- * monitoring, and responsive design. It serves as the primary navigation hub
- * accessible from all pages.
+ * featuring secure search functionality, user authentication controls, and responsive
+ * design. It serves as the primary navigation hub accessible from all pages.
  *
  * Key Features:
  * - Integrated search bar with CSRF protection and input sanitization
  * - Dynamic authentication state display (Sign In/Sign Out)
- * - Real-time connection status indicator
  * - User profile display with welcome message
  * - Responsive navigation menu with accessibility support
  * - URL synchronization for search parameters
@@ -51,7 +48,6 @@ import "./Navbar.css";
  * ```
  *
  * @see {@link useAuth} for authentication context integration
- * @see {@link ConnectionIndicator} for network status monitoring
  * @see {@link AuthModal} for authentication modal functionality
  * @see {@link csrfUtils} for CSRF token management
  * @see {@link sanitizeInput} for input security utilities
@@ -187,9 +183,6 @@ const Navbar: React.FC = () => {
               🔍
             </button>
           </form>
-
-          {/* Connection Indicator */}
-          <ConnectionIndicator position="top-right" showText={false} showOnlyWhenPoor={true} />
 
           {/* Navigation Menu */}
           <ul className="nav-menu" role="menubar">
