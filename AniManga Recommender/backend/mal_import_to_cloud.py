@@ -810,7 +810,7 @@ class OptimizedCloudMALImporter:
         # Unified sequential scanning ranges (MAL uses single ID space for both anime and manga)
         # Resume from 9,000 to avoid reprocessing IDs we've already handled
         mal_id_ranges = [     # Recent era (medium density)
-            (111900, 500000),   # Current era (lower density)
+            (115000, 500000),   # Current era (lower density)
         ]
         
         print(f"📊 Sequential Scanning Plan:")
