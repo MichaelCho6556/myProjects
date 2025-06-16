@@ -85,6 +85,26 @@ export const sanitizeInput = (input: string): string => {
     .trim();
 };
 
+// ✅ NEW: Search-specific sanitization function that preserves spaces and normal search terms
+export const sanitizeSearchInput = (input: string): string => {
+  // For search queries, we want to be less aggressive to allow legitimate search terms
+  // while still protecting against dangerous patterns
+  return (
+    input
+      .replace(/[<>]/g, "") // Remove < and > to prevent basic XSS
+      .replace(/javascript:/gi, "") // Remove javascript: protocol
+      .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
+      .replace(/\.\.\//g, "") // Block path traversal attacks
+      .replace(/\{\{.*?\}\}/g, "") // Block template injection {{ }}
+      .replace(/\$\{.*?\}/g, "") // Block expression injection ${ }
+      .replace(/;\s*(echo|cat|ls|rm|curl|wget|nc|bash|sh)/gi, "") // Block command injection
+      .replace(/(DROP|DELETE|INSERT|UPDATE|CREATE|ALTER)\s+(TABLE|DATABASE)/gi, "") // Block SQL injection
+      // Preserve spaces and normal punctuation for search
+      .replace(/^\s+|\s+$/g, "") // Only trim leading/trailing spaces
+      .replace(/\s+/g, " ")
+  ); // Normalize multiple spaces to single space
+};
+
 // ✅ NEW: Advanced Input Validation - Strict Rejection
 export const validateInput = (
   input: string,

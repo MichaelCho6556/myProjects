@@ -305,6 +305,7 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
               onHold={dashboardData.on_hold}
               completedRecently={dashboardData.completed_recently}
               onStatusUpdate={handleStatusUpdate}
+              onItemDeleted={fetchDashboardData}
             />
 
             <QuickActions onRefresh={fetchDashboardData} />

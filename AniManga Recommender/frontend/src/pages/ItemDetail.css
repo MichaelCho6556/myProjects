@@ -243,15 +243,15 @@
   margin: 0 auto;
 }
 
-/* Recommendations section */
-.recommendations-section {
+/* Related items section */
+.related-section {
   margin-top: 50px;
   padding-top: 40px;
   border-top: 2px solid var(--border-color);
   text-align: center;
 }
 
-.recommendations-section h3 {
+.related-section h3 {
   font-size: 2rem;
   margin-bottom: 30px;
   color: var(--text-primary);
@@ -263,8 +263,8 @@
   background-clip: text;
 }
 
-/* Constrain recommendations grid but allow it to be wider */
-.recommendations-list {
+/* Constrain related items grid but allow it to be wider */
+.related-list {
   max-width: 1200px;
   margin: 0 auto;
 }
@@ -377,7 +377,7 @@
     font-size: 2rem;
   }
 
-  .recommendations-section h3 {
+  .related-section h3 {
     font-size: 1.6rem;
   }
 
@@ -422,7 +422,7 @@
   }
 
   .trailer-section h3,
-  .recommendations-section h3 {
+  .related-section h3 {
     font-size: 1.4rem;
   }
 

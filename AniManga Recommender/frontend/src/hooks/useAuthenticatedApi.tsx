@@ -55,6 +55,8 @@ interface UseAuthenticatedApiReturn {
   getUserItems: (status?: string) => Promise<any>;
   updateUserItemStatus: (itemUid: string, data: any) => Promise<any>;
   removeUserItem: (itemUid: string) => Promise<any>;
+  cleanupOrphanedItems: () => Promise<any>;
+  forceRefreshStats: () => Promise<any>;
   getDashboardData: () => Promise<any>;
   resetRateLimit: () => void;
 }
@@ -391,6 +393,42 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
     });
 
   /**
+   * Cleans up orphaned user items that reference non-existent anime/manga.
+   *
+   * @async
+   * @function cleanupOrphanedItems
+   * @returns {Promise<any>} Promise resolving to cleanup results
+   *
+   * @example
+   * ```typescript
+   * const result = await cleanupOrphanedItems();
+   * console.log(`Removed ${result.removed_count} orphaned items`);
+   * ```
+   */
+  const cleanupOrphanedItems = (): Promise<any> =>
+    makeAuthenticatedRequest("/api/auth/cleanup-orphaned-items", {
+      method: "POST",
+    });
+
+  /**
+   * Forces refresh of user statistics cache.
+   *
+   * @async
+   * @function forceRefreshStats
+   * @returns {Promise<any>} Promise resolving to refreshed statistics
+   *
+   * @example
+   * ```typescript
+   * const stats = await forceRefreshStats();
+   * console.log("Statistics refreshed:", stats);
+   * ```
+   */
+  const forceRefreshStats = (): Promise<any> =>
+    makeAuthenticatedRequest("/api/auth/force-refresh-stats", {
+      method: "POST",
+    });
+
+  /**
    * Retrieves comprehensive dashboard data for the authenticated user.
    *
    * This includes user statistics, recent activity, current progress,
@@ -416,6 +454,8 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
     getUserItems,
     updateUserItemStatus,
     removeUserItem,
+    cleanupOrphanedItems,
+    forceRefreshStats,
     getDashboardData,
     resetRateLimit,
   };
