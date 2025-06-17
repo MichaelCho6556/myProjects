@@ -577,20 +577,28 @@
   transform: translateY(-2px);
 }
 
-/* Header Section */
-.recommendations-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 2rem 2.5rem 1rem;
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%);
-  border-bottom: 1px solid rgba(20, 184, 166, 0.2);
+/* Personalized Recommendations Header - Enhanced Professional Styling */
+.personalized-recommendations-header {
+  margin-bottom: 2rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
 }
 
-.recommendations-header h2 {
-  color: var(--text-primary);
+.section-title-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  gap: 1rem;
+}
+
+.section-title {
   font-size: 1.75rem;
   font-weight: 700;
+  color: var(--text-primary);
   margin: 0;
   background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
   -webkit-background-clip: text;
@@ -598,22 +606,76 @@
   background-clip: text;
 }
 
-.recommendations-header .refresh-button {
-  background: rgba(20, 184, 166, 0.1);
-  border: 1px solid var(--accent-primary);
-  color: var(--accent-primary);
-  padding: 0.75rem 1.5rem;
-  border-radius: 12px;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  cursor: pointer;
+.section-subtitle {
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  font-style: italic;
 }
 
-.recommendations-header .refresh-button:hover {
+.refresh-button {
   background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  border-radius: 12px;
+  padding: 0.75rem 1.5rem;
   color: white;
-  transform: translateY(-1px);
-  box-shadow: 0 5px 15px rgba(20, 184, 166, 0.3);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.3);
+  min-width: 120px;
+  justify-content: center;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(20, 184, 166, 0.4);
+}
+
+.refresh-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  animation: refreshSpin 1s linear infinite;
+}
+
+@keyframes refreshSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Responsive adjustments for header */
+@media (max-width: 768px) {
+  .personalized-recommendations-header {
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .section-title-container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .section-title {
+    font-size: 1.5rem;
+  }
+
+  .refresh-button {
+    align-self: stretch;
+    width: 100%;
+  }
 }
 
 /* Content Section */
@@ -632,6 +694,14 @@
 /* Section Headers */
 .section-header {
   margin-bottom: 1.5rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.section-title-group {
+  flex: 1;
 }
 
 .section-header h3 {
@@ -642,6 +712,40 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+/* Section refresh button styles */
+.section-refresh-btn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+}
+
+.section-refresh-btn:hover:not(:disabled) {
+  background: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+.section-refresh-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  animation: spin 1s linear infinite;
+}
+
+.section-refresh-btn:disabled:hover {
+  transform: none;
 }
 
 .section-subtitle {
@@ -986,7 +1090,6 @@
 /* Card wrapper with actions */
 .recommendation-card-wrapper {
   position: relative;
-  transition: all 0.3s ease;
 }
 
 .recommendation-card-wrapper:hover {
@@ -995,76 +1098,169 @@
 
 .recommendation-card-wrapper:hover .recommendation-actions {
   opacity: 1;
-  visibility: visible;
 }
 
-/* Interactive action buttons positioned on top of card */
+/* Show actions on hover for desktop, always visible on mobile */
+@media (min-width: 769px) {
+  .recommendation-actions {
+    opacity: 0.8;
+    transition: opacity 0.3s ease;
+  }
+
+  .recommendation-card-wrapper:hover .recommendation-actions {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .recommendation-actions {
+    opacity: 1;
+  }
+}
+
+/* Recommendation Actions - Updated Professional Styling */
 .recommendation-actions {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 8px;
+  right: 8px;
   display: flex;
-  gap: 5px;
-  z-index: 10;
-  opacity: 0;
-  visibility: hidden;
-  transition: all 0.3s ease;
+  gap: 0.5rem;
+  z-index: 3;
 }
 
-.action-btn {
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.8);
+/* Base Action Button Styling */
+.action-btn,
+.not-interested-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: white;
-  font-size: 16px;
+  font-size: 0.9rem;
   cursor: pointer;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(5px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.action-btn:hover {
-  background: rgba(0, 0, 0, 0.9);
-  transform: scale(1.1);
+/* Hover States */
+.action-btn:hover,
+.not-interested-btn:hover {
+  background: rgba(0, 0, 0, 0.85);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Specific Button Colors */
+.not-interested-btn {
+  background: rgba(220, 53, 69, 0.8);
+  border-color: rgba(220, 53, 69, 0.3);
 }
 
 .not-interested-btn:hover {
-  background: rgba(220, 38, 38, 0.9);
+  background: rgba(220, 53, 69, 0.95);
+  border-color: rgba(220, 53, 69, 0.5);
+}
+
+.info-btn {
+  background: rgba(0, 123, 255, 0.8);
+  border-color: rgba(0, 123, 255, 0.3);
 }
 
 .info-btn:hover {
-  background: rgba(59, 130, 246, 0.9);
+  background: rgba(0, 123, 255, 0.95);
+  border-color: rgba(0, 123, 255, 0.5);
+}
+
+.add-to-list-btn {
+  background: rgba(40, 167, 69, 0.8);
+  border-color: rgba(40, 167, 69, 0.3);
 }
 
 .add-to-list-btn:hover {
-  background: rgba(34, 197, 94, 0.9);
+  background: rgba(40, 167, 69, 0.95);
+  border-color: rgba(40, 167, 69, 0.5);
 }
 
-/* Tooltip container */
+/* Enhanced loading and success states for add-to-list button */
+.add-to-list-btn.loading {
+  background: rgba(251, 191, 36, 0.9) !important;
+  border-color: rgba(251, 191, 36, 0.5) !important;
+  animation: buttonPulse 1.5s ease-in-out infinite;
+  cursor: not-allowed;
+}
+
+.add-to-list-btn.success {
+  background: rgba(16, 185, 129, 0.9) !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  animation: successPulse 0.6s ease-out;
+}
+
+.add-to-list-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.dropdown-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--bg-overlay) !important;
+  color: var(--text-muted) !important;
+}
+
+@keyframes buttonPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes successPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Tooltip Container */
 .tooltip-container {
   position: relative;
 }
 
+/* Recommendation Tooltip */
 .recommendation-tooltip {
   position: absolute;
   top: 40px;
   right: 0;
-  width: 280px;
   background: var(--bg-dark);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 0;
+  padding: 1rem;
+  width: 280px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   opacity: 0;
   visibility: hidden;
   transform: translateY(-10px);
   transition: all 0.3s ease;
-  z-index: 100;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  overflow: hidden;
+  z-index: 1000;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .tooltip-container:hover .recommendation-tooltip {
@@ -1073,47 +1269,47 @@
   transform: translateY(0);
 }
 
-.tooltip-content {
-  padding: 1rem;
-}
-
 .tooltip-content h4 {
-  margin: 0 0 0.5rem 0;
-  color: var(--accent-primary);
+  margin: 0 0 0.75rem 0;
+  color: var(--primary-color);
   font-size: 0.9rem;
   font-weight: 600;
 }
 
 .tooltip-content p {
-  margin: 0.3rem 0;
+  margin: 0.5rem 0;
   font-size: 0.8rem;
+  color: var(--text-secondary);
   line-height: 1.4;
 }
 
 .tooltip-content strong {
-  color: var(--text-muted);
+  color: var(--text-primary);
 }
 
-/* Add to list dropdown */
+/* Add to List Container */
 .add-to-list-container {
   position: relative;
 }
 
+/* Add Dropdown */
 .add-dropdown {
   position: absolute;
   top: 40px;
   right: 0;
-  min-width: 160px;
   background: var(--bg-dark);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 0.5rem 0;
+  border-radius: 12px;
+  padding: 0.5rem;
+  min-width: 160px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   opacity: 0;
   visibility: hidden;
   transform: translateY(-10px);
   transition: all 0.3s ease;
-  z-index: 100;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .add-to-list-container:hover .add-dropdown {
@@ -1124,168 +1320,245 @@
 
 .dropdown-option {
   width: 100%;
-  padding: 8px 12px;
-  border: none;
+  padding: 0.5rem 0.75rem;
   background: transparent;
-  color: var(--text-primary);
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
   text-align: left;
   cursor: pointer;
-  font-size: 0.8rem;
-  transition: background-color 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.dropdown-option:hover {
-  background: var(--bg-card);
-}
-
-.dropdown-option:active {
-  background: var(--accent-primary);
-  color: white;
-}
-
-/* Predicted rating badge */
-.predicted-rating {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  background: rgba(34, 197, 94, 0.9);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 20px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  backdrop-filter: blur(5px);
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-/* Section refresh button */
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
-}
-
-.section-title-group h3 {
-  margin: 0 0 0.5rem 0;
-  color: var(--text-primary);
-  font-size: 1.3rem;
-  font-weight: 600;
-}
-
-.section-title-group p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-.section-refresh-btn {
-  padding: 8px 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 0.9rem;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.5rem;
 }
 
-.section-refresh-btn:hover:not(:disabled) {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
+.dropdown-option:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* Arrow indicators for dropdowns */
+.recommendation-tooltip::before,
+.add-dropdown::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: 12px;
+  width: 12px;
+  height: 12px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  border-right: none;
+  transform: rotate(45deg);
+}
+
+/* ================================
+   Personalized Recommendations Styles - Phase 1: Card Layout
+   ================================ */
+
+/* Personalized Recommendations Header */
+.personalized-recommendations-header {
+  margin-bottom: 1.5rem;
+}
+
+.section-title-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.section-subtitle {
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Content Type Filter Styles */
+.content-type-filter {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 2rem;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.filter-label {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.filter-btn:hover {
+  background: var(--bg-light);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.filter-btn.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
   color: white;
+  font-weight: 500;
 }
 
-.section-refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  animation: spin 1s linear infinite;
+.filter-btn.active:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  transform: translateY(-1px);
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* Content Type Badge Styles */
+.content-type-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 2;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Mobile responsive adjustments for interactive features */
+.content-type-badge .type-icon {
+  font-size: 0.8rem;
+}
+
+.content-type-badge .type-label {
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.content-type-anime {
+  background: rgba(0, 120, 255, 0.9);
+  border-color: rgba(0, 120, 255, 0.3);
+}
+
+.content-type-manga {
+  background: rgba(255, 140, 0, 0.9);
+  border-color: rgba(255, 140, 0, 0.3);
+}
+
+.content-type-unknown {
+  background: rgba(128, 128, 128, 0.9);
+  border-color: rgba(128, 128, 128, 0.3);
+}
+
+/* Adjust image container to accommodate badge */
+.recommendation-image-container {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Filter Summary Styles */
+.filter-summary {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.filter-result-text {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.clear-filter-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.25rem 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clear-filter-btn:hover {
+  background: var(--bg-light);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+/* Responsive adjustments for filter controls */
 @media (max-width: 768px) {
-  .recommendation-actions {
-    opacity: 1;
-    visibility: visible;
-    position: static;
-    justify-content: flex-end;
-    margin-bottom: 8px;
-  }
-
-  .action-btn {
-    width: 35px;
-    height: 35px;
-    font-size: 18px;
-  }
-
-  .recommendation-tooltip {
-    width: 250px;
-    right: -10px;
-  }
-
-  .add-dropdown {
-    right: -10px;
-    min-width: 140px;
-  }
-
-  .section-header {
+  .filter-group {
     flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
+    align-items: flex-start;
+    gap: 0.75rem;
   }
 
-  .section-refresh-btn {
-    align-self: flex-end;
-    width: fit-content;
-  }
-}
-
-@media (max-width: 480px) {
-  .recommendation-actions {
-    gap: 3px;
+  .filter-buttons {
+    width: 100%;
   }
 
-  .action-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 16px;
+  .filter-btn {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
   }
 
-  .recommendation-tooltip {
-    width: 200px;
-    right: -20px;
-  }
-
-  .add-dropdown {
-    right: -20px;
-    min-width: 120px;
-  }
-
-  .dropdown-option {
-    padding: 6px 8px;
-    font-size: 0.75rem;
+  .filter-summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
 }
 
-/* Rating Modal Styles */
+/* ================================
+   Rating Modal Styles (Phase 2: Interactive Features)
+   ================================ */
+
 .rating-modal-overlay {
   position: fixed;
   top: 0;
@@ -1293,41 +1566,31 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(5px);
+  z-index: 2000;
+  padding: 1rem;
 }
 
 .rating-modal {
   background: var(--bg-dark);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  width: 90%;
   max-width: 500px;
+  width: 100%;
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  animation: modalSlideIn 0.3s ease-out;
-}
-
-@keyframes modalSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-20px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 .rating-modal-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 1.5rem 2rem 1rem;
+  justify-content: space-between;
+  padding: 1.5rem 1.5rem 1rem;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -1341,39 +1604,33 @@
 .close-button {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 1.5rem;
   cursor: pointer;
-  padding: 0;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
+  padding: 0.25rem;
+  border-radius: 4px;
   transition: all 0.2s ease;
+  line-height: 1;
 }
 
 .close-button:hover {
-  background: var(--bg-card);
+  background: var(--bg-secondary);
   color: var(--text-primary);
 }
 
 .rating-modal-content {
-  padding: 1.5rem 2rem 2rem;
+  padding: 1.5rem;
 }
 
 .item-title {
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: var(--bg-card);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+  font-size: 1rem;
   text-align: center;
-}
-
-.item-title strong {
-  color: var(--accent-primary);
-  font-size: 1.1rem;
 }
 
 .rating-section {
@@ -1382,9 +1639,9 @@
 
 .rating-section label {
   display: block;
-  margin-bottom: 0.5rem;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-weight: 500;
+  margin-bottom: 0.5rem;
 }
 
 .rating-input-container {
@@ -1395,87 +1652,69 @@
 }
 
 .rating-input {
-  width: 120px;
-  padding: 0.75rem;
-  background: var(--bg-card);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
+  padding: 0.75rem;
   color: var(--text-primary);
-  font-family: inherit;
   font-size: 1rem;
-  font-weight: 600;
+  width: 80px;
   text-align: center;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease;
 }
 
 .rating-input:focus {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.1);
-}
-
-.rating-input::-webkit-outer-spin-button,
-.rating-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.rating-input[type="number"] {
-  -moz-appearance: textfield;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
 }
 
 .rating-suffix {
-  color: var(--text-muted);
-  font-weight: 500;
-  font-size: 1rem;
-}
-
-.rating-help {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  margin-top: 0.25rem;
-}
-
-.notes-section {
-  margin-bottom: 1.5rem;
-}
-
-.notes-section label {
-  display: block;
-  margin-bottom: 0.5rem;
   color: var(--text-secondary);
   font-weight: 500;
 }
 
+.rating-help {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.notes-section {
+  margin-bottom: 2rem;
+}
+
+.notes-section label {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
 .notes-section textarea {
   width: 100%;
-  padding: 0.75rem;
-  background: var(--bg-card);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
+  padding: 0.75rem;
   color: var(--text-primary);
-  font-family: inherit;
   font-size: 0.9rem;
-  line-height: 1.4;
   resize: vertical;
   min-height: 80px;
   transition: border-color 0.2s ease;
+  font-family: inherit;
 }
 
 .notes-section textarea:focus {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.1);
-}
-
-.notes-section textarea::placeholder {
-  color: var(--text-muted);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
 }
 
 .character-count {
   text-align: right;
-  font-size: 0.8rem;
   color: var(--text-muted);
+  font-size: 0.75rem;
   margin-top: 0.25rem;
 }
 
@@ -1483,28 +1722,27 @@
   display: flex;
   gap: 1rem;
   justify-content: flex-end;
-  margin-top: 2rem;
 }
 
 .cancel-button,
 .submit-button {
   padding: 0.75rem 1.5rem;
-  border: none;
   border-radius: 8px;
+  font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 0.9rem;
+  border: none;
 }
 
 .cancel-button {
-  background: var(--bg-card);
+  background: var(--bg-secondary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
 }
 
 .cancel-button:hover {
-  background: var(--bg-deep-dark);
+  background: var(--bg-overlay);
   color: var(--text-primary);
 }
 
@@ -1513,27 +1751,27 @@
   color: white;
 }
 
-.submit-button:hover {
+.submit-button:hover:not(:disabled) {
   background: var(--accent-secondary);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
 }
 
-/* Mobile responsive adjustments for modal */
-@media (max-width: 768px) {
+.submit-button:disabled {
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 480px) {
   .rating-modal {
-    width: 95%;
     margin: 1rem;
+    max-width: none;
   }
 
   .rating-modal-header,
   .rating-modal-content {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-  }
-
-  .star {
-    font-size: 1.3rem;
+    padding: 1rem;
   }
 
   .modal-actions {
@@ -1545,7 +1783,3 @@
     width: 100%;
   }
 }
-
-/* ================================
-   Personalized Recommendations Styles - Phase 1: Card Layout
-   ================================ */
