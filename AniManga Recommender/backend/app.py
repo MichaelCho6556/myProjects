@@ -3411,75 +3411,352 @@ except Exception as e:
 # In-memory cache fallback for recommendations
 _recommendation_cache: Dict[str, Any] = {}
 
-def get_personalized_recommendation_cache(user_id: str) -> Optional[Dict[str, Any]]:
+def get_personalized_recommendation_cache(user_id: str, content_type: str = 'all', section: str = 'all') -> Optional[Dict[str, Any]]:
     """
-    Retrieve cached personalized recommendations for a user.
+    Retrieve cached personalized recommendations for a user with content type and section support.
     
-    Checks Redis first, falls back to in-memory cache if Redis is unavailable.
-    Returns None if no cached data exists or if cached data is stale.
+    Production-ready caching with support for filtered recommendations. Uses hierarchical
+    cache keys to efficiently store and retrieve different filtered views of recommendations.
     
+    Cache Strategy:
+        - Base cache: user_id + 'all' content + 'all' sections
+        - Filtered cache: user_id + specific content_type + specific section
+        - TTL: 30 minutes for all cache entries
+        - Fallback: In-memory cache if Redis unavailable
+        
     Args:
         user_id (str): UUID of the user whose recommendations to retrieve
+        content_type (str): Content type filter ('all', 'anime', 'manga')
+        section (str): Section filter ('all', 'completed_based', 'trending_genres', 'hidden_gems')
         
     Returns:
         Optional[Dict[str, Any]]: Cached recommendation data if fresh, None otherwise
+        
+    Cache Key Format:
+        personalized_recommendations:{user_id}:{content_type}:{section}
+        
+    Performance:
+        - O(1) Redis lookup with optimized key structure
+        - Automatic stale data cleanup
+        - Graceful degradation to in-memory cache
     """
     try:
-        cache_key = f"personalized_recommendations:{user_id}"
+        # Create hierarchical cache key for efficient filtering
+        cache_key = f"personalized_recommendations:{user_id}:{content_type}:{section}"
         
         if redis_client:
-            # Try Redis first
-            cached_data = redis_client.get(cache_key)
-            if cached_data:
-                import json
-                return json.loads(cached_data)
-        else:
-            # Fall back to in-memory cache
+            try:
+                # Try Redis first with robust error handling
+                cached_data = redis_client.get(cache_key)
+                if cached_data:
+                    import json
+                    data = json.loads(cached_data)
+                    
+                    # Validate cache structure
+                    if _is_valid_cache_data(data):
+                        return data
+                    else:
+                        # Invalid cache data, remove it
+                        redis_client.delete(cache_key)
+                        print(f"⚠️ Removed invalid cache data for key: {cache_key}")
+                        
+            except Exception as redis_error:
+                print(f"⚠️ Redis cache error for {cache_key}: {redis_error}")
+                # Continue to in-memory fallback
+        
+        # Fall back to in-memory cache with the same key structure
+        if hasattr(_recommendation_cache, 'get'):
             cached_data = _recommendation_cache.get(cache_key)
             if cached_data:
-                # Check if cache is still fresh (30 minutes)
-                cache_time = datetime.fromisoformat(cached_data.get('generated_at', ''))
-                if datetime.now() - cache_time < timedelta(minutes=30):
+                # Validate freshness (30 minutes TTL)
+                if _is_cache_fresh(cached_data):
                     return cached_data
                 else:
                     # Remove stale cache
-                    del _recommendation_cache[cache_key]
+                    if cache_key in _recommendation_cache:
+                        del _recommendation_cache[cache_key]
+                    print(f"🗑️ Removed stale in-memory cache for: {cache_key}")
                     
         return None
+        
     except Exception as e:
-        print(f"Error retrieving recommendation cache: {e}")
+        print(f"❌ Error retrieving recommendation cache for {user_id}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
-def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[str, Any]) -> bool:
+def _is_valid_cache_data(data: Dict[str, Any]) -> bool:
+    """Validate cache data structure for production reliability"""
+    try:
+        required_keys = ['recommendations', 'user_preferences', 'cache_info', 'generated_at']
+        if not all(key in data for key in required_keys):
+            return False
+            
+        # Validate recommendations structure
+        recommendations = data.get('recommendations', {})
+        if not isinstance(recommendations, dict):
+            return False
+            
+        # Validate cache_info
+        cache_info = data.get('cache_info', {})
+        if not isinstance(cache_info, dict) or 'generated_at' not in cache_info:
+            return False
+            
+        return True
+    except Exception:
+        return False
+
+def _is_cache_fresh(cached_data: Dict[str, Any], ttl_minutes: int = 30) -> bool:
+    """Check if cached data is still fresh based on TTL"""
+    try:
+        generated_at = cached_data.get('generated_at') or cached_data.get('cache_info', {}).get('generated_at')
+        if not generated_at:
+            return False
+            
+        cache_time = datetime.fromisoformat(generated_at.replace('Z', '+00:00'))
+        return datetime.now() - cache_time < timedelta(minutes=ttl_minutes)
+    except Exception:
+        return False
+
+def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[str, Any], 
+                                        content_type: str = 'all', section: str = 'all') -> bool:
     """
-    Cache personalized recommendations for a user with 30-minute TTL.
+    Cache personalized recommendations with production-ready multi-level caching strategy.
     
-    Stores in Redis with automatic expiration, falls back to in-memory cache
-    if Redis is unavailable.
+    Implements sophisticated caching with content type and section support, automatic
+    expiration, data validation, and graceful fallback mechanisms for high availability.
+    
+    Caching Strategy:
+        - Primary: Redis with 30-minute TTL and automatic cleanup
+        - Fallback: In-memory cache with manual TTL management
+        - Validation: Data integrity checks before storage
+        - Monitoring: Success/failure logging for ops visibility
     
     Args:
         user_id (str): UUID of the user whose recommendations to cache
         recommendations (Dict[str, Any]): Recommendation data to cache
+        content_type (str): Content type filter applied ('all', 'anime', 'manga')
+        section (str): Section filter applied ('all', 'completed_based', etc.)
         
     Returns:
         bool: True if caching succeeded, False otherwise
+        
+    Cache Key Strategy:
+        - Base key: personalized_recommendations:{user_id}:all:all
+        - Filtered keys: personalized_recommendations:{user_id}:{content_type}:{section}
+        
+    Performance Optimizations:
+        - JSON serialization with error handling
+        - Atomic Redis operations with TTL
+        - Memory-efficient in-memory fallback
+        - Automatic stale data cleanup
     """
     try:
-        cache_key = f"personalized_recommendations:{user_id}"
-        recommendations['generated_at'] = datetime.now().isoformat()
+        # Create hierarchical cache key
+        cache_key = f"personalized_recommendations:{user_id}:{content_type}:{section}"
         
+        # Validate input data before caching
+        if not _is_valid_cache_input(recommendations):
+            print(f"⚠️ Invalid cache input for {cache_key}, skipping cache storage")
+            return False
+        
+        # Ensure timestamp is set
+        current_time = datetime.now().isoformat()
+        recommendations['generated_at'] = current_time
+        if 'cache_info' in recommendations:
+            recommendations['cache_info']['generated_at'] = current_time
+            recommendations['cache_info']['cache_key'] = cache_key
+            recommendations['cache_info']['content_type'] = content_type
+            recommendations['cache_info']['section'] = section
+        
+        success = False
+        
+        # Primary caching: Redis with robust error handling
         if redis_client:
-            # Use Redis with 30-minute TTL
-            import json
-            redis_client.setex(cache_key, 1800, json.dumps(recommendations))  # 30 minutes = 1800 seconds
-        else:
-            # Fall back to in-memory cache
-            _recommendation_cache[cache_key] = recommendations
+            try:
+                import json
+                serialized_data = json.dumps(recommendations, ensure_ascii=False)
+                
+                # Use pipeline for atomic operation
+                pipe = redis_client.pipeline()
+                pipe.setex(cache_key, 1800, serialized_data)  # 30 minutes TTL
+                pipe.execute()
+                
+                success = True
+                print(f"✅ Cached recommendations in Redis: {cache_key}")
+                
+            except Exception as redis_error:
+                print(f"⚠️ Redis caching failed for {cache_key}: {redis_error}")
+                # Continue to fallback caching
+        
+        # Fallback caching: In-memory with manual TTL
+        try:
+            # Add TTL metadata for in-memory cache
+            cache_data = recommendations.copy()
+            cache_data['_cache_expires_at'] = (datetime.now() + timedelta(minutes=30)).isoformat()
+            
+            _recommendation_cache[cache_key] = cache_data
+            success = True
+            print(f"✅ Cached recommendations in memory: {cache_key}")
+            
+            # Clean up old in-memory cache entries periodically
+            _cleanup_stale_memory_cache()
+            
+        except Exception as memory_error:
+            print(f"❌ In-memory caching failed for {cache_key}: {memory_error}")
+            
+        return success
+        
+    except Exception as e:
+        print(f"❌ Error caching recommendations for {user_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def _is_valid_cache_input(data: Dict[str, Any]) -> bool:
+    """Validate input data before caching"""
+    try:
+        if not isinstance(data, dict):
+            return False
+            
+        # Check for required structure
+        if 'recommendations' not in data:
+            return False
+            
+        recommendations = data['recommendations']
+        if not isinstance(recommendations, dict):
+            return False
+            
+        # Validate that recommendations contain expected sections
+        expected_sections = ['completed_based', 'trending_genres', 'hidden_gems']
+        if not any(section in recommendations for section in expected_sections):
+            return False
             
         return True
-    except Exception as e:
-        print(f"Error caching recommendations: {e}")
+    except Exception:
         return False
+
+def _cleanup_stale_memory_cache():
+    """Clean up stale entries from in-memory cache"""
+    try:
+        current_time = datetime.now()
+        stale_keys = []
+        
+        for key, data in _recommendation_cache.items():
+            if isinstance(data, dict) and '_cache_expires_at' in data:
+                try:
+                    expires_at = datetime.fromisoformat(data['_cache_expires_at'])
+                    if current_time > expires_at:
+                        stale_keys.append(key)
+                except Exception:
+                    # Invalid expiration time, mark for cleanup
+                    stale_keys.append(key)
+        
+        # Remove stale entries
+        for key in stale_keys:
+            del _recommendation_cache[key]
+            
+        if stale_keys:
+            print(f"🗑️ Cleaned up {len(stale_keys)} stale in-memory cache entries")
+            
+    except Exception as e:
+        print(f"⚠️ Error during memory cache cleanup: {e}")
+
+def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: str, section: str) -> Optional[Dict[str, Any]]:
+    """
+    Filter cached recommendations by content type and section for production efficiency.
+    
+    This function enables efficient cache reuse by filtering existing cached data
+    instead of regenerating recommendations from scratch. Critical for production
+    performance where cache misses are expensive.
+    
+    Args:
+        cached_data (Dict[str, Any]): Base cached recommendation data
+        content_type (str): Content type filter to apply ('anime', 'manga', 'all')
+        section (str): Section filter to apply ('completed_based', etc., 'all')
+        
+    Returns:
+        Optional[Dict[str, Any]]: Filtered recommendation data or None if insufficient data
+        
+    Performance Optimizations:
+        - In-place filtering without data duplication
+        - Early termination on empty results
+        - Maintains original data structure
+        - Preserves metadata and cache info
+    """
+    try:
+        if not cached_data or 'recommendations' not in cached_data:
+            return None
+            
+        original_recs = cached_data['recommendations']
+        if not isinstance(original_recs, dict):
+            return None
+        
+        filtered_recs = {}
+        total_filtered_items = 0
+        
+        # Define sections to process
+        sections_to_process = [section] if section != 'all' else list(original_recs.keys())
+        
+        for section_name in sections_to_process:
+            if section_name not in original_recs:
+                continue
+                
+            section_items = original_recs[section_name]
+            if not isinstance(section_items, list):
+                continue
+                
+            # Apply content type filtering
+            if content_type == 'all':
+                filtered_items = section_items
+            else:
+                filtered_items = []
+                for item in section_items:
+                    try:
+                        if (isinstance(item, dict) and 
+                            'item' in item and 
+                            isinstance(item['item'], dict)):
+                            
+                            item_media_type = item['item'].get('mediaType', '').lower()
+                            if item_media_type == content_type.lower():
+                                filtered_items.append(item)
+                    except Exception as filter_error:
+                        print(f"⚠️ Error filtering item in section {section_name}: {filter_error}")
+                        continue
+            
+            if filtered_items:
+                filtered_recs[section_name] = filtered_items
+                total_filtered_items += len(filtered_items)
+        
+        # Return None if no items match the filter
+        if total_filtered_items == 0:
+            print(f"📭 No items found after filtering content_type: {content_type}, section: {section}")
+            return None
+        
+        # Create filtered response maintaining original structure
+        filtered_response = {
+            'recommendations': filtered_recs,
+            'user_preferences': cached_data.get('user_preferences', {}),
+            'cache_info': cached_data.get('cache_info', {}).copy()
+        }
+        
+        # Update cache info to reflect filtering
+        filtered_response['cache_info'].update({
+            'filtered_from_base': True,
+            'content_type_filter': content_type,
+            'section_filter': section,
+            'total_items': total_filtered_items,
+            'generated_at': datetime.now().isoformat()
+        })
+        
+        print(f"✅ Successfully filtered cache: {total_filtered_items} items for content_type: {content_type}")
+        return filtered_response
+        
+    except Exception as e:
+        print(f"❌ Error filtering cached recommendations: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
     """
@@ -3529,66 +3806,86 @@ def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
         if not user_items:
             return _get_default_preferences()
         
-        # Analyze genre preferences with rating weights
+        # Initialize all variables with safe defaults
         genre_scores = {}
-        total_weighted_score = 0
-        
-        # Analyze rating patterns
-        user_ratings = [item['rating'] for item in user_items if item.get('rating') and item['rating'] > 0]
-        avg_user_rating = sum(user_ratings) / len(user_ratings) if user_ratings else 7.0
-        
-        # Analyze completion patterns and media type preferences
+        total_weighted_score = 0.0
+        user_ratings = []
         anime_count = 0
         manga_count = 0
         length_preferences = {'short': 0, 'medium': 0, 'long': 0}
         
+        # Extract user ratings safely
         for item in user_items:
-            item_details = get_item_details_for_stats(item['item_uid'])
-            if not item_details:
-                continue
-                
-            # Count media types
-            if item_details.get('media_type') == 'anime':
-                anime_count += 1
-            elif item_details.get('media_type') == 'manga':
-                manga_count += 1
-            
-            # Analyze completion patterns by length
-            episodes = item_details.get('episodes', 0)
-            chapters = item_details.get('chapters', 0)
-            content_length = max(episodes, chapters)
-            
-            if content_length > 0:
-                if content_length <= 12:
-                    length_preferences['short'] += 1
-                elif content_length <= 26:
-                    length_preferences['medium'] += 1
-                else:
-                    length_preferences['long'] += 1
-            
-            # Analyze genre preferences with rating weights
-            genres = item_details.get('genres', [])
-            rating_weight = item.get('rating', avg_user_rating) / 10.0  # Normalize to 0.0-1.0
-            
-            for genre in genres:
-                if genre and isinstance(genre, str):
-                    genre_scores[genre] = genre_scores.get(genre, 0) + rating_weight
-                    total_weighted_score += rating_weight
+            rating = item.get('rating')
+            if rating and isinstance(rating, (int, float)) and rating > 0:
+                user_ratings.append(float(rating))
         
-        # Normalize genre scores
-        if total_weighted_score > 0:
+        # Calculate average rating with fallback - ensure it's always defined
+        if user_ratings and len(user_ratings) > 0:
+            avg_user_rating = sum(user_ratings) / len(user_ratings)
+        else:
+            avg_user_rating = 7.0  # Default fallback rating
+        
+        # Analyze completion patterns and media type preferences
+        for item in user_items:
+            try:
+                item_details = get_item_details_for_stats(item['item_uid'])
+                if not item_details:
+                    continue
+                    
+                # Count media types safely
+                media_type = item_details.get('media_type', '').lower()
+                if media_type == 'anime':
+                    anime_count += 1
+                elif media_type == 'manga':
+                    manga_count += 1
+                
+                # Analyze completion patterns by length
+                episodes = item_details.get('episodes', 0) or 0
+                chapters = item_details.get('chapters', 0) or 0
+                content_length = max(episodes, chapters)
+                
+                if content_length > 0:
+                    if content_length <= 12:
+                        length_preferences['short'] += 1
+                    elif content_length <= 26:
+                        length_preferences['medium'] += 1
+                    else:
+                        length_preferences['long'] += 1
+                
+                # Analyze genre preferences with rating weights
+                genres = item_details.get('genres', [])
+                if genres and isinstance(genres, list):
+                    # Get rating weight, defaulting to average if not available
+                    item_rating = item.get('rating')
+                    if item_rating and isinstance(item_rating, (int, float)) and item_rating > 0:
+                        rating_weight = float(item_rating) / 10.0  # Normalize to 0.0-1.0
+                    else:
+                        rating_weight = avg_user_rating / 10.0
+                    
+                    for genre in genres:
+                        if genre and isinstance(genre, str):
+                            genre_scores[genre] = genre_scores.get(genre, 0.0) + rating_weight
+                            total_weighted_score += rating_weight
+                            
+            except Exception as e:
+                print(f"Error processing item {item.get('item_uid', 'unknown')}: {e}")
+                continue
+        
+        # Normalize genre scores safely
+        if total_weighted_score > 0.0:
             genre_preferences = {genre: score / total_weighted_score 
                               for genre, score in genre_scores.items()}
         else:
             genre_preferences = {}
         
-        # Determine media type preference
+        # Determine media type preference safely
         total_items = anime_count + manga_count
         if total_items == 0:
             media_preference = "both"
-        elif total_items > 0:
-            anime_ratio = anime_count / total_items
-            manga_ratio = manga_count / total_items
+        else:
+            anime_ratio = anime_count / total_items if total_items > 0 else 0.0
+            manga_ratio = manga_count / total_items if total_items > 0 else 0.0
             
             if anime_ratio > 0.7:
                 media_preference = "anime"
@@ -3596,20 +3893,27 @@ def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
                 media_preference = "manga"
             else:
                 media_preference = "both"
-        else:
-            media_preference = "both"
         
         # Calculate diversity factor (entropy of genre distribution)
         diversity_factor = _calculate_diversity(genre_preferences)
         
-        # Determine preferred score range
-        if user_ratings:
-            score_std = np.std(user_ratings) if len(user_ratings) > 1 else 1.0
-            preferred_range = (
-                max(1.0, avg_user_rating - score_std),
-                min(10.0, avg_user_rating + score_std)
-            )
+        # Determine preferred score range safely
+        if user_ratings and len(user_ratings) > 0:
+            try:
+                avg_user_rating = sum(user_ratings) / len(user_ratings)
+                score_std = np.std(user_ratings) if len(user_ratings) > 1 else 1.0
+                # Ensure score_std is not None or NaN
+                if score_std is None or np.isnan(score_std):
+                    score_std = 1.0
+                preferred_range = (
+                    max(1.0, avg_user_rating - score_std),
+                    min(10.0, avg_user_rating + score_std)
+                )
+            except Exception as e:
+                print(f"Error calculating score range: {e}")
+                preferred_range = (6.0, 9.0)
         else:
+            avg_user_rating = 7.0  # Default fallback
             preferred_range = (6.0, 9.0)
         
         return {
@@ -3628,6 +3932,8 @@ def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
         
     except Exception as e:
         print(f"Error analyzing user preferences: {e}")
+        import traceback
+        traceback.print_exc()
         return _get_default_preferences()
 
 def _get_default_preferences() -> Dict[str, Any]:
@@ -3661,7 +3967,7 @@ def _calculate_diversity(genre_preferences: Dict[str, float]) -> float:
     return entropy / max_entropy if max_entropy > 0 else 0.5
 
 def generate_personalized_recommendations(user_id: str, user_preferences: Dict[str, Any], 
-                                        limit: int = 20) -> Dict[str, List[Dict[str, Any]]]:
+                                        limit: int = 20, dismissed_items: set = None, content_type: str = 'all') -> Dict[str, List[Dict[str, Any]]]:
     """
     Generate personalized recommendations using hybrid algorithms.
     
@@ -3708,6 +4014,11 @@ def generate_personalized_recommendations(user_id: str, user_preferences: Dict[s
         # Get items user already has (to exclude from recommendations)
         user_item_uids = set(item['item_uid'] for item in user_items)
         
+        # Also exclude dismissed items
+        if dismissed_items:
+            user_item_uids.update(dismissed_items)
+            print(f"🚫 Excluding {len(dismissed_items)} dismissed items from recommendations")
+        
         recommendations = {
             'completed_based': [],
             'trending_genres': [],
@@ -3717,19 +4028,19 @@ def generate_personalized_recommendations(user_id: str, user_preferences: Dict[s
         # 1. Content-based recommendations from completed items
         if completed_items:
             content_recs = _generate_content_based_recommendations(
-                completed_items, user_preferences, user_item_uids, limit//3
+                completed_items, user_preferences, user_item_uids, limit//3, content_type
             )
             recommendations['completed_based'] = content_recs
         
         # 2. Genre-based trending recommendations
         trending_recs = _generate_trending_genre_recommendations(
-            user_preferences, user_item_uids, limit//3
+            user_preferences, user_item_uids, limit//3, content_type
         )
         recommendations['trending_genres'] = trending_recs
         
         # 3. Hidden gem recommendations
         hidden_gems = _generate_hidden_gem_recommendations(
-            user_preferences, user_item_uids, limit//3
+            user_preferences, user_item_uids, limit//3, content_type
         )
         recommendations['hidden_gems'] = hidden_gems
         
@@ -3754,7 +4065,7 @@ def _get_user_items_for_recommendations(user_id: str) -> List[Dict[str, Any]]:
 
 def _generate_content_based_recommendations(completed_items: List[Dict[str, Any]], 
                                           user_preferences: Dict[str, Any],
-                                          exclude_uids: set, limit: int) -> List[Dict[str, Any]]:
+                                          exclude_uids: set, limit: int, content_type: str = 'all') -> List[Dict[str, Any]]:
     """Generate recommendations based on completed items using content similarity"""
     try:
         if not completed_items or uid_to_idx is None:
@@ -3787,18 +4098,46 @@ def _generate_content_based_recommendations(completed_items: List[Dict[str, Any]
         sorted_items = sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)
         
         recommendations = []
+        processed_count = 0
+        skipped_content_type = 0
+        skipped_excluded = 0
+        
         for idx, score in sorted_items:
             if len(recommendations) >= limit:
                 break
                 
-            item_uid = df_processed.iloc[idx]['uid']
-            if item_uid in exclude_uids:
-                continue
+            processed_count += 1
             
-            # Apply additional filters and scoring
-            item_data = _create_recommendation_item(idx, score, user_preferences, "content_similarity")
-            if item_data:
-                recommendations.append(item_data)
+            try:
+                item_uid = df_processed.iloc[idx]['uid']
+                if item_uid in exclude_uids:
+                    skipped_excluded += 1
+                    continue
+                
+                # Apply content type filter with production monitoring
+                if content_type != 'all':
+                    item_media_type = df_processed.iloc[idx]['media_type']
+                    if item_media_type != content_type:
+                        skipped_content_type += 1
+                        continue
+                
+                # Apply additional filters and scoring with error handling
+                item_data = _create_recommendation_item(idx, score, user_preferences, "content_similarity")
+                if item_data:
+                    recommendations.append(item_data)
+                else:
+                    print(f"⚠️ Failed to create recommendation item for idx {idx}")
+                    
+            except Exception as item_error:
+                print(f"❌ Error processing recommendation item at idx {idx}: {item_error}")
+                continue
+        
+        # Production monitoring logs
+        print(f"📊 Content-based recommendations: {len(recommendations)}/{processed_count} items processed")
+        print(f"   - Skipped (excluded): {skipped_excluded}")
+        print(f"   - Skipped (content_type): {skipped_content_type}")
+        print(f"   - Content type filter: {content_type}")
+        print(f"   - Final recommendations: {len(recommendations)}")
         
         return recommendations
         
@@ -3807,7 +4146,7 @@ def _generate_content_based_recommendations(completed_items: List[Dict[str, Any]
         return []
 
 def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
-                                           exclude_uids: set, limit: int) -> List[Dict[str, Any]]:
+                                           exclude_uids: set, limit: int, content_type: str = 'all') -> List[Dict[str, Any]]:
     """Generate recommendations for trending items in user's favorite genres"""
     try:
         if df_processed is None or not user_preferences.get('genre_preferences'):
@@ -3823,12 +4162,43 @@ def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
         recommendations = []
         
         for genre, preference_score in top_genres:
-            # Filter items by genre and score
-            genre_items = df_processed[
-                (df_processed['genres'].apply(lambda x: genre in (x or []))) &
-                (df_processed['score'] >= user_preferences['preferred_score_range'][0]) &
-                (~df_processed['uid'].isin(exclude_uids))
-            ].copy()
+            # Production-optimized DataFrame filtering with vectorized operations
+            try:
+                # Pre-filter by content type first for better performance
+                if content_type != 'all':
+                    content_filtered_df = df_processed[df_processed['media_type'] == content_type]
+                else:
+                    content_filtered_df = df_processed
+                
+                # Early termination if no items match content type
+                if content_filtered_df.empty:
+                    continue
+                
+                # Vectorized filtering for production performance
+                # 1. Genre filter - optimized for list membership
+                genre_mask = content_filtered_df['genres'].apply(
+                    lambda x: genre in x if isinstance(x, list) and x else False
+                )
+                
+                # 2. Score filter - simple numeric comparison
+                min_score = user_preferences.get('preferred_score_range', [6.0, 10.0])[0]
+                score_mask = content_filtered_df['score'] >= min_score
+                
+                # 3. Exclusion filter - optimized set lookup
+                exclude_mask = ~content_filtered_df['uid'].isin(exclude_uids)
+                
+                # Combine all filters efficiently
+                combined_mask = genre_mask & score_mask & exclude_mask
+                genre_items = content_filtered_df[combined_mask].copy()
+                
+                # Log filter effectiveness for monitoring
+                total_items = len(content_filtered_df)
+                filtered_items = len(genre_items)
+                print(f"🔍 Genre '{genre}' filter: {filtered_items}/{total_items} items (content_type: {content_type})")
+                
+            except Exception as filter_error:
+                print(f"❌ Error filtering genre '{genre}': {filter_error}")
+                continue
             
             if genre_items.empty:
                 continue
@@ -3855,7 +4225,7 @@ def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
         return []
 
 def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
-                                       exclude_uids: set, limit: int) -> List[Dict[str, Any]]:
+                                       exclude_uids: set, limit: int, content_type: str = 'all') -> List[Dict[str, Any]]:
     """Generate hidden gem recommendations - high quality but lesser known items"""
     try:
         if df_processed is None:
@@ -3864,12 +4234,36 @@ def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
         # Define hidden gems as high-rated items with fewer interactions
         # (This is a simplified version - in production you'd track popularity metrics)
         
-        min_score = user_preferences['preferred_score_range'][0]
-        hidden_gems = df_processed[
-            (df_processed['score'] >= min_score) &
-            (df_processed['score'] >= 7.5) &  # High quality threshold
-            (~df_processed['uid'].isin(exclude_uids))
-        ].copy()
+        # Production-optimized hidden gem filtering
+        try:
+            # Pre-filter by content type for better performance
+            if content_type != 'all':
+                base_df = df_processed[df_processed['media_type'] == content_type]
+            else:
+                base_df = df_processed
+            
+            # Early termination if no items match content type
+            if base_df.empty:
+                print(f"📭 No items available for content_type: {content_type}")
+                return []
+            
+            # Vectorized filtering for production performance
+            min_score = user_preferences.get('preferred_score_range', [6.0, 10.0])[0]
+            quality_threshold = 7.5
+            
+            # Combine score filters efficiently
+            score_mask = (base_df['score'] >= min_score) & (base_df['score'] >= quality_threshold)
+            exclude_mask = ~base_df['uid'].isin(exclude_uids)
+            
+            # Apply combined filter
+            hidden_gems = base_df[score_mask & exclude_mask].copy()
+            
+            # Log filter effectiveness for monitoring
+            print(f"🔍 Hidden gems filter: {len(hidden_gems)}/{len(base_df)} items (content_type: {content_type}, min_score: {min_score})")
+            
+        except Exception as filter_error:
+            print(f"❌ Error in hidden gems filtering: {filter_error}")
+            return []
         
         if hidden_gems.empty:
             return []
@@ -4172,47 +4566,127 @@ def get_personalized_recommendations():
         if not user_id:
             return jsonify({'error': 'User ID not found in token'}), 400
         
-        # Parse query parameters
-        limit = min(int(request.args.get('limit', 20)), 50)  # Max 50 per section
-        section = request.args.get('section', 'all').lower()
-        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+        # Production-ready parameter parsing with comprehensive validation
+        try:
+            # Parse and validate limit parameter
+            limit_str = request.args.get('limit', '20')
+            try:
+                limit = int(limit_str)
+                if limit < 1 or limit > 100:  # Production limits
+                    return jsonify({'error': 'Limit must be between 1 and 100'}), 400
+                limit = min(limit, 50)  # Cap at 50 for performance
+            except ValueError:
+                return jsonify({'error': f'Invalid limit parameter: {limit_str}. Must be an integer.'}), 400
+            
+            # Parse and validate section parameter
+            section = request.args.get('section', 'all').lower().strip()
+            valid_sections = ['all', 'completed_based', 'trending_genres', 'hidden_gems']
+            if section not in valid_sections:
+                return jsonify({
+                    'error': f'Invalid section parameter: {section}',
+                    'valid_sections': valid_sections
+                }), 400
+            
+            # Parse and validate content_type parameter
+            content_type = request.args.get('content_type', 'all').lower().strip()
+            valid_content_types = ['all', 'anime', 'manga']
+            if content_type not in valid_content_types:
+                return jsonify({
+                    'error': f'Invalid content_type parameter: {content_type}',
+                    'valid_content_types': valid_content_types
+                }), 400
+            
+            # Parse and validate refresh parameter
+            refresh_str = request.args.get('refresh', 'false').lower().strip()
+            force_refresh = refresh_str in ['true', '1', 'yes', 'on']
+            
+            # Log request parameters for monitoring
+            print(f"🎯 Recommendation request: user={user_id}, limit={limit}, section={section}, content_type={content_type}, refresh={force_refresh}")
+            
+        except Exception as param_error:
+            print(f"❌ Parameter validation error: {param_error}")
+            return jsonify({'error': f'Parameter validation failed: {str(param_error)}'}), 400
         
-        # Validate section parameter
-        valid_sections = ['all', 'completed_based', 'trending_genres', 'hidden_gems']
-        if section not in valid_sections:
-            return jsonify({'error': f'Invalid section. Must be one of: {", ".join(valid_sections)}'}), 400
-        
-        # Check cache first (unless refresh requested)
+        # Production-ready cache management with content type and section support
         cache_hit = False
         if not force_refresh:
-            cached_recommendations = get_personalized_recommendation_cache(user_id)
+            # Try to get cached recommendations with exact content type and section match
+            cached_recommendations = get_personalized_recommendation_cache(user_id, content_type, section)
+            
             if cached_recommendations:
                 cache_hit = True
-                
-                # Filter by section if specific section requested
-                if section != 'all':
-                    filtered_recs = {'recommendations': {}}
-                    if section in cached_recommendations.get('recommendations', {}):
-                        filtered_recs['recommendations'][section] = cached_recommendations['recommendations'][section]
-                    
-                    filtered_recs.update({
-                        'user_preferences': cached_recommendations.get('user_preferences', {}),
-                        'cache_info': cached_recommendations.get('cache_info', {})
-                    })
-                    filtered_recs['cache_info']['cache_hit'] = True
-                    return jsonify(filtered_recs)
-                else:
-                    cached_recommendations['cache_info']['cache_hit'] = True
-                    return jsonify(cached_recommendations)
+                cached_recommendations['cache_info']['cache_hit'] = True
+                print(f"✅ Cache hit for user {user_id}, content_type: {content_type}, section: {section}")
+                return jsonify(cached_recommendations)
+            
+            # If no exact match and we're looking for 'all' content, try to find base cache
+            # and filter it on-the-fly for better performance
+            if content_type != 'all' and section == 'all':
+                base_cached = get_personalized_recommendation_cache(user_id, 'all', 'all')
+                if base_cached:
+                    print(f"🔄 Filtering base cache for content_type: {content_type}")
+                    filtered_cache = _filter_cached_recommendations(base_cached, content_type, section)
+                    if filtered_cache:
+                        # Cache the filtered result for future requests
+                        set_personalized_recommendation_cache(user_id, filtered_cache, content_type, section)
+                        filtered_cache['cache_info']['cache_hit'] = True
+                        filtered_cache['cache_info']['filtered_from_base'] = True
+                        return jsonify(filtered_cache)
         
-        # Generate fresh recommendations
+        # Generate fresh recommendations with production error handling
+        start_time = datetime.now()
         print(f"🤖 Generating personalized recommendations for user {user_id}")
+        print(f"   - Content type: {content_type}")
+        print(f"   - Section: {section}")
+        print(f"   - Limit: {limit}")
+        print(f"   - Force refresh: {force_refresh}")
         
-        # Analyze user preferences
-        user_preferences = analyze_user_preferences(user_id)
-        
-        # Generate recommendations
-        recommendations = generate_personalized_recommendations(user_id, user_preferences, limit)
+        try:
+            # Analyze user preferences with error handling
+            user_preferences = analyze_user_preferences(user_id)
+            if not user_preferences:
+                print(f"⚠️ Could not analyze preferences for user {user_id}, using defaults")
+                user_preferences = _get_default_preferences()
+            
+            # Get user's dismissed items with error handling
+            try:
+                dismissed_items = get_user_dismissed_items(user_id)
+                print(f"🚫 Excluding {len(dismissed_items)} dismissed items")
+            except Exception as dismissed_error:
+                print(f"⚠️ Error getting dismissed items: {dismissed_error}")
+                dismissed_items = set()
+            
+            # Generate recommendations with comprehensive error handling
+            recommendations = generate_personalized_recommendations(
+                user_id, user_preferences, limit, dismissed_items, content_type
+            )
+            
+            # Validate recommendation structure
+            if not isinstance(recommendations, dict):
+                raise ValueError("Invalid recommendations structure returned")
+            
+            # Check if we have sufficient recommendations
+            total_recs = sum(len(recs) for recs in recommendations.values() if isinstance(recs, list))
+            if total_recs == 0:
+                print(f"⚠️ No recommendations generated for user {user_id} with content_type {content_type}")
+            else:
+                print(f"✅ Generated {total_recs} total recommendations")
+                
+        except Exception as generation_error:
+            print(f"❌ Error generating recommendations: {generation_error}")
+            import traceback
+            traceback.print_exc()
+            
+            # Return empty recommendations with error info
+            recommendations = {
+                'completed_based': [],
+                'trending_genres': [],
+                'hidden_gems': []
+            }
+            
+        # Calculate generation time for monitoring
+        generation_time = (datetime.now() - start_time).total_seconds()
+        print(f"⏱️ Recommendation generation took {generation_time:.2f} seconds")
         
         # Create user preferences summary for frontend
         user_prefs_summary = {
@@ -4236,9 +4710,12 @@ def get_personalized_recommendations():
             }
         }
         
-        # Cache the results (only cache complete results)
-        if section == 'all':
-            set_personalized_recommendation_cache(user_id, response_data)
+        # Cache the results with production-ready cache management
+        cache_success = set_personalized_recommendation_cache(user_id, response_data, content_type, section)
+        if cache_success:
+            print(f"✅ Successfully cached recommendations for user {user_id}, content_type: {content_type}, section: {section}")
+        else:
+            print(f"⚠️ Failed to cache recommendations for user {user_id}, content_type: {content_type}, section: {section}")
         
         return jsonify(response_data)
         
@@ -4442,6 +4919,10 @@ def submit_recommendation_feedback():
         # For now, we'll just log it and invalidate the user's recommendation cache
         print(f"📝 Recommendation feedback received: {feedback_data}")
         
+        # If user marked item as not interested, add to dismissed items
+        if action == 'not_interested':
+            add_user_dismissed_item(user_id, item_uid)
+        
         # Invalidate user's recommendation cache to reflect feedback
         try:
             invalidate_personalized_recommendation_cache(user_id)
@@ -4493,6 +4974,20 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
     except Exception as e:
         print(f"Error invalidating recommendation cache: {e}")
         return False
+
+# Global storage for user feedback (in production, this would be in a database)
+_user_dismissed_items = {}  # Format: {user_id: set(item_uids)}
+
+def get_user_dismissed_items(user_id: str) -> set:
+    """Get set of item UIDs that user has marked as not interested"""
+    return _user_dismissed_items.get(user_id, set())
+
+def add_user_dismissed_item(user_id: str, item_uid: str):
+    """Add an item to user's dismissed list"""
+    if user_id not in _user_dismissed_items:
+        _user_dismissed_items[user_id] = set()
+    _user_dismissed_items[user_id].add(item_uid)
+    print(f"📝 Added {item_uid} to dismissed items for user {user_id}")
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
