@@ -10,6 +10,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
+import { createPortal } from "react-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { PersonalizedRecommendationsProps } from "../../types";
@@ -44,11 +45,18 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
     sectionType: "",
   });
 
+  // Add content type filter state
+  const [contentTypeFilter, setContentTypeFilter] = useState<"all" | "anime" | "manga">("all");
+
+  // Add loading states for better UX
+  const [addingToList, setAddingToList] = useState<Set<string>>(new Set());
+  const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     if (user?.id) {
       fetchRecommendations();
     }
-  }, [user?.id]);
+  }, [user?.id, contentTypeFilter]); // Refetch when content type filter changes
 
   const fetchRecommendations = async () => {
     try {
@@ -56,9 +64,45 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
       setError(null);
 
       console.log("🎯 Fetching personalized recommendations...");
-      const response = await makeAuthenticatedRequest("/api/auth/personalized-recommendations");
+      console.log("🔍 Current contentTypeFilter:", contentTypeFilter);
+
+      // Add timestamp for cache busting to ensure fresh recommendations
+      const timestamp = Date.now();
+
+      // Include content type filter in the API request
+      const params = new URLSearchParams();
+      params.set("refresh", "true");
+      params.set("t", timestamp.toString());
+      if (contentTypeFilter !== "all") {
+        params.set("content_type", contentTypeFilter);
+      }
+
+      const finalUrl = `/api/auth/personalized-recommendations?${params.toString()}`;
+      console.log("🌐 API URL:", finalUrl);
+      console.log("📤 Request params:", Object.fromEntries(params.entries()));
+
+      const response = await makeAuthenticatedRequest(finalUrl);
 
       console.log("📊 Recommendations response:", response);
+
+      // Debug the actual recommendations data structure
+      if (response?.recommendations) {
+        console.log("🔍 DETAILED RESPONSE DEBUG:");
+        Object.entries(response.recommendations).forEach(([section, items]) => {
+          console.log(`  📂 Section: ${section}`);
+          if (Array.isArray(items)) {
+            console.log(`     📊 Item count: ${items.length}`);
+            items.slice(0, 3).forEach((item, idx) => {
+              const mediaType = item?.item?.mediaType;
+              const title = item?.item?.title;
+              console.log(`     ${idx + 1}. ${title} (${mediaType})`);
+            });
+            if (items.length > 3) {
+              console.log(`     ... and ${items.length - 3} more items`);
+            }
+          }
+        });
+      }
       setRecommendations(response);
     } catch (err: any) {
       console.error("❌ Error fetching recommendations:", err);
@@ -69,6 +113,8 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   };
 
   const handleRefresh = async () => {
+    // Don't clear removed items - user dismissed them for a reason
+    // Instead, fetch new recommendations that should exclude dismissed items
     await fetchRecommendations();
     if (onRefresh) {
       onRefresh();
@@ -81,19 +127,103 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   const handleSectionRefresh = async (sectionType: string) => {
     try {
       setRefreshingSection(sectionType);
-      // Since backend doesn't support section-specific refresh yet,
-      // we'll refresh all recommendations and filter on frontend
-      const response = await makeAuthenticatedRequest(`/api/auth/personalized-recommendations?refresh=true`);
+      console.log(`🔄 Refreshing section: ${sectionType}`);
+
+      // Don't clear removed items - we want to keep them dismissed
+      // The backend should provide new recommendations that exclude dismissed items
+
+      // Force refresh with timestamp to ensure we get truly fresh data
+      const timestamp = Date.now();
+
+      // IMPORTANT: Include current content type filter in section refresh!
+      const params = new URLSearchParams();
+      params.set("refresh", "true");
+      params.set("t", timestamp.toString());
+      if (contentTypeFilter !== "all") {
+        params.set("content_type", contentTypeFilter);
+      }
+
+      const refreshUrl = `/api/auth/personalized-recommendations?${params.toString()}`;
+      console.log("🔄 Section refresh URL:", refreshUrl);
+      console.log("🔄 Section refresh with content filter:", contentTypeFilter);
+
+      const response = await makeAuthenticatedRequest(refreshUrl);
+
+      console.log("📊 Section refresh response:", response);
 
       // Update the full recommendations object
       if (response?.recommendations) {
         setRecommendations(response);
+        console.log(`✅ Successfully refreshed section: ${sectionType} with new recommendations`);
+      } else {
+        console.warn("⚠️ No recommendations data in response");
       }
     } catch (err: any) {
       console.error(`❌ Error refreshing section ${sectionType}:`, err);
+      // Show user-friendly error message if needed
+      setError(`Failed to refresh ${sectionType} section. Please try again.`);
     } finally {
       setRefreshingSection(null);
     }
+  };
+
+  /**
+   * Check if a title might have anime/manga counterpart
+   */
+  const mightHaveCounterpart = (title: string) => {
+    // Simple heuristic - titles that are likely to have both formats
+    const commonCrossFormats = [
+      "naruto",
+      "one piece",
+      "attack on titan",
+      "demon slayer",
+      "my hero academia",
+      "dragon ball",
+      "bleach",
+      "death note",
+      "fullmetal alchemist",
+      "tokyo ghoul",
+      "jujutsu kaisen",
+      "chainsaw man",
+      "spy x family",
+      "mob psycho",
+      "one punch man",
+    ];
+
+    const titleLower = title.toLowerCase();
+    return commonCrossFormats.some(
+      (format) => titleLower.includes(format) || format.includes(titleLower.split(" ")[0])
+    );
+  };
+
+  /**
+   * Enhanced not interested handler with cross-format suggestion
+   */
+  const handleNotInterestedWithSuggestion = async (
+    itemUid: string,
+    sectionType: string,
+    title: string,
+    mediaType: string
+  ) => {
+    const hasCounterpart = mightHaveCounterpart(title);
+
+    if (hasCounterpart) {
+      const counterpartType = mediaType.toLowerCase() === "anime" ? "manga" : "anime";
+      const confirmed = window.confirm(
+        `Not interested in the ${mediaType.toLowerCase()}?\n\n` +
+          `"${title}" also exists as ${counterpartType}. Would you like to:\n\n` +
+          `• Click "OK" to dismiss this ${mediaType.toLowerCase()} only\n` +
+          `• Click "Cancel" to keep it and explore both formats\n\n` +
+          `Tip: You can use the content type filter above to show only ${counterpartType} recommendations!`
+      );
+
+      if (!confirmed) {
+        return; // User decided to keep it
+      }
+    }
+
+    // Proceed with dismissal
+    await handleNotInterested(itemUid, sectionType);
   };
 
   /**
@@ -129,7 +259,7 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   );
 
   /**
-   * Handle quick-add to user list
+   * Handle quick-add to user list with enhanced UX
    */
   const handleQuickAdd = useCallback(
     async (itemUid: string, status: string, sectionType: string, itemTitle: string = "") => {
@@ -144,6 +274,11 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           });
           return;
         }
+
+        // Show loading state immediately
+        setAddingToList((prev) => new Set([...Array.from(prev), itemUid]));
+
+        console.log(`📝 Adding ${itemTitle} (${itemUid}) to ${status}...`);
 
         // Add item to user's list using the correct endpoint
         await makeAuthenticatedRequest(`/api/auth/user-items/${itemUid}`, {
@@ -171,25 +306,54 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           }),
         });
 
-        console.log(`✅ Added ${itemUid} to ${status}`);
+        console.log(`✅ Successfully added ${itemTitle} to ${status}`);
+
+        // Show success state
+        setRecentlyAdded((prev) => new Set([...Array.from(prev), itemUid]));
+
+        // Hide success indicator after 2 seconds
+        setTimeout(() => {
+          setRecentlyAdded((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(itemUid);
+            return newSet;
+          });
+        }, 2000);
+
+        // Optimistically remove item from recommendations immediately
+        setRemovedItems((prev) => new Set([...Array.from(prev), itemUid]));
 
         // Auto-refresh recommendations after successful addition
         setTimeout(() => {
+          console.log("🔄 Auto-refreshing recommendations after add...");
           fetchRecommendations();
-        }, 500); // Small delay to ensure backend processing is complete
+        }, 800); // Increased delay to ensure backend processing
       } catch (err: any) {
-        console.error("❌ Error adding to list:", err);
+        console.error(`❌ Error adding ${itemTitle} to list:`, err);
+        // Show error notification to user (you can enhance this with a toast system)
+        alert(`Failed to add "${itemTitle}" to your list. Please try again.`);
+      } finally {
+        // Clear loading state
+        setAddingToList((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(itemUid);
+          return newSet;
+        });
       }
     },
     [makeAuthenticatedRequest, fetchRecommendations]
   );
 
   /**
-   * Handle completed item with rating and notes
+   * Handle completed item with rating and notes - Enhanced
    */
   const handleCompletedWithRating = useCallback(
     async (itemUid: string, rating: number, notes: string, sectionType: string) => {
       try {
+        const itemTitle = showRatingModal.itemTitle;
+
+        console.log(`📝 Adding ${itemTitle} (${itemUid}) to completed with rating ${rating}...`);
+
         // Add item to user's list as completed with rating and notes
         await makeAuthenticatedRequest(`/api/auth/user-items/${itemUid}`, {
           method: "POST",
@@ -219,20 +383,37 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           }),
         });
 
-        console.log(`✅ Added ${itemUid} to completed with rating ${rating}`);
+        console.log(`✅ Successfully added ${itemTitle} to completed with rating ${rating}`);
 
-        // Close modal
+        // Close modal first for better UX
         setShowRatingModal({ show: false, itemUid: "", itemTitle: "", sectionType: "" });
+
+        // Show success state
+        setRecentlyAdded((prev) => new Set([...Array.from(prev), itemUid]));
+
+        // Optimistically remove item from recommendations
+        setRemovedItems((prev) => new Set([...Array.from(prev), itemUid]));
 
         // Auto-refresh recommendations after successful addition
         setTimeout(() => {
+          console.log("🔄 Auto-refreshing recommendations after completed add...");
           fetchRecommendations();
-        }, 500);
+        }, 800);
+
+        // Hide success indicator after 2 seconds
+        setTimeout(() => {
+          setRecentlyAdded((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(itemUid);
+            return newSet;
+          });
+        }, 2000);
       } catch (err: any) {
         console.error("❌ Error adding completed item:", err);
+        alert(`Failed to add "${showRatingModal.itemTitle}" to your completed list. Please try again.`);
       }
     },
-    [makeAuthenticatedRequest, fetchRecommendations]
+    [makeAuthenticatedRequest, fetchRecommendations, showRatingModal.itemTitle]
   );
 
   /**
@@ -277,23 +458,27 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
 
     const itemUid = animeData?.uid || item.uid;
 
+    // Get content type indicator
+    const typeIndicator = getContentTypeIndicator(mediaType);
+
     // Skip rendering if item was removed
     if (removedItems.has(itemUid)) {
       return null;
     }
 
     return (
-      <div key={itemIndex} className="recommendation-card-wrapper">
+      <div key={`${sectionType}-${itemUid}-${itemIndex}`} className="recommendation-card-wrapper">
         <div className="recommendation-actions">
           <button
-            className="action-btn not-interested-btn"
-            onClick={() => handleNotInterested(itemUid, sectionType)}
-            title="Not Interested"
-            aria-label="Mark as not interested"
+            onClick={() => handleNotInterestedWithSuggestion(itemUid, sectionType, title, mediaType)}
+            className="not-interested-btn"
+            title="Not interested"
+            aria-label={`Mark ${title} as not interested`}
           >
-            ❌
+            ✕
           </button>
 
+          {/* Info Tooltip */}
           <div className="tooltip-container">
             <button
               className="action-btn info-btn"
@@ -325,32 +510,50 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
             </div>
           </div>
 
+          {/* Add to List Dropdown with Enhanced States */}
           <div className="add-to-list-container">
-            <button className="action-btn add-to-list-btn" title="Add to List" aria-label="Add to your list">
-              ➕
+            <button
+              className={`action-btn add-to-list-btn ${addingToList.has(itemUid) ? "loading" : ""} ${
+                recentlyAdded.has(itemUid) ? "success" : ""
+              }`}
+              title={
+                addingToList.has(itemUid)
+                  ? "Adding to list..."
+                  : recentlyAdded.has(itemUid)
+                  ? "Added successfully!"
+                  : "Add to List"
+              }
+              aria-label="Add to your list"
+              disabled={addingToList.has(itemUid)}
+            >
+              {addingToList.has(itemUid) ? "⟳" : recentlyAdded.has(itemUid) ? "✓" : "➕"}
             </button>
             <div className="add-dropdown">
               <button
                 className="dropdown-option"
                 onClick={() => handleQuickAdd(itemUid, "plan_to_watch", sectionType, title)}
+                disabled={addingToList.has(itemUid)}
               >
                 📋 Plan to Watch
               </button>
               <button
                 className="dropdown-option"
                 onClick={() => handleQuickAdd(itemUid, "watching", sectionType, title)}
+                disabled={addingToList.has(itemUid)}
               >
                 👁️ Watching
               </button>
               <button
                 className="dropdown-option"
                 onClick={() => handleQuickAdd(itemUid, "on_hold", sectionType, title)}
+                disabled={addingToList.has(itemUid)}
               >
                 ⏸️ On Hold
               </button>
               <button
                 className="dropdown-option"
                 onClick={() => handleQuickAdd(itemUid, "completed", sectionType, title)}
+                disabled={addingToList.has(itemUid)}
               >
                 ✅ Completed
               </button>
@@ -359,9 +562,9 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
         </div>
 
         <Link
-          to={`/item/${itemUid}`}
+          to={`/items/${itemUid}`}
           className="recommendation-card-link"
-          aria-label={`View details for ${title} - ${mediaType} with score ${rating}`}
+          aria-label={`View details for ${title}`}
         >
           <article className="recommendation-card">
             <div className="recommendation-image-container">
@@ -372,6 +575,12 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
                 onError={handleImageError}
                 className="recommendation-image"
               />
+
+              {/* Content Type Indicator */}
+              <div className={`content-type-badge ${typeIndicator.className}`}>
+                <span className="type-icon">{typeIndicator.icon}</span>
+                <span className="type-label">{typeIndicator.label}</span>
+              </div>
 
               {predictedRating && (
                 <div className="predicted-rating" title={`We think you'll rate this: ${predictedRating}/10`}>
@@ -413,12 +622,25 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
     );
   };
 
+  /**
+   * Get content type indicator
+   */
+  const getContentTypeIndicator = (mediaType: string) => {
+    const type = mediaType?.toLowerCase();
+    if (type === "anime") {
+      return { icon: "📺", label: "Anime", className: "content-type-anime" };
+    } else if (type === "manga") {
+      return { icon: "📖", label: "Manga", className: "content-type-manga" };
+    }
+    return { icon: "❓", label: "Unknown", className: "content-type-unknown" };
+  };
+
   if (loading) {
     return (
       <div className={`personalized-recommendations ${className}`}>
         <div className="recommendations-loading">
           <Spinner size={24} />
-          <p>Loading your personalized recommendations...</p>
+          <p>Loading personalized recommendations...</p>
         </div>
       </div>
     );
@@ -428,72 +650,136 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
     return (
       <div className={`personalized-recommendations ${className}`}>
         <div className="recommendations-error">
-          <h2>🎯 Personalized Recommendations</h2>
-          <p>⚠️ Could not load recommendations: {error}</p>
-          <p>This feature requires the backend API from Task 1.2 to be running.</p>
-          <button onClick={handleRefresh} className="retry-button">
-            🔄 Try Again
+          <h2>Unable to Load Recommendations</h2>
+          <p>{error}</p>
+          <button onClick={fetchRecommendations} className="retry-button">
+            Try Again
           </button>
         </div>
       </div>
     );
   }
 
-  if (
-    !recommendations ||
-    !recommendations.recommendations ||
-    Object.keys(recommendations.recommendations).length === 0
-  ) {
+  if (!recommendations || !recommendations.recommendations) {
     return (
       <div className={`personalized-recommendations ${className}`}>
         <div className="recommendations-placeholder">
-          <h2>🎯 Personalized Recommendations</h2>
-          <p>
-            No recommendations available yet. Add more anime and manga to your lists to get personalized
-            suggestions!
-          </p>
-          <div className="placeholder-features">
-            <div className="feature-item">📊 Based on your completed titles</div>
-            <div className="feature-item">📈 Trending in your favorite genres</div>
-            <div className="feature-item">💎 Hidden gems you might love</div>
-          </div>
-          <button onClick={handleRefresh} className="refresh-button">
-            🔄 Refresh Recommendations
-          </button>
+          <h2>No Recommendations Available</h2>
+          <p>Complete some anime or manga to get personalized recommendations!</p>
         </div>
       </div>
     );
   }
 
+  console.log("🔍 RENDER DEBUG - Current contentTypeFilter:", contentTypeFilter);
+  console.log("🔍 RENDER DEBUG - Full recommendations object:", recommendations);
+
   const { recommendations: recs } = recommendations;
+
+  // Filter out removed items from each section (backend handles content type filtering)
   const sections = [
     {
       title: "📊 Based on Your Completed Titles",
       subtitle: "Recommendations similar to anime and manga you've enjoyed",
-      items: recs.completed_based || [],
+      items: (recs.completed_based || []).filter((item: any) => !removedItems.has(item.item?.uid)),
       sectionType: "completed_based",
     },
     {
       title: "💎 Hidden Gems",
       subtitle: "Underrated titles that match your preferences",
-      items: recs.hidden_gems || [],
+      items: (recs.hidden_gems || []).filter((item: any) => !removedItems.has(item.item?.uid)),
       sectionType: "hidden_gems",
     },
     {
       title: "📈 Trending in Your Favorite Genres",
       subtitle: "Popular titles in genres you love",
-      items: recs.trending_genres || [],
+      items: (recs.trending_genres || []).filter((item: any) => !removedItems.has(item.item?.uid)),
       sectionType: "trending_genres",
     },
   ];
 
+  console.log(
+    "🔍 SECTIONS DEBUG - sections created:",
+    sections.map((s) => ({
+      title: s.title,
+      originalCount:
+        s.sectionType === "completed_based"
+          ? (recs.completed_based || []).length
+          : s.sectionType === "hidden_gems"
+          ? (recs.hidden_gems || []).length
+          : (recs.trending_genres || []).length,
+      filteredCount: s.items.length,
+    }))
+  );
+
   return (
     <div className={`personalized-recommendations ${className}`}>
-      <div className="recommendations-header">
-        <h2>🎯 Personalized Recommendations</h2>
-        <button onClick={handleRefresh} className="refresh-button">
-          🔄 Refresh All
-        </button>
+      <div className="personalized-recommendations-header">
+        <div className="section-title-container">
+          <h2 className="section-title">🎯 Personalized Recommendations</h2>
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="refresh-button"
+            title="Refresh all recommendations"
+          >
+            {loading ? "🔄" : "🔄"}
+          </button>
+        </div>
+        <p className="section-subtitle">Tailored suggestions based on your preferences and activity</p>
+      </div>
+
+      {/* Content Type Filter Controls */}
+      <div className="content-type-filter">
+        <div className="filter-group">
+          <span className="filter-label">Show:</span>
+          <div className="filter-buttons">
+            <button
+              className={`filter-btn ${contentTypeFilter === "all" ? "active" : ""}`}
+              onClick={() => {
+                console.log("🔍 FILTER CLICK - Setting filter to: all");
+                setContentTypeFilter("all");
+              }}
+            >
+              📚 All Content
+            </button>
+            <button
+              className={`filter-btn ${contentTypeFilter === "anime" ? "active" : ""}`}
+              onClick={() => {
+                console.log("🔍 FILTER CLICK - Setting filter to: anime");
+                setContentTypeFilter("anime");
+              }}
+            >
+              📺 Anime Only
+            </button>
+            <button
+              className={`filter-btn ${contentTypeFilter === "manga" ? "active" : ""}`}
+              onClick={() => {
+                console.log("🔍 FILTER CLICK - Setting filter to: manga");
+                setContentTypeFilter("manga");
+              }}
+            >
+              📖 Manga Only
+            </button>
+          </div>
+        </div>
+
+        {/* Filter Result Summary */}
+        {contentTypeFilter !== "all" && (
+          <div className="filter-summary">
+            <span className="filter-result-text">
+              Showing {contentTypeFilter} only •
+              {sections.reduce((total, section) => total + section.items.length, 0)} recommendations
+            </span>
+            <button
+              className="clear-filter-btn"
+              onClick={() => setContentTypeFilter("all")}
+              title="Show all content types"
+            >
+              Clear Filter
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="recommendations-content">
@@ -536,17 +822,19 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
         </div>
       )}
 
-      {/* Rating Modal for Completed Items */}
-      {showRatingModal.show && (
-        <RatingModal
-          isOpen={showRatingModal.show}
-          itemTitle={showRatingModal.itemTitle}
-          onSubmit={(rating, notes) =>
-            handleCompletedWithRating(showRatingModal.itemUid, rating, notes, showRatingModal.sectionType)
-          }
-          onClose={() => setShowRatingModal({ show: false, itemUid: "", itemTitle: "", sectionType: "" })}
-        />
-      )}
+      {/* Rating Modal for Completed Items - Rendered using Portal for proper centering */}
+      {showRatingModal.show &&
+        createPortal(
+          <RatingModal
+            isOpen={showRatingModal.show}
+            itemTitle={showRatingModal.itemTitle}
+            onSubmit={(rating, notes) =>
+              handleCompletedWithRating(showRatingModal.itemUid, rating, notes, showRatingModal.sectionType)
+            }
+            onClose={() => setShowRatingModal({ show: false, itemUid: "", itemTitle: "", sectionType: "" })}
+          />,
+          document.body
+        )}
     </div>
   );
 };
@@ -576,20 +864,29 @@ const RatingModal: React.FC<RatingModalProps> = ({ isOpen, itemTitle, onSubmit, 
   const handleRatingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
 
-    // Allow empty string for editing
-    if (value === "") {
-      setRating("");
+    // Allow empty string, decimal point, and numbers during typing
+    if (value === "" || value === "." || /^\d*\.?\d*$/.test(value)) {
+      setRating(value);
+    }
+  };
+
+  const handleRatingBlur = () => {
+    // Only validate and fix on blur (when user finishes typing)
+    if (rating === "" || rating === ".") {
+      setRating("8.0");
       return;
     }
 
-    // Allow valid decimal numbers between 1-10
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue) && numValue >= 1 && numValue <= 10) {
-      setRating(value);
-    } else if (!isNaN(numValue) && numValue > 10) {
-      setRating("10.0");
-    } else if (!isNaN(numValue) && numValue < 1) {
+    const numValue = parseFloat(rating);
+    if (isNaN(numValue)) {
+      setRating("8.0");
+    } else if (numValue < 1) {
       setRating("1.0");
+    } else if (numValue > 10) {
+      setRating("10.0");
+    } else {
+      // Format to one decimal place if it's a whole number
+      setRating(numValue % 1 === 0 ? numValue.toFixed(1) : rating);
     }
   };
 
@@ -622,6 +919,7 @@ const RatingModal: React.FC<RatingModalProps> = ({ isOpen, itemTitle, onSubmit, 
                   step="0.1"
                   value={rating}
                   onChange={handleRatingChange}
+                  onBlur={handleRatingBlur}
                   className="rating-input"
                   placeholder="8.0"
                 />
