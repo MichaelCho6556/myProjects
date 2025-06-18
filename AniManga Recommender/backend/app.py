@@ -4314,6 +4314,9 @@ def _create_recommendation_item(df_idx: int, base_score: float,
     try:
         item_row = df_processed.iloc[df_idx]
         
+        # Get the image URL, preferring 'image_url' but falling back to 'main_picture'
+        image_url = item_row.get('image_url') or item_row.get('main_picture')
+        
         # Create the recommendation item
         item_data = {
             'uid': str(item_row['uid']),
@@ -4322,7 +4325,7 @@ def _create_recommendation_item(df_idx: int, base_score: float,
             'score': float(item_row.get('score', 0)) if pd.notna(item_row.get('score')) else 0.0,
             'genres': list(item_row.get('genres', [])) if isinstance(item_row.get('genres'), list) else [],
             'synopsis': str(item_row.get('synopsis', '')) if pd.notna(item_row.get('synopsis')) else '',
-            'imageUrl': str(item_row.get('image_url', '')) if pd.notna(item_row.get('image_url')) else None,
+            'imageUrl': str(image_url) if pd.notna(image_url) else None,
             'episodes': int(item_row.get('episodes', 0)) if pd.notna(item_row.get('episodes')) else None,
             'chapters': int(item_row.get('chapters', 0)) if pd.notna(item_row.get('chapters')) else None
         }
@@ -4724,6 +4727,77 @@ def get_personalized_recommendations():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to generate recommendations: {str(e)}'}), 500
+
+
+@app.route('/api/auth/personalized-recommendations/more', methods=['GET'])
+@require_auth
+def get_more_personalized_recommendations():
+    """
+    Load more personalized recommendations for infinite scroll pagination.
+    
+    This endpoint provides additional recommendations for a specific section
+    to support infinite scroll functionality on the frontend.
+    
+    Query Parameters:
+        page (int): Page number (1-based, default: 1)
+        section (str): Recommendation section type (required)
+        content_type (str): Filter by content type ('anime', 'manga', 'all')
+        limit (int): Number of items per page (default: 10, max: 20)
+    
+    Returns:
+        JSON response with paginated recommendation items
+    """
+    try:
+        user_id = g.user_id
+        page = int(request.args.get('page', 1))
+        section = request.args.get('section', '')
+        content_type = request.args.get('content_type', 'all')
+        limit = min(int(request.args.get('limit', 10)), 20)  # Cap at 20 items
+        
+        if not section:
+            return jsonify({'error': 'Section parameter is required'}), 400
+        
+        if page < 1:
+            return jsonify({'error': 'Page must be 1 or greater'}), 400
+        
+        # Get cached recommendations for the specific section
+        cached_recommendations = get_personalized_recommendation_cache(user_id, content_type, 'all')
+        
+        if not cached_recommendations or 'recommendations' not in cached_recommendations:
+            return jsonify({'error': 'No recommendations available. Please refresh the main page.'}), 404
+        
+        section_items = cached_recommendations['recommendations'].get(section, [])
+        
+        if not section_items:
+            return jsonify({'items': [], 'has_more': False, 'total': 0})
+        
+        # Calculate pagination
+        total_items = len(section_items)
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        
+        if start_idx >= total_items:
+            return jsonify({'items': [], 'has_more': False, 'total': total_items})
+        
+        # Get the paginated items
+        paginated_items = section_items[start_idx:end_idx]
+        has_more = end_idx < total_items
+        
+        return jsonify({
+            'items': paginated_items,
+            'has_more': has_more,
+            'total': total_items,
+            'page': page,
+            'section': section
+        })
+        
+    except ValueError as e:
+        return jsonify({'error': 'Invalid parameter format'}), 400
+    except Exception as e:
+        print(f"❌ Error loading more personalized recommendations: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load more recommendations: {str(e)}'}), 500
 
 def _get_preferred_length_label(completion_tendencies: Dict[str, int]) -> str:
     """Convert completion tendencies to readable label"""
