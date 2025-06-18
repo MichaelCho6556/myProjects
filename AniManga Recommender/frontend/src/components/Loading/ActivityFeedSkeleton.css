@@ -1,0 +1,131 @@
+/* ActivityFeedSkeleton Component Styles */
+
+.activity-feed-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.activity-item-skeleton {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.activity-icon-skeleton {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(
+    90deg,
+    var(--bg-overlay) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    var(--bg-overlay) 100%
+  );
+  background-size: 468px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.activity-content-skeleton {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.activity-action-skeleton {
+  width: 120px;
+  height: 14px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-overlay) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    var(--bg-overlay) 100%
+  );
+  background-size: 468px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.activity-title-skeleton {
+  width: 85%;
+  height: 16px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-overlay) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    var(--bg-overlay) 100%
+  );
+  background-size: 468px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.activity-timestamp-skeleton {
+  width: 80px;
+  height: 12px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-overlay) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    var(--bg-overlay) 100%
+  );
+  background-size: 468px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Shimmer animation */
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+/* Vary item widths for more realistic appearance */
+.activity-item-skeleton:nth-child(2n) .activity-action-skeleton {
+  width: 140px;
+}
+
+.activity-item-skeleton:nth-child(3n) .activity-title-skeleton {
+  width: 75%;
+}
+
+.activity-item-skeleton:nth-child(4n) .activity-action-skeleton {
+  width: 100px;
+}
+
+.activity-item-skeleton:nth-child(5n) .activity-title-skeleton {
+  width: 90%;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .activity-item-skeleton {
+    padding: 0.75rem;
+  }
+  
+  .activity-icon-skeleton {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .activity-icon-skeleton,
+  .activity-action-skeleton,
+  .activity-title-skeleton,
+  .activity-timestamp-skeleton {
+    animation: none;
+    background: var(--bg-overlay);
+  }
+}
