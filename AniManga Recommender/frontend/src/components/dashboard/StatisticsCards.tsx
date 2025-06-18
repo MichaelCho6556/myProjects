@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo, useMemo } from "react";
 import { UserStatistics, QuickStats } from "../../types";
 
 interface StatisticsCardsProps {
@@ -47,21 +47,73 @@ const StatisticsCards: React.FC<StatisticsCardsProps> = ({ userStats, quickStats
     );
   }
 
-  // Helper function to safely format hours
-  const formatHours = (hours: number | undefined | null): string => {
+  // Memoized helper functions to prevent recreation on every render
+  const formatHours = useMemo(() => (hours: number | undefined | null): string => {
     if (hours === undefined || hours === null || isNaN(hours)) {
       return "0.0";
     }
     return hours.toFixed(1);
-  };
+  }, []);
 
-  // Helper function to safely format numbers
-  const formatNumber = (value: number | undefined | null): number => {
+  const formatNumber = useMemo(() => (value: number | undefined | null): number => {
     if (value === undefined || value === null || isNaN(value)) {
       return 0;
     }
     return value;
-  };
+  }, []);
+
+  // Memoized computed values to prevent recalculation
+  const computedStats = useMemo(() => {
+    if (!userStats || !quickStats) return null;
+    
+    return {
+      animeWatched: formatNumber(userStats.total_anime_watched),
+      hoursWatched: formatHours(userStats.total_hours_watched),
+      mangaRead: formatNumber(userStats.total_manga_read),
+      chaptersRead: formatNumber(userStats.total_chapters_read),
+      currentlyWatching: formatNumber(quickStats.watching),
+      completionRate: formatNumber(userStats.completion_rate),
+    };
+  }, [userStats, quickStats, formatNumber, formatHours]);
+
+  if (!computedStats) {
+    return (
+      <div className="statistics-grid">
+        <div className="stat-card">
+          <div className="stat-icon">📺</div>
+          <div className="stat-content">
+            <h3>Anime Watched</h3>
+            <div className="stat-number">-</div>
+            <div className="stat-subtitle">Loading...</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">📚</div>
+          <div className="stat-content">
+            <h3>Manga Read</h3>
+            <div className="stat-number">-</div>
+            <div className="stat-subtitle">Loading...</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">▶️</div>
+          <div className="stat-content">
+            <h3>Currently Watching</h3>
+            <div className="stat-number">-</div>
+            <div className="stat-subtitle">Loading...</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon">✅</div>
+          <div className="stat-content">
+            <h3>Completion Rate</h3>
+            <div className="stat-number">-</div>
+            <div className="stat-subtitle">Loading...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="statistics-grid">
@@ -69,8 +121,8 @@ const StatisticsCards: React.FC<StatisticsCardsProps> = ({ userStats, quickStats
         <div className="stat-icon">📺</div>
         <div className="stat-content">
           <h3>Anime Watched</h3>
-          <div className="stat-number">{formatNumber(userStats.total_anime_watched)}</div>
-          <div className="stat-subtitle">{formatHours(userStats.total_hours_watched)} hours</div>
+          <div className="stat-number">{computedStats.animeWatched}</div>
+          <div className="stat-subtitle">{computedStats.hoursWatched} hours</div>
         </div>
       </div>
 
@@ -78,8 +130,8 @@ const StatisticsCards: React.FC<StatisticsCardsProps> = ({ userStats, quickStats
         <div className="stat-icon">📚</div>
         <div className="stat-content">
           <h3>Manga Read</h3>
-          <div className="stat-number">{formatNumber(userStats.total_manga_read)}</div>
-          <div className="stat-subtitle">{formatNumber(userStats.total_chapters_read)} chapters</div>
+          <div className="stat-number">{computedStats.mangaRead}</div>
+          <div className="stat-subtitle">{computedStats.chaptersRead} chapters</div>
         </div>
       </div>
 
@@ -87,7 +139,7 @@ const StatisticsCards: React.FC<StatisticsCardsProps> = ({ userStats, quickStats
         <div className="stat-icon">▶️</div>
         <div className="stat-content">
           <h3>Currently Watching</h3>
-          <div className="stat-number">{formatNumber(quickStats.watching)}</div>
+          <div className="stat-number">{computedStats.currentlyWatching}</div>
           <div className="stat-subtitle">In progress</div>
         </div>
       </div>
@@ -96,7 +148,7 @@ const StatisticsCards: React.FC<StatisticsCardsProps> = ({ userStats, quickStats
         <div className="stat-icon">✅</div>
         <div className="stat-content">
           <h3>Completion Rate</h3>
-          <div className="stat-number">{formatNumber(userStats.completion_rate)}%</div>
+          <div className="stat-number">{computedStats.completionRate}%</div>
           <div className="stat-subtitle">Of started items</div>
         </div>
       </div>
@@ -104,4 +156,4 @@ const StatisticsCards: React.FC<StatisticsCardsProps> = ({ userStats, quickStats
   );
 };
 
-export default StatisticsCards;
+export default memo(StatisticsCards);

@@ -8,16 +8,16 @@
  * @component
  */
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
+import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 import { PersonalizedRecommendationsProps } from "../../types";
 import RecommendationsSkeleton from "../Loading/RecommendationsSkeleton";
 import EmptyState from "../EmptyState";
-
-const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
+import VirtualGrid from "../VirtualGrid";
+import RecommendationCard from "./RecommendationCard";
 
 /**
  * PersonalizedRecommendations component that fetches and displays recommendations
@@ -34,6 +34,11 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   const [error, setError] = useState<string | null>(null);
   const [removedItems, setRemovedItems] = useState<Set<string>>(new Set());
   const [refreshingSection, setRefreshingSection] = useState<string | null>(null);
+  
+  // New state for infinite scroll
+  const [loadingMore, setLoadingMore] = useState<{[key: string]: boolean}>({});
+  const [hasMore, setHasMore] = useState<{[key: string]: boolean}>({});
+  const [page, setPage] = useState<{[key: string]: number}>({});
   const [showRatingModal, setShowRatingModal] = useState<{
     show: boolean;
     itemUid: string;
@@ -105,11 +110,67 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
         });
       }
       setRecommendations(response);
+      
+      // Initialize infinite scroll state
+      const newHasMore: {[key: string]: boolean} = {};
+      const newPage: {[key: string]: number} = {};
+      Object.keys(response.recommendations || {}).forEach(section => {
+        const items = response.recommendations?.[section] || [];
+        newHasMore[section] = items.length >= 10; // Assume more if we got 10+ items
+        newPage[section] = 1;
+      });
+      setHasMore(newHasMore);
+      setPage(newPage);
+      
     } catch (err: any) {
       console.error("❌ Error fetching recommendations:", err);
       setError(err.message || "Failed to load recommendations");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load more items for a specific section
+  const loadMoreItems = async (sectionType: string) => {
+    if (loadingMore[sectionType] || !hasMore[sectionType]) return;
+
+    try {
+      setLoadingMore(prev => ({ ...prev, [sectionType]: true }));
+      
+      const currentPage = page[sectionType] || 1;
+      const nextPage = currentPage + 1;
+      
+      const params = new URLSearchParams();
+      params.set("page", nextPage.toString());
+      params.set("section", sectionType);
+      if (contentTypeFilter !== "all") {
+        params.set("content_type", contentTypeFilter);
+      }
+
+      const finalUrl = `/api/auth/personalized-recommendations/more?${params.toString()}`;
+      const response = await makeAuthenticatedRequest(finalUrl);
+
+      if (response?.items && Array.isArray(response.items)) {
+        setRecommendations((prev: any) => ({
+          ...prev,
+          recommendations: {
+            ...prev.recommendations,
+            [sectionType]: [...(prev.recommendations?.[sectionType] || []), ...response.items]
+          }
+        }));
+        
+        setPage(prev => ({ ...prev, [sectionType]: nextPage }));
+        setHasMore(prev => ({ 
+          ...prev, 
+          [sectionType]: response.items.length >= 10 // Has more if we got a full page
+        }));
+      } else {
+        setHasMore(prev => ({ ...prev, [sectionType]: false }));
+      }
+    } catch (err) {
+      console.error(`❌ Error loading more items for ${sectionType}:`, err);
+    } finally {
+      setLoadingMore(prev => ({ ...prev, [sectionType]: false }));
     }
   };
 
@@ -417,224 +478,7 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
     [makeAuthenticatedRequest, fetchRecommendations, showRatingModal.itemTitle]
   );
 
-  /**
-   * Handle image load error by falling back to default placeholder
-   */
-  const handleImageError = (event: React.SyntheticEvent<HTMLImageElement, Event>): void => {
-    const target = event.target as HTMLImageElement;
-    target.src = DEFAULT_PLACEHOLDER_IMAGE;
-  };
 
-  /**
-   * Render individual recommendation card with interactive features
-   */
-  const renderRecommendationCard = (item: any, itemIndex: number, sectionType: string) => {
-    // Extract the actual anime/manga data from the nested structure
-    const animeData = item.item; // The actual anime/manga data is in item.item
-    const title = animeData?.title || animeData?.name || "Unknown Title";
-    const reasoning = item.reasoning || "No reasoning provided";
-    const score = item.recommendation_score || 0;
-    const mediaType = animeData?.media_type || animeData?.mediaType || "Unknown";
-    const genres = animeData?.genres || [];
-    const rating = animeData?.rating || animeData?.score || "N/A";
-    const predictedRating = item.predicted_rating;
-
-    // Fix image URL extraction - handle multiple possible field names
-    let imageUrl = animeData?.image_url || animeData?.imageUrl || animeData?.main_picture;
-
-    // Additional fallback checks
-    if (!imageUrl && animeData) {
-      // Check for nested image structures that might exist
-      imageUrl =
-        animeData.images?.jpg?.image_url ||
-        animeData.images?.large_image_url ||
-        animeData.picture?.large ||
-        animeData.picture?.medium;
-    }
-
-    // Final fallback to placeholder
-    if (!imageUrl) {
-      imageUrl = DEFAULT_PLACEHOLDER_IMAGE;
-    }
-
-    const itemUid = animeData?.uid || item.uid;
-
-    // Get content type indicator
-    const typeIndicator = getContentTypeIndicator(mediaType);
-
-    // Skip rendering if item was removed
-    if (removedItems.has(itemUid)) {
-      return null;
-    }
-
-    return (
-      <div key={`${sectionType}-${itemUid}-${itemIndex}`} className="recommendation-card-wrapper">
-        <div className="recommendation-actions">
-          <button
-            onClick={() => handleNotInterestedWithSuggestion(itemUid, sectionType, title, mediaType)}
-            className="not-interested-btn"
-            title="Not interested"
-            aria-label={`Mark ${title} as not interested`}
-          >
-            ✕
-          </button>
-
-          {/* Info Tooltip */}
-          <div className="tooltip-container">
-            <button
-              className="action-btn info-btn"
-              title="Why this recommendation?"
-              aria-label="Show recommendation details"
-            >
-              ℹ️
-            </button>
-            <div className="recommendation-tooltip">
-              <div className="tooltip-content">
-                <h4>Why this recommendation?</h4>
-                <p>
-                  <strong>Reason:</strong> {reasoning}
-                </p>
-                <p>
-                  <strong>Confidence:</strong> {Math.round(score * 100)}%
-                </p>
-                {genres.length > 0 && (
-                  <p>
-                    <strong>Genres:</strong> {genres.slice(0, 3).join(", ")}
-                  </p>
-                )}
-                {rating !== "N/A" && (
-                  <p>
-                    <strong>Score:</strong> {rating}/10
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Add to List Dropdown with Enhanced States */}
-          <div className="add-to-list-container">
-            <button
-              className={`action-btn add-to-list-btn ${addingToList.has(itemUid) ? "loading" : ""} ${
-                recentlyAdded.has(itemUid) ? "success" : ""
-              }`}
-              title={
-                addingToList.has(itemUid)
-                  ? "Adding to list..."
-                  : recentlyAdded.has(itemUid)
-                  ? "Added successfully!"
-                  : "Add to List"
-              }
-              aria-label="Add to your list"
-              disabled={addingToList.has(itemUid)}
-            >
-              {addingToList.has(itemUid) ? "⟳" : recentlyAdded.has(itemUid) ? "✓" : "➕"}
-            </button>
-            <div className="add-dropdown">
-              <button
-                className="dropdown-option"
-                onClick={() => handleQuickAdd(itemUid, "plan_to_watch", sectionType, title)}
-                disabled={addingToList.has(itemUid)}
-              >
-                📋 Plan to Watch
-              </button>
-              <button
-                className="dropdown-option"
-                onClick={() => handleQuickAdd(itemUid, "watching", sectionType, title)}
-                disabled={addingToList.has(itemUid)}
-              >
-                👁️ Watching
-              </button>
-              <button
-                className="dropdown-option"
-                onClick={() => handleQuickAdd(itemUid, "on_hold", sectionType, title)}
-                disabled={addingToList.has(itemUid)}
-              >
-                ⏸️ On Hold
-              </button>
-              <button
-                className="dropdown-option"
-                onClick={() => handleQuickAdd(itemUid, "completed", sectionType, title)}
-                disabled={addingToList.has(itemUid)}
-              >
-                ✅ Completed
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <Link
-          to={`/items/${itemUid}`}
-          className="recommendation-card-link"
-          aria-label={`View details for ${title}`}
-        >
-          <article className="recommendation-card">
-            <div className="recommendation-image-container">
-              <img
-                src={imageUrl}
-                alt={`Cover for ${title}`}
-                loading="lazy"
-                onError={handleImageError}
-                className="recommendation-image"
-              />
-
-              {/* Content Type Indicator */}
-              <div className={`content-type-badge ${typeIndicator.className}`}>
-                <span className="type-icon">{typeIndicator.icon}</span>
-                <span className="type-label">{typeIndicator.label}</span>
-              </div>
-
-              {predictedRating && (
-                <div className="predicted-rating" title={`We think you'll rate this: ${predictedRating}/10`}>
-                  ★ {predictedRating.toFixed(1)}
-                </div>
-              )}
-            </div>
-
-            <div className="recommendation-content">
-              <h4 className="recommendation-title">{title}</h4>
-
-              <div className="recommendation-meta">
-                <span className="recommendation-type">{mediaType.toUpperCase()}</span>
-                <span className="recommendation-rating">★ {rating}/10</span>
-              </div>
-
-              <div className="recommendation-reason">
-                <p>{reasoning}</p>
-              </div>
-
-              {genres.length > 0 && (
-                <div className="recommendation-genres">
-                  {genres.slice(0, 3).map((genre: string, idx: number) => (
-                    <span key={idx} className="genre-tag">
-                      {genre}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className="recommendation-score">
-                <span className="score-label">Match:</span>
-                <span className="score-value">{(score * 100).toFixed(0)}%</span>
-              </div>
-            </div>
-          </article>
-        </Link>
-      </div>
-    );
-  };
-
-  /**
-   * Get content type indicator
-   */
-  const getContentTypeIndicator = (mediaType: string) => {
-    const type = mediaType?.toLowerCase();
-    if (type === "anime") {
-      return { icon: "📺", label: "Anime", className: "content-type-anime" };
-    } else if (type === "manga") {
-      return { icon: "📖", label: "Manga", className: "content-type-manga" };
-    }
-    return { icon: "❓", label: "Unknown", className: "content-type-unknown" };
-  };
 
   if (loading) {
     return (
@@ -812,11 +656,71 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
             </div>
 
             {section.items.length > 0 ? (
-              <div className="recommendation-grid">
-                {section.items.map((item: any, itemIndex: number) =>
-                  renderRecommendationCard(item, itemIndex, section.sectionType)
-                )}
-              </div>
+              section.items.length > 20 ? (
+                // Use virtual grid for large sections (>20 items)
+                (() => {
+                  console.log(`🔧 Using VirtualGrid for ${section.title} with ${section.items.length} items`);
+                  return <VirtualGrid
+                  items={section.items}
+                  renderItem={(item: any, itemIndex: number) => (
+                    <RecommendationCard
+                      key={`${section.sectionType}-${item.item?.uid || item.uid}-${itemIndex}`}
+                      item={item}
+                      sectionType={section.sectionType}
+                      removedItems={removedItems}
+                      addingToList={addingToList}
+                      recentlyAdded={recentlyAdded}
+                      onNotInterested={handleNotInterestedWithSuggestion}
+                      onQuickAdd={handleQuickAdd}
+                      onCompleted={(itemUid, sectionType, title) => setShowRatingModal({
+                        show: true,
+                        itemUid,
+                        itemTitle: title,
+                        sectionType,
+                      })}
+                    />
+                  )}
+                  itemHeight={380}
+                  itemWidth={320}
+                  containerHeight={800}
+                  gap={16}
+                  className="recommendation-virtual-grid"
+                />
+                })()
+              ) : (
+                // Use regular grid for smaller sections
+                (() => {
+                  console.log(`🔧 Using Regular Grid for ${section.title} with ${section.items.length} items`);
+                  return <div className="recommendation-grid">
+                  {section.items.map((item: any, itemIndex: number) => (
+                    <RecommendationCard
+                      key={`${section.sectionType}-${item.item?.uid || item.uid}-${itemIndex}`}
+                      item={item}
+                      sectionType={section.sectionType}
+                      removedItems={removedItems}
+                      addingToList={addingToList}
+                      recentlyAdded={recentlyAdded}
+                      onNotInterested={handleNotInterestedWithSuggestion}
+                      onQuickAdd={handleQuickAdd}
+                      onCompleted={(itemUid, sectionType, title) => setShowRatingModal({
+                        show: true,
+                        itemUid,
+                        itemTitle: title,
+                        sectionType,
+                      })}
+                    />
+                  ))}
+                  
+                  {/* Load More Component */}
+                  <LoadMoreSection 
+                    sectionType={section.sectionType}
+                    hasMore={hasMore[section.sectionType] || false}
+                    isLoading={loadingMore[section.sectionType] || false}
+                    onLoadMore={() => loadMoreItems(section.sectionType)}
+                  />
+                </div>
+                })()
+              )
             ) : (
               <div className="section-empty">
                 <p>No recommendations available in this category yet.</p>
@@ -971,4 +875,50 @@ const RatingModal: React.FC<RatingModalProps> = ({ isOpen, itemTitle, onSubmit, 
   );
 };
 
-export default React.memo(PersonalizedRecommendations);
+// LoadMoreSection component for infinite scroll
+interface LoadMoreSectionProps {
+  sectionType: string;
+  hasMore: boolean;
+  isLoading: boolean;
+  onLoadMore: () => void;
+}
+
+const LoadMoreSection: React.FC<LoadMoreSectionProps> = ({ 
+  sectionType, 
+  hasMore, 
+  isLoading, 
+  onLoadMore 
+}) => {
+  const sentinelRef = useInfiniteScroll({
+    hasMore,
+    isLoading,
+    onLoadMore,
+    threshold: 0.1,
+    rootMargin: "100px"
+  });
+
+  if (!hasMore && !isLoading) {
+    return null; // No more items to load
+  }
+
+  return (
+    <div className="load-more-section" ref={sentinelRef}>
+      {isLoading ? (
+        <div className="loading-more">
+          <div className="loading-spinner">⟳</div>
+          <span>Loading more recommendations...</span>
+        </div>
+      ) : hasMore ? (
+        <button 
+          className="load-more-button"
+          onClick={onLoadMore}
+          aria-label={`Load more ${sectionType} recommendations`}
+        >
+          Load More
+        </button>
+      ) : null}
+    </div>
+  );
+};
+
+export default memo(PersonalizedRecommendations);

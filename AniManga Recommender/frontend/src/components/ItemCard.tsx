@@ -1,6 +1,7 @@
-import React from "react";
+import React, { memo, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ItemCardProps } from "../types";
+import LazyImage from "./LazyImage";
 
 const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
 
@@ -72,35 +73,52 @@ const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
  * @author AniManga Recommender Team
  */
 const ItemCard: React.FC<ItemCardProps> = ({ item, className = "" }) => {
+  // Memoize computed values to prevent recalculation on every render
+  const computedData = useMemo(() => {
+    if (!item) {
+      return {
+        title: "No Title",
+        mediaType: "N/A",
+        score: "N/A",
+        imageUrl: DEFAULT_PLACEHOLDER_IMAGE,
+        genresDisplay: "None",
+        themesDisplay: "None"
+      };
+    }
+    const title = item.title || "No Title";
+    const mediaType = item.media_type || "N/A";
+    const score = item.score ? parseFloat(item.score.toString()).toFixed(2) : "N/A";
+    // Handle both image_url and main_picture for backward compatibility
+    const imageUrl = item.image_url || (item as any).main_picture || DEFAULT_PLACEHOLDER_IMAGE;
+
+    const genresDisplay = Array.isArray(item.genres)
+      ? item.genres.join(", ")
+      : typeof item.genres === "string"
+      ? item.genres
+      : "None";
+
+    const themesDisplay = Array.isArray(item.themes)
+      ? item.themes.join(", ")
+      : typeof item.themes === "string"
+      ? item.themes
+      : "None";
+
+    return {
+      title,
+      mediaType,
+      score,
+      imageUrl,
+      genresDisplay,
+      themesDisplay,
+    };
+  }, [item]);
+
+  const { title, mediaType, score, imageUrl, genresDisplay, themesDisplay } = computedData;
+
+  // Handle null item after hooks are called
   if (!item) {
     return null;
   }
-
-  const title = item.title || "No Title";
-  const mediaType = item.media_type || "N/A";
-  const score = item.score ? parseFloat(item.score.toString()).toFixed(2) : "N/A";
-  // Handle both image_url and main_picture for backward compatibility
-  const imageUrl = item.image_url || (item as any).main_picture || DEFAULT_PLACEHOLDER_IMAGE;
-
-  const genresDisplay = Array.isArray(item.genres)
-    ? item.genres.join(", ")
-    : typeof item.genres === "string"
-    ? item.genres
-    : "None";
-
-  const themesDisplay = Array.isArray(item.themes)
-    ? item.themes.join(", ")
-    : typeof item.themes === "string"
-    ? item.themes
-    : "None";
-
-  /**
-   * Handle image load error by falling back to default placeholder
-   */
-  const handleImageError = (event: React.SyntheticEvent<HTMLImageElement, Event>): void => {
-    const target = event.target as HTMLImageElement;
-    target.src = DEFAULT_PLACEHOLDER_IMAGE;
-  };
 
   return (
     <Link
@@ -109,7 +127,15 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, className = "" }) => {
       aria-label={`View details for ${title} - ${mediaType} with score ${score}`}
     >
       <article className="item-card">
-        <img src={imageUrl} alt={`Cover for ${title}`} loading="lazy" onError={handleImageError} />
+        <div className="item-card-image">
+          <LazyImage
+            src={imageUrl}
+            alt={`Cover for ${title}`}
+            fallbackSrc={DEFAULT_PLACEHOLDER_IMAGE}
+            title={title}
+            className="aspect-cover"
+          />
+        </div>
         <div className="item-card-content-wrapper">
           <h3>{title}</h3>
           <div className="details">
@@ -138,4 +164,4 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, className = "" }) => {
   );
 };
 
-export default React.memo(ItemCard);
+export default memo(ItemCard);

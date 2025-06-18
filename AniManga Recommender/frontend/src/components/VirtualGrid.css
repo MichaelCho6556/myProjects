@@ -1,0 +1,104 @@
+/* VirtualGrid Component Styles */
+
+.virtual-grid {
+  position: relative;
+  overflow: auto;
+  scroll-behavior: smooth;
+}
+
+.virtual-grid-spacer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.virtual-grid-items {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.virtual-grid-item {
+  will-change: transform;
+}
+
+/* Loading state */
+.virtual-grid.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-overlay);
+}
+
+.virtual-grid-loading {
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-top: 3px solid var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Custom scrollbar for virtual grid */
+.virtual-grid::-webkit-scrollbar {
+  width: 12px;
+}
+
+.virtual-grid::-webkit-scrollbar-track {
+  background: var(--bg-overlay);
+  border-radius: 6px;
+}
+
+.virtual-grid::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  border-radius: 6px;
+  border: 2px solid var(--bg-dark);
+}
+
+.virtual-grid::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, var(--accent-primary-hover), var(--accent-secondary-hover));
+}
+
+/* Performance optimizations */
+.virtual-grid-item {
+  transform: translateZ(0); /* Force hardware acceleration */
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .virtual-grid::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  .virtual-grid {
+    scroll-behavior: auto; /* Disable smooth scrolling on mobile for better performance */
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .virtual-grid {
+    scroll-behavior: auto;
+  }
+  
+  .loading-spinner {
+    animation: none;
+    border-top-color: var(--border-color);
+  }
+}
