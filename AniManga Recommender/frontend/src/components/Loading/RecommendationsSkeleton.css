@@ -1,0 +1,235 @@
+/* RecommendationsSkeleton Component Styles */
+
+.recommendations-skeleton {
+  width: 100%;
+}
+
+/* Base skeleton animation */
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bg-overlay) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    var(--bg-overlay) 100%
+  );
+  background-size: 468px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Filter Controls Skeleton */
+.filter-skeleton {
+  margin-bottom: 2rem;
+}
+
+.filter-buttons-skeleton {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.skeleton-button {
+  height: 40px;
+  border-radius: 8px;
+  background: var(--bg-overlay);
+  @extend .skeleton-shimmer;
+}
+
+.skeleton-button:not(.small) {
+  width: 100px;
+}
+
+.skeleton-button.small {
+  width: 60px;
+  height: 32px;
+}
+
+/* Section Skeleton */
+.section-skeleton {
+  margin-bottom: 3rem;
+  background: linear-gradient(135deg, var(--bg-overlay), var(--bg-dark));
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.section-header-skeleton {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.section-title-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.skeleton-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: var(--bg-overlay);
+  @extend .skeleton-shimmer;
+}
+
+.skeleton-title {
+  width: 200px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--bg-overlay);
+  @extend .skeleton-shimmer;
+}
+
+.section-actions-skeleton {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Items Grid Skeleton */
+.items-grid-skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.item-card-skeleton {
+  background: var(--bg-deep-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.item-image-skeleton {
+  width: 100%;
+  height: 160px;
+  background: var(--bg-overlay);
+  @extend .skeleton-shimmer;
+}
+
+.item-content-skeleton {
+  padding: 1rem;
+}
+
+.item-title-skeleton {
+  width: 80%;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--bg-overlay);
+  @extend .skeleton-shimmer;
+  margin-bottom: 0.75rem;
+}
+
+.item-type-skeleton {
+  width: 60px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--bg-overlay);
+  @extend .skeleton-shimmer;
+  margin-bottom: 0.5rem;
+}
+
+.item-score-skeleton {
+  width: 80px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--bg-overlay);
+  @extend .skeleton-shimmer;
+  margin-bottom: 0.75rem;
+}
+
+.item-description-skeleton {
+  margin-bottom: 1rem;
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 3px;
+  background: var(--bg-overlay);
+  @extend .skeleton-shimmer;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-line:last-child {
+  margin-bottom: 0;
+}
+
+.skeleton-line.short {
+  width: 70%;
+}
+
+.item-actions-skeleton {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.item-actions-skeleton .skeleton-button {
+  width: 120px;
+  height: 36px;
+}
+
+/* Apply shimmer animation to all skeleton elements */
+.skeleton-button,
+.skeleton-icon,
+.skeleton-title,
+.item-image-skeleton,
+.item-title-skeleton,
+.item-type-skeleton,
+.item-score-skeleton,
+.skeleton-line {
+  background: linear-gradient(
+    90deg,
+    var(--bg-overlay) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    var(--bg-overlay) 100%
+  );
+  background-size: 468px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .items-grid-skeleton {
+    grid-template-columns: 1fr;
+  }
+  
+  .filter-buttons-skeleton {
+    justify-content: flex-start;
+  }
+  
+  .section-header-skeleton {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .section-actions-skeleton {
+    align-self: flex-end;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-button,
+  .skeleton-icon,
+  .skeleton-title,
+  .item-image-skeleton,
+  .item-title-skeleton,
+  .item-type-skeleton,
+  .item-score-skeleton,
+  .skeleton-line {
+    animation: none;
+    background: var(--bg-overlay);
+  }
+}

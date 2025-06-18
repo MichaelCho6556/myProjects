@@ -14,7 +14,8 @@ import { createPortal } from "react-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { PersonalizedRecommendationsProps } from "../../types";
-import Spinner from "../Spinner";
+import RecommendationsSkeleton from "../Loading/RecommendationsSkeleton";
+import EmptyState from "../EmptyState";
 
 const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
 
@@ -638,10 +639,7 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   if (loading) {
     return (
       <div className={`personalized-recommendations ${className}`}>
-        <div className="recommendations-loading">
-          <Spinner size={24} />
-          <p>Loading personalized recommendations...</p>
-        </div>
+        <RecommendationsSkeleton sections={3} itemsPerSection={4} />
       </div>
     );
   }
@@ -649,13 +647,16 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   if (error) {
     return (
       <div className={`personalized-recommendations ${className}`}>
-        <div className="recommendations-error">
-          <h2>Unable to Load Recommendations</h2>
-          <p>{error}</p>
-          <button onClick={fetchRecommendations} className="retry-button">
-            Try Again
-          </button>
-        </div>
+        <EmptyState
+          type="error"
+          title="Unable to Load Recommendations"
+          description={error}
+          actionButton={{
+            text: "Try Again",
+            onClick: fetchRecommendations,
+            variant: "primary"
+          }}
+        />
       </div>
     );
   }
@@ -663,10 +664,20 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   if (!recommendations || !recommendations.recommendations) {
     return (
       <div className={`personalized-recommendations ${className}`}>
-        <div className="recommendations-placeholder">
-          <h2>No Recommendations Available</h2>
-          <p>Complete some anime or manga to get personalized recommendations!</p>
-        </div>
+        <EmptyState
+          type="no-recommendations"
+          title="No Recommendations Available"
+          description="Complete some anime or manga to get personalized recommendations! The more you add to your lists, the better our suggestions become."
+          actionButton={{
+            text: "Browse Anime & Manga",
+            href: "/",
+            variant: "primary"
+          }}
+          secondaryAction={{
+            text: "Learn How Recommendations Work",
+            href: "/help/recommendations"
+          }}
+        />
       </div>
     );
   }

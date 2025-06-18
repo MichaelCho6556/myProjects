@@ -45,7 +45,7 @@
  * @author Michael Cho
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
 import { DashboardData } from "../types";
@@ -57,6 +57,8 @@ import QuickActions from "../components/dashboard/QuickActions";
 import PersonalizedRecommendations from "../components/dashboard/PersonalizedRecommendations";
 import DashboardSkeleton from "../components/Loading/DashboardSkeleton";
 import ErrorFallback from "../components/Error/ErrorFallback";
+import CollapsibleSection from "../components/CollapsibleSection";
+import EmptyState from "../components/EmptyState";
 import "./DashboardPage.css";
 import { supabase } from "../lib/supabase";
 
@@ -88,6 +90,20 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sectionLoading, setSectionLoading] = useState({
+    recommendations: false,
+    itemLists: false,
+    quickActions: false,
+    activityFeed: false,
+  });
+
+  // Debounce timer refs for section refreshes
+  const refreshTimers = useRef<{
+    recommendations?: NodeJS.Timeout;
+    itemLists?: NodeJS.Timeout;
+    quickActions?: NodeJS.Timeout;
+    activityFeed?: NodeJS.Timeout;
+  }>({});
 
   useDocumentTitle("Dashboard");
 
@@ -179,6 +195,53 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
     await fetchDashboardData();
   };
 
+  /**
+   * Helper function for debounced section refresh to prevent rapid API calls
+   */
+  const debouncedSectionRefresh = useCallback((sectionName: keyof typeof sectionLoading, delay: number = 1000) => {
+    // Clear existing timer for this section
+    if (refreshTimers.current[sectionName]) {
+      clearTimeout(refreshTimers.current[sectionName]);
+    }
+
+    // Check if section is already loading
+    if (sectionLoading[sectionName]) {
+      return Promise.resolve();
+    }
+
+    setSectionLoading(prev => ({ ...prev, [sectionName]: true }));
+
+    return new Promise<void>((resolve) => {
+      refreshTimers.current[sectionName] = setTimeout(async () => {
+        try {
+          await fetchDashboardData();
+        } finally {
+          setSectionLoading(prev => ({ ...prev, [sectionName]: false }));
+          resolve();
+        }
+      }, delay);
+    });
+  }, [sectionLoading]);
+
+  /**
+   * Section-specific refresh functions for individual loading states
+   */
+  const refreshRecommendations = useCallback(async (): Promise<void> => {
+    await debouncedSectionRefresh('recommendations', 500);
+  }, [debouncedSectionRefresh]);
+
+  const refreshItemLists = useCallback(async (): Promise<void> => {
+    await debouncedSectionRefresh('itemLists', 500);
+  }, [debouncedSectionRefresh]);
+
+  const refreshQuickActions = useCallback(async (): Promise<void> => {
+    await debouncedSectionRefresh('quickActions', 500);
+  }, [debouncedSectionRefresh]);
+
+  const refreshActivityFeed = useCallback(async (): Promise<void> => {
+    await debouncedSectionRefresh('activityFeed', 500);
+  }, [debouncedSectionRefresh]);
+
   // Set up cross-tab synchronization for real-time updates
   useEffect(() => {
     /**
@@ -200,6 +263,15 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(refreshTimers.current).forEach(timer => {
+        if (timer) clearTimeout(timer);
+      });
     };
   }, []);
 
@@ -249,10 +321,23 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
   if (!user) {
     return (
       <div className="dashboard-page">
-        <div className="auth-required">
-          <h2>Please Sign In</h2>
-          <p>You need to be signed in to view your dashboard.</p>
-        </div>
+        <EmptyState
+          type="new-user"
+          title="Welcome to AniManga Recommender!"
+          description="Sign in to track your anime and manga progress, get personalized recommendations, and connect with the community."
+          actionButton={{
+            text: "Sign In",
+            onClick: () => {
+              // This would typically open the auth modal
+              window.location.href = "/auth";
+            },
+            variant: "primary"
+          }}
+          secondaryAction={{
+            text: "Browse without signing in",
+            href: "/"
+          }}
+        />
       </div>
     );
   }
@@ -279,10 +364,20 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
   if (!dashboardData) {
     return (
       <div className="dashboard-page">
-        <div className="no-data">
-          <h2>No Data Available</h2>
-          <p>Start adding anime and manga to your lists to see your dashboard!</p>
-        </div>
+        <EmptyState
+          type="new-user"
+          title="Welcome to Your Dashboard!"
+          description="Start building your anime and manga collection to unlock detailed statistics, personalized recommendations, and activity tracking."
+          actionButton={{
+            text: "Browse Anime & Manga",
+            href: "/",
+            variant: "primary"
+          }}
+          secondaryAction={{
+            text: "Learn How to Get Started",
+            href: "/help/getting-started"
+          }}
+        />
       </div>
     );
   }
@@ -300,22 +395,58 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
 
         <div className="dashboard-grid">
           <div className="dashboard-main">
-            <ItemLists
-              inProgress={dashboardData.in_progress}
-              planToWatch={dashboardData.plan_to_watch}
-              onHold={dashboardData.on_hold}
-              completedRecently={dashboardData.completed_recently}
-              onStatusUpdate={handleStatusUpdate}
-              onItemDeleted={fetchDashboardData}
-            />
+            <CollapsibleSection
+              id="item-lists"
+              title="Your Lists"
+              icon="📋"
+              showRefreshButton={true}
+              onRefresh={refreshItemLists}
+              isLoading={sectionLoading.itemLists}
+            >
+              <ItemLists
+                inProgress={dashboardData.in_progress}
+                planToWatch={dashboardData.plan_to_watch}
+                onHold={dashboardData.on_hold}
+                completedRecently={dashboardData.completed_recently}
+                onStatusUpdate={handleStatusUpdate}
+                onItemDeleted={fetchDashboardData}
+              />
+            </CollapsibleSection>
 
-            <PersonalizedRecommendations onRefresh={fetchDashboardData} />
+            <CollapsibleSection
+              id="recommendations"
+              title="Personalized Recommendations"
+              icon="🎯"
+              showRefreshButton={true}
+              onRefresh={refreshRecommendations}
+              isLoading={sectionLoading.recommendations}
+            >
+              <PersonalizedRecommendations onRefresh={fetchDashboardData} />
+            </CollapsibleSection>
 
-            <QuickActions onRefresh={fetchDashboardData} />
+            <CollapsibleSection
+              id="quick-actions"
+              title="Quick Actions"
+              icon="⚡"
+              showRefreshButton={true}
+              onRefresh={refreshQuickActions}
+              isLoading={sectionLoading.quickActions}
+            >
+              <QuickActions onRefresh={fetchDashboardData} />
+            </CollapsibleSection>
           </div>
 
           <div className="dashboard-sidebar">
-            <ActivityFeed activities={dashboardData.recent_activity} />
+            <CollapsibleSection
+              id="activity-feed"
+              title="Recent Activity"
+              icon="🕒"
+              showRefreshButton={true}
+              onRefresh={refreshActivityFeed}
+              isLoading={sectionLoading.activityFeed}
+            >
+              <ActivityFeed activities={dashboardData.recent_activity} />
+            </CollapsibleSection>
           </div>
         </div>
       </div>
