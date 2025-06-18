@@ -62,7 +62,7 @@ class OptimizedCloudMALImporter:
         # Conservative performance settings for MAL's dynamic rate limiting
         self.batch_size = 50  # Keep small batches for easier recovery
         self.concurrent_requests = 1 # Sequential processing to avoid overwhelming MAL
-        self.delay_between_requests = 0.2# Minimal delay since MAL client handles rate limiting
+        self.delay_between_requests = 0.8# Minimal delay since MAL client handles rate limiting
         
         # MAL cooldown management
         self.request_timeout = 30  # 30 second timeout per request
@@ -810,7 +810,7 @@ class OptimizedCloudMALImporter:
         # Unified sequential scanning ranges (MAL uses single ID space for both anime and manga)
         # Resume from 9,000 to avoid reprocessing IDs we've already handled
         mal_id_ranges = [     # Recent era (medium density)
-            (10000, 500000),   # Current era (lower density)
+            (62000, 500000),   # Current era (lower density)
             # 151000
         ]
         

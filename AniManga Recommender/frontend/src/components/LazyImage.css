@@ -1,0 +1,230 @@
+/* LazyImage Component Styles */
+
+.lazy-image-container {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-overlay);
+  border-radius: 8px;
+  width: 100%;
+  height: 100%;
+}
+
+/* Placeholder while image loads */
+.lazy-image-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--bg-overlay), var(--bg-secondary));
+  z-index: 1;
+}
+
+/* Shimmer loading placeholder */
+.shimmer-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0f0f0, #e0e0e0);
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.6;
+}
+
+.shimmer-image-icon {
+  font-size: 2rem;
+  opacity: 0.5;
+}
+
+.shimmer-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Initials placeholder */
+.initials-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  position: relative;
+}
+
+.initials-text {
+  font-size: clamp(1rem, 4vw, 2rem);
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.1em;
+}
+
+.fallback-label {
+  font-size: 0.6rem;
+  font-weight: 500;
+  margin-top: 4px;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.initials-placeholder.final-fallback {
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+}
+
+.placeholder-img {
+  width: 50%;
+  height: 50%;
+  opacity: 0.3;
+  object-fit: contain;
+  filter: grayscale(100%);
+}
+
+/* Actual lazy-loaded image */
+.lazy-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition: opacity 0.3s ease-in-out;
+  z-index: 2;
+}
+
+.lazy-image.loading {
+  opacity: 0;
+}
+
+.lazy-image.loaded {
+  opacity: 1;
+}
+
+/* Loading animation */
+.shimmer-placeholder::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Error state styling */
+.lazy-image-container[data-error="true"] .lazy-image-placeholder {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.1));
+}
+
+.lazy-image-container[data-error="true"] .placeholder-img {
+  filter: grayscale(100%) sepia(100%) hue-rotate(320deg) saturate(200%);
+}
+
+/* Hover effects for interactive images */
+.lazy-image-container:hover .lazy-image.loaded {
+  transform: scale(1.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Focus states for accessibility */
+.lazy-image:focus {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Different aspect ratios */
+.lazy-image-container.aspect-square {
+  aspect-ratio: 1 / 1;
+}
+
+.lazy-image-container.aspect-cover {
+  aspect-ratio: 3 / 4; /* Standard book/poster aspect ratio */
+}
+
+.lazy-image-container.aspect-wide {
+  aspect-ratio: 16 / 9;
+}
+
+/* Size variants */
+.lazy-image-container.size-small {
+  width: 60px;
+  height: 80px;
+}
+
+.lazy-image-container.size-medium {
+  width: 120px;
+  height: 160px;
+}
+
+.lazy-image-container.size-large {
+  width: 200px;
+  height: 280px;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .lazy-image-container:hover .lazy-image.loaded {
+    transform: none; /* Disable hover effects on mobile */
+  }
+  
+  .lazy-image-placeholder::before {
+    animation-duration: 2s; /* Slower animation on mobile to reduce battery usage */
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .lazy-image {
+    transition: none;
+  }
+  
+  .lazy-image-placeholder::before {
+    animation: none;
+  }
+  
+  .lazy-image-container:hover .lazy-image.loaded {
+    transform: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .lazy-image-container {
+    border: 1px solid var(--text-primary);
+  }
+  
+  .lazy-image-placeholder {
+    background: var(--bg-dark);
+  }
+}
