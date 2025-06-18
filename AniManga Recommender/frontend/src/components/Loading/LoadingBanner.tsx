@@ -1,5 +1,4 @@
 import React from "react";
-import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import "./Loading.css";
 
 interface LoadingBannerProps {
@@ -9,43 +8,20 @@ interface LoadingBannerProps {
 }
 
 /**
- * Professional Loading Banner Component
- * Replaces basic spinners with polished loading states
+ * Minimal Loading Banner Component
+ * Subtle loading bar that doesn't disrupt layout
  */
 const LoadingBanner: React.FC<LoadingBannerProps> = ({ message, isVisible, className = "" }) => {
-  const { shouldWarnSlowConnection } = useNetworkStatus();
-
   if (!isVisible) return null;
-
-  // Adjust message based on connection quality
-  const getDisplayMessage = () => {
-    if (shouldWarnSlowConnection) {
-      return `${message} (Slow connection detected)`;
-    }
-    return message;
-  };
-
-  const displayMessage = getDisplayMessage();
 
   return (
     <div
-      className={`loading-banner ${
-        shouldWarnSlowConnection ? "loading-banner--slow-connection" : ""
-      } ${className}`.trim()}
+      className={`loading-banner ${className}`.trim()}
       role="status"
       aria-live="polite"
-      aria-label={displayMessage}
-    >
-      <div className="loading-content">
-        <div className="loading-spinner" aria-hidden="true"></div>
-        <span className="loading-text">{displayMessage}</span>
-        {shouldWarnSlowConnection && (
-          <div className="loading-connection-warning" aria-hidden="true" title="Slow connection">
-            🐌
-          </div>
-        )}
-      </div>
-    </div>
+      aria-label={message}
+      title={message}
+    />
   );
 };
 

@@ -102,7 +102,7 @@ main {
 /* ✅ UPDATED: Item grid with 5 cards per row */
 .item-list {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr)); /* ✅ CHANGED: 6 to 5 cards */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 20px;
   padding: 30px 0;
   margin: 0 auto;
@@ -110,7 +110,6 @@ main {
   width: 100%;
 }
 
-/* ✅ UPDATED: Item cards with consistent sizing */
 .item-card {
   background-color: var(--bg-dark);
   border: 1px solid var(--border-color);
@@ -121,8 +120,6 @@ main {
   flex-direction: column;
   overflow: hidden;
   height: 100%;
-  width: 100%; /* ✅ ADDED: Ensure cards fill grid cell */
-  min-width: 0; /* ✅ ADDED: Allow cards to shrink */
 }
 .item-card:hover {
   transform: translateY(-6px);
@@ -449,17 +446,16 @@ button.btn-primary:disabled,
   transform: translateY(-3px);
 }
 
-/* ✅ COMPLETELY REDESIGNED: Filter Bar with Organized Layout */
+/* ✅ REDESIGNED: Professional Uniform Filter Bar Layout */
 .filter-bar {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   grid-template-areas:
-    "sort type status score"
-    "genres themes demographics year"
-    "studios authors . ."
-    "reset reset reset reset";
-  gap: 18px;
-  padding: 25px;
+    "sort type status score year"
+    "genres themes demographics studios authors"
+    "reset reset reset reset reset";
+  gap: 15px 12px;
+  padding: 20px;
   background: linear-gradient(135deg, var(--bg-overlay), var(--bg-dark));
   border-radius: 12px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
@@ -467,14 +463,82 @@ button.btn-primary:disabled,
   max-width: 1350px;
   margin: 0 auto;
   position: relative;
-  overflow: visible !important; /* ✅ CHANGED: Allow dropdowns to extend outside */
+  overflow: visible !important;
 }
 
-/* ✅ Grid Area Assignments */
+/* ✅ PROFESSIONAL: Subtle loading indicators */
+.filter-bar.loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.filter-bar.loading::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent-primary) 25%,
+    var(--accent-secondary) 50%,
+    var(--accent-primary) 75%,
+    transparent 100%
+  );
+  animation: loadingSlide 1.5s ease-in-out infinite;
+  z-index: 1000;
+  border-radius: 0 0 2px 2px;
+}
+
+@keyframes loadingSlide {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ✅ PROFESSIONAL: Loading state for controls */
+.filter-bar.loading .filter-group {
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+.filter-bar.loading .filter-group::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top: 2px solid var(--accent-primary);
+  border-radius: 50%;
+  animation: filterSpin 1s linear infinite;
+  z-index: 100;
+  transform: translateY(-50%);
+}
+
+@keyframes filterSpin {
+  0% {
+    transform: translateY(-50%) rotate(0deg);
+  }
+  100% {
+    transform: translateY(-50%) rotate(360deg);
+  }
+}
+
+/* ✅ UNIFORM: Grid Area Assignments for Professional Layout */
 .filter-bar > .filter-group.sort-by-selector {
   grid-area: sort;
-  position: relative; /* ✅ ADDED: Ensure proper positioning context */
-  z-index: 10; /* ✅ ADDED: Higher z-index for dropdown visibility */
+  position: relative;
+  z-index: 10;
 }
 .filter-bar > .filter-group:nth-child(2) {
   grid-area: type;
@@ -503,34 +567,27 @@ button.btn-primary:disabled,
 .filter-bar > .filter-group:nth-child(10) {
   grid-area: year;
 } /* Year */
-/* ✅ NEW: Professional Filter Actions Container */
-.filter-bar > .filter-actions {
-  grid-area: reset;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 15px 0;
-}
 
-/* ✅ UPDATED: Professional Reset Button */
+/* ✅ COMPACT: Professional Reset Button */
 .filter-bar .reset-filters-btn {
   background: linear-gradient(135deg, #ef4444, #dc2626);
   color: white;
   border: none;
-  border-radius: 10px;
-  padding: 12px 24px;
+  border-radius: 8px;
+  padding: 10px 18px;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.3);
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 160px;
+  gap: 6px;
+  min-width: 120px;
   justify-content: center;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
+  height: 44px;
 }
 
 .filter-bar .reset-filters-btn:hover:not(:disabled) {
@@ -551,22 +608,30 @@ button.btn-primary:disabled,
   box-shadow: none;
 }
 
-/* ✅ UPDATED: Larger minimum height for filter groups with multi-select */
+/* ✅ UNIFORM: Consistent styling for all filter groups */
 .filter-bar > .filter-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-height: 90px; /* ✅ INCREASED: Allow more space for multi-select tags */
+  gap: 6px;
+  min-height: 85px; /* Consistent height for all groups */
   position: relative;
+  min-width: 0; /* Allow shrinking */
+  max-width: none; /* Remove width restrictions */
 }
 
-/* ✅ NEW: Special height for groups that commonly have multi-select */
-.filter-bar > .filter-group:nth-child(3), /* Genres */
-.filter-bar > .filter-group:nth-child(4), /* Themes */
-.filter-bar > .filter-group:nth-child(5), /* Demographics */
-.filter-bar > .filter-group:nth-child(6), /* Studios */
-.filter-bar > .filter-group:nth-child(7) /* Authors */ {
-  min-height: 110px; /* ✅ ADDED: Extra height for multi-select groups */
+/* Removed duplicate - styling consolidated above */
+
+/* ✅ CENTERED: Reset button at bottom */
+.filter-reset-container {
+  grid-area: reset;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 10px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+  width: 100%;
+  text-align: center;
 }
 
 /* ✅ UPDATED: More Intuitive Filter Labels */
@@ -618,11 +683,15 @@ button.btn-primary:disabled,
   border-radius: 0 0 3px 3px;
 }
 
-/* ✅ UPDATED: Regular select elements with perfect centering */
+/* ✅ UNIFORM: All filter controls with consistent styling */
 .filter-bar > .filter-group select,
 .filter-bar > .filter-group input[type="text"],
-.filter-bar > .filter-group input[type="number"] {
+.filter-bar > .filter-group input[type="number"],
+.filter-bar .react-select__control {
   height: 45px !important;
+  min-height: 45px !important;
+  width: 100% !important;
+  min-width: 160px !important; /* Uniform minimum width */
   padding: 0 16px !important;
   background: var(--bg-deep-dark);
   border: 2px solid var(--border-color);
@@ -708,14 +777,29 @@ button.btn-primary:disabled,
 
 /* ✅ FIXED: Multi-select container for professional layout */
 .filter-bar .react-select__value-container--is-multi {
-  padding: 6px 16px !important; /* ✅ Better padding */
+  padding: 6px 16px !important;
   min-height: 45px !important;
-  max-height: 120px !important; /* ✅ Reasonable max height */
+  max-height: 120px !important;
   overflow-y: auto !important;
   flex-wrap: wrap !important;
   align-content: flex-start !important;
-  gap: 1px !important; /* ✅ Minimal gap for clean look */
+  gap: 1px !important;
   align-items: flex-start !important;
+  scroll-behavior: smooth !important;
+}
+
+/* ✅ FIX: Force scroll to top when new values are added */
+.filter-bar .react-select__value-container--is-multi:focus-within {
+  scroll-behavior: auto !important;
+}
+
+.filter-bar .react-select__value-container--is-multi::after {
+  content: "";
+  position: sticky;
+  top: 0;
+  display: block;
+  height: 0;
+  scroll-margin-top: 0;
 }
 
 /* ✅ PROFESSIONAL: Multi-select control height management */
@@ -742,17 +826,16 @@ button.btn-primary:disabled,
 
 /* ✅ NEW: Professional Loading Banner */
 .loading-banner {
-  grid-area: reset;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
   background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-  border-radius: 12px;
-  margin-bottom: 10px;
-  animation: pulse 2s infinite;
-  color: white;
-  box-shadow: 0 4px 15px rgba(20, 184, 166, 0.3);
+  border-radius: 0 0 6px 6px;
+  z-index: 1000;
+  animation: loadingPulse 1.5s ease-in-out infinite;
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.4);
 }
 
 /* ✅ RESPONSIVE: Tablet Layout */
@@ -761,16 +844,15 @@ button.btn-primary:disabled,
     grid-template-columns: repeat(3, 1fr);
     grid-template-areas:
       "sort type status"
+      "score year ."
       "genres themes demographics"
-      "studios authors score"
-      "year . ."
-      "reset reset reset";
-    gap: 18px;
-    padding: 25px;
+      "studios authors .";
+    gap: 15px;
+    padding: 20px;
   }
 
   .item-list {
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     max-width: 95%;
   }
 
@@ -783,6 +865,8 @@ button.btn-primary:disabled,
   }
 }
 
+/* Removed duplicate - main .item-list rule is above */
+
 /* ✅ RESPONSIVE: Mobile Layout */
 @media (max-width: 768px) {
   .filter-bar {
@@ -790,10 +874,10 @@ button.btn-primary:disabled,
     grid-template-areas:
       "sort type"
       "status score"
+      "year ."
       "genres themes"
       "demographics studios"
-      "authors year"
-      "reset reset";
+      "authors .";
     gap: 15px;
     padding: 20px;
   }
@@ -831,8 +915,7 @@ button.btn-primary:disabled,
       "studios"
       "authors"
       "score"
-      "year"
-      "reset";
+      "year";
     gap: 15px;
     padding: 20px;
   }
@@ -933,16 +1016,8 @@ button.btn-primary:disabled,
   }
 }
 
+/* Mobile 480px responsive rules consolidated above */
 @media (max-width: 480px) {
-  .item-list {
-    grid-template-columns: 1fr;
-    gap: 20px;
-    padding: 20px 5px;
-  }
-  .item-card img {
-    height: auto;
-    max-height: 400px;
-  }
   .app-container {
     padding: 0 15px;
   }
@@ -1348,48 +1423,17 @@ input:focus-visible {
   height: 36px;
 }
 
-/* ✅ NEW: Professional Loading Banner for Filters */
-.loading-banner {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 15px 25px;
-  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-  border-radius: 10px;
-  margin-bottom: 15px;
-  animation: pulse 2s infinite;
-  color: white;
-}
+/* Loading content styles removed - using minimal loading bar instead */
 
-.loading-content {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.loading-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.loading-text {
-  color: white;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-@keyframes pulse {
+@keyframes loadingPulse {
   0%,
   100% {
-    opacity: 1;
+    opacity: 0.8;
+    transform: scaleX(1);
   }
   50% {
-    opacity: 0.8;
+    opacity: 1;
+    transform: scaleX(1.02);
   }
 }
 
@@ -1494,144 +1538,153 @@ input:focus-visible {
   font-size: 1.2rem;
 }
 
-/* ✅ NEW: Enhanced React-Select Dropdown with Extended Height */
+/* ✅ ENHANCED: Much larger, more professional dropdown menus */
 .filter-bar .react-select__menu {
-  z-index: 99999 !important; /* ✅ INCREASED: Even higher z-index */
+  z-index: 99999 !important;
   background: var(--bg-dark) !important;
   border: 2px solid var(--border-color) !important;
-  border-radius: 10px !important;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3) !important; /* ✅ ENHANCED: Stronger shadow */
-  margin-top: 4px !important;
-  min-width: 100% !important;
-  max-height: 400px !important; /* ✅ INCREASED: Much larger dropdown */
+  border-radius: 12px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.2) !important;
+  margin-top: 8px !important;
+  min-width: 280px !important; /* ✅ FIXED: Larger minimum width */
+  max-height: 400px !important; /* ✅ FIXED: Reasonable dropdown height */
   overflow-y: auto !important;
-  position: absolute !important; /* ✅ ADDED: Ensure absolute positioning */
+  position: absolute !important; /* ✅ CRITICAL: Return to absolute positioning */
 }
 
 /* ✅ ENHANCED: Menu portal with maximum z-index */
 .filter-bar .react-select__menu-portal {
-  z-index: 99999 !important; /* ✅ INCREASED: Maximum z-index */
+  z-index: 99999 !important;
 }
 
-/* ✅ UPDATED: Larger, more readable dropdown options */
+/* ✅ ENHANCED: Much larger, more professional dropdown options */
 .filter-bar .react-select__option {
   background: var(--bg-dark) !important;
   color: var(--text-primary) !important;
-  padding: 14px 18px !important; /* ✅ INCREASED: More padding for better readability */
-  font-size: 0.95rem !important; /* ✅ INCREASED: Slightly larger text */
-  border-bottom: 1px solid var(--border-color) !important;
+  padding: 16px 20px !important; /* ✅ MUCH LARGER: Professional padding */
+  font-size: 1rem !important; /* ✅ LARGER: More readable text */
+  font-weight: 500 !important; /* Better text weight */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
   cursor: pointer !important;
-  min-height: 45px !important; /* ✅ ADDED: Minimum height for touch targets */
+  min-height: 52px !important; /* ✅ MUCH LARGER: Professional height */
   display: flex !important;
   align-items: center !important;
-}
-
-.filter-bar .react-select__option:hover {
-  background: var(--bg-overlay) !important;
-  color: var(--accent-primary) !important;
-  transform: translateX(2px) !important; /* ✅ ADDED: Subtle animation */
   transition: all 0.2s ease !important;
 }
 
-.filter-bar .react-select__option--is-focused {
-  background: var(--bg-overlay) !important;
+.filter-bar .react-select__option:hover {
+  background: linear-gradient(135deg, var(--bg-overlay), var(--bg-secondary)) !important;
   color: var(--accent-primary) !important;
-  transform: translateX(2px) !important;
+  transform: translateX(4px) !important; /* Slightly more pronounced animation */
+  border-left: 3px solid var(--accent-primary) !important; /* Professional highlight */
+}
+
+.filter-bar .react-select__option--is-focused {
+  background: linear-gradient(135deg, var(--bg-overlay), var(--bg-secondary)) !important;
+  color: var(--accent-primary) !important;
+  transform: translateX(4px) !important;
+  border-left: 3px solid var(--accent-primary) !important;
 }
 
 .filter-bar .react-select__option--is-selected {
-  background: var(--accent-primary) !important;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)) !important;
   color: white !important;
-  font-weight: 600 !important; /* ✅ ADDED: Bold selected items */
+  font-weight: 600 !important;
+  border-left: 4px solid rgba(255, 255, 255, 0.3) !important;
 }
 
 .filter-bar .react-select__option:last-child {
   border-bottom: none !important;
-  border-radius: 0 0 8px 8px !important;
+  border-radius: 0 0 10px 10px !important;
 }
 
-/* ✅ NEW: Ensure maximum visibility for dropdowns */
+/* ✅ ENHANCED: Larger dropdown list container */
 .filter-bar .react-select__menu-list {
-  max-height: 380px !important; /* ✅ ADDED: Maximum list height */
-  padding: 0 !important;
+  max-height: 480px !important; /* Much larger list height */
+  padding: 8px 0 !important; /* Professional padding */
 }
 
-/* ✅ NEW: Custom scrollbar for dropdown menus */
+/* ✅ ENHANCED: Professional scrollbar for dropdown menus */
 .filter-bar .react-select__menu-list::-webkit-scrollbar {
-  width: 8px !important;
+  width: 12px !important; /* Wider scrollbar */
 }
 
 .filter-bar .react-select__menu-list::-webkit-scrollbar-track {
   background: var(--bg-overlay) !important;
-  border-radius: 4px !important;
+  border-radius: 6px !important;
 }
 
 .filter-bar .react-select__menu-list::-webkit-scrollbar-thumb {
-  background: var(--accent-primary) !important;
-  border-radius: 4px !important;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)) !important;
+  border-radius: 6px !important;
+  border: 2px solid var(--bg-dark) !important; /* Professional border */
 }
 
 .filter-bar .react-select__menu-list::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-primary-hover) !important;
+  background: linear-gradient(135deg, var(--accent-primary-hover), var(--accent-secondary-hover)) !important;
 }
 
-/* ✅ NEW: Force All Dropdowns to Use Portal for Maximum Visibility */
+/* ✅ CRITICAL: Force positioning to prevent movement and ensure professional appearance */
 .filter-bar .react-select__control {
   position: relative !important;
+  z-index: 1 !important; /* Base z-index for controls */
 }
 
-/* ✅ NEW: Override any container overflow restrictions */
+/* ✅ CRITICAL: Override any container overflow restrictions */
 .filter-bar,
 .filter-section,
 main,
 .app-container,
 body {
-  overflow: visible !important; /* ✅ CRITICAL: Ensure all parent containers allow overflow */
+  overflow: visible !important; /* Ensure all parent containers allow overflow */
 }
 
-/* ✅ NEW: Specific portal styling for filter dropdowns */
+/* ✅ ENHANCED: Specific portal styling for filter dropdowns */
 div[class*="react-select__menu-portal"] {
   z-index: 99999 !important;
 }
 
-/* ✅ NEW: Global override for react-select menus in filter context */
+/* ✅ CRITICAL: Global override for react-select menus in filter context */
 .filter-bar .react-select__menu,
 .filter-bar .react-select__menu-portal > .react-select__menu {
-  position: fixed !important; /* ✅ CRITICAL: Use fixed positioning to break out of containers */
+  position: fixed !important; /* ✅ CRITICAL: Fixed positioning prevents movement */
   z-index: 99999 !important;
-  min-width: 200px !important; /* ✅ ADDED: Minimum width */
-  max-width: 300px !important; /* ✅ ADDED: Maximum width for readability */
+  min-width: 250px !important; /* Professional minimum width */
+  max-width: 400px !important; /* Reasonable maximum width */
+  width: auto !important; /* Auto width for content */
 }
 
-/* ✅ NEW: Ensure menu notices (loading, no options) are also visible */
+/* ✅ ENHANCED: Professional menu notices */
 .filter-bar .react-select__menu-notice {
-  padding: 16px 18px !important;
+  padding: 20px 24px !important; /* Larger padding */
   color: var(--text-secondary) !important;
-  font-size: 0.9rem !important;
+  font-size: 1rem !important; /* Larger text */
   text-align: center !important;
+  font-style: italic !important;
 }
 
-/* ✅ NEW: Professional visual hierarchy for multi-select */
+/* ✅ ENHANCED: Professional visual hierarchy for multi-select */
 .filter-bar .react-select__value-container--is-multi.react-select__value-container--has-value {
   background: linear-gradient(
     135deg,
-    rgba(37, 99, 235, 0.05),
-    rgba(29, 78, 216, 0.05)
-  ) !important; /* ✅ Subtle background tint when has values */
+    rgba(37, 99, 235, 0.08),
+    rgba(29, 78, 216, 0.08)
+  ) !important; /* Slightly more visible background tint */
   border-radius: 8px !important;
   margin: -2px !important;
   padding: 8px 18px !important;
 }
 
-/* ✅ NEW: Subtle indicator when filters are applied */
+/* ✅ ENHANCED: More pronounced indicator when filters are applied */
 .filter-bar .react-select__control--is-multi.react-select__control--has-value {
-  border-color: rgba(37, 99, 235, 0.4) !important; /* ✅ Subtle blue border when has values */
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(37, 99, 235, 0.1) !important;
+  border-color: rgba(37, 99, 235, 0.6) !important; /* More visible blue border */
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+  background: linear-gradient(135deg, var(--bg-dark), var(--bg-overlay)) !important;
 }
 
-/* ✅ NEW: Professional scrollbar for multi-select when needed */
+/* ✅ ENHANCED: Professional scrollbar for multi-select */
 .filter-bar .react-select__value-container--is-multi::-webkit-scrollbar {
-  width: 4px !important;
+  width: 6px !important;
 }
 
 .filter-bar .react-select__value-container--is-multi::-webkit-scrollbar-track {
@@ -1639,77 +1692,26 @@ div[class*="react-select__menu-portal"] {
 }
 
 .filter-bar .react-select__value-container--is-multi::-webkit-scrollbar-thumb {
-  background: rgba(37, 99, 235, 0.3) !important;
-  border-radius: 2px !important;
+  background: rgba(37, 99, 235, 0.4) !important;
+  border-radius: 3px !important;
 }
 
-/* ✅ NEW: Counter indicator for many selected items */
+/* ✅ ENHANCED: Counter indicator for many selected items */
 .filter-bar .react-select__value-container--is-multi::after {
   content: attr(data-count) !important;
   position: absolute !important;
-  top: 2px !important;
-  right: 30px !important;
-  background: rgba(37, 99, 235, 0.8) !important;
+  top: 4px !important;
+  right: 35px !important;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.9), rgba(29, 78, 216, 0.9)) !important;
   color: white !important;
-  font-size: 0.65rem !important;
-  font-weight: 600 !important;
-  padding: 2px 5px !important;
-  border-radius: 10px !important;
-  min-width: 16px !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  padding: 3px 6px !important;
+  border-radius: 12px !important;
+  min-width: 20px !important;
   text-align: center !important;
   display: none !important; /* Hidden by default, can be shown via JS */
-}
-
-/* ✅ FIXED: Sort by selector specific positioning and visibility */
-.filter-bar > .filter-group.sort-by-selector {
-  grid-area: sort;
-  position: relative; /* ✅ ADDED: Ensure proper positioning context */
-  z-index: 10; /* ✅ ADDED: Higher z-index for dropdown visibility */
-}
-
-.filter-bar > .filter-group.sort-by-selector select {
-  width: 100%;
-  height: 45px !important;
-  padding: 0 16px !important;
-  background: var(--bg-deep-dark);
-  border: 2px solid var(--border-color);
-  border-radius: 10px;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-  position: relative; /* ✅ ADDED: Proper positioning */
-  z-index: 11; /* ✅ ADDED: Ensure dropdown appears above other elements */
-  cursor: pointer; /* ✅ ADDED: Show pointer cursor */
-}
-
-/* ✅ FIXED: Sort dropdown focus and hover states */
-.filter-bar > .filter-group.sort-by-selector select:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
-  z-index: 12; /* ✅ ADDED: Even higher z-index when focused */
-}
-
-.filter-bar > .filter-group.sort-by-selector select:hover {
-  border-color: var(--accent-secondary);
-  background: var(--bg-dark);
-  transform: translateY(-0.5px);
-}
-
-/* ✅ ADDED: Ensure sort dropdown options are visible */
-.filter-bar > .filter-group.sort-by-selector select option {
-  background: var(--bg-deep-dark);
-  color: var(--text-primary);
-  padding: 8px 12px;
-  border: none;
-}
-
-.filter-bar > .filter-group.sort-by-selector select option:hover,
-.filter-bar > .filter-group.sort-by-selector select option:focus {
-  background: var(--bg-overlay);
-  color: var(--accent-primary);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
 }
 
 /* ========================================
