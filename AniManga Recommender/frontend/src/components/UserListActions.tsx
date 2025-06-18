@@ -29,6 +29,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
   const [selectedStatus, setSelectedStatus] = useState("plan_to_watch");
   const [progress, setProgress] = useState(0);
   const [rating, setRating] = useState<number | undefined>(undefined);
+  const [ratingInput, setRatingInput] = useState(""); // Raw input string for typing
   const [notes, setNotes] = useState("");
 
   const statusOptions = [
@@ -56,9 +57,11 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
         setSelectedStatus(existingItem.status);
         setProgress(existingItem.progress || 0);
         setRating(existingItem.rating);
+        setRatingInput(existingItem.rating ? existingItem.rating.toString() : "");
         setNotes(existingItem.notes || "");
       } else {
         setUserItem(null);
+        setRatingInput("");
       }
     } catch (err: any) {
       console.error("Failed to load user item:", err);
@@ -144,14 +147,46 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
 
   const handleRatingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
+    
+    // Allow empty input
     if (value === "") {
+      setRatingInput("");
       setRating(undefined);
       return;
     }
+    
+    // Allow typing decimal numbers - basic validation only
+    if (/^\d*\.?\d*$/.test(value)) {
+      setRatingInput(value);
+      
+      // Update rating state only if it's a valid complete number
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue) && numValue >= 0 && numValue <= 10) {
+        setRating(numValue);
+      }
+    }
+  };
 
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue) && numValue >= 0 && numValue <= 10) {
-      setRating(Math.round(numValue * 10) / 10);
+  const handleRatingBlur = () => {
+    if (ratingInput === "") {
+      setRating(undefined);
+      return;
+    }
+    
+    const numValue = parseFloat(ratingInput);
+    if (isNaN(numValue) || numValue < 0 || numValue > 10) {
+      // Invalid input - reset to previous valid value or empty
+      if (rating !== undefined) {
+        setRatingInput(rating.toString());
+      } else {
+        setRatingInput("");
+        setRating(undefined);
+      }
+    } else {
+      // Valid input - round to 1 decimal place and update both states
+      const roundedValue = Math.round(numValue * 10) / 10;
+      setRating(roundedValue);
+      setRatingInput(roundedValue.toString());
     }
   };
 
@@ -169,6 +204,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
       setSelectedStatus("plan_to_watch");
       setProgress(0);
       setRating(undefined);
+      setRatingInput("");
       setNotes("");
 
       if (onStatusUpdate) {
@@ -306,15 +342,15 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
             <label htmlFor="rating-input">Rating (0.0 - 10.0, optional):</label>
             <input
               id="rating-input"
-              type="number"
-              min="0"
-              max="10"
-              step="0.1"
-              value={rating !== undefined ? rating.toFixed(1) : ""}
+              type="text"
+              value={ratingInput}
               onChange={handleRatingChange}
+              onBlur={handleRatingBlur}
               placeholder="e.g., 9.2, 8.7, 7.5"
               disabled={loading}
               className="rating-decimal-input"
+              inputMode="decimal"
+              pattern="[0-9]*\.?[0-9]*"
             />
             <small className="rating-help">
               Enter a decimal rating like 9.1, 8.7, 6.5, etc. (0.0 to 10.0)

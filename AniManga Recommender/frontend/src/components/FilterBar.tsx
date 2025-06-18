@@ -1,7 +1,6 @@
 import React, { useMemo, useCallback } from "react";
 import Select from "react-select";
 import { FilterBarProps, CustomSelectStyles } from "../types";
-import LoadingBanner from "./Loading/LoadingBanner";
 
 /**
  * FilterBar Component - Comprehensive filtering and sorting controls for anime/manga discovery
@@ -199,30 +198,66 @@ const FilterBar: React.FC<FilterBarProps> = ({
         borderColor: state.isFocused ? "var(--accent-primary)" : "var(--border-color)",
         boxShadow: state.isFocused ? "var(--shadow-focus-ring)" : "none",
         "&:hover": { borderColor: state.isFocused ? "var(--accent-primary)" : "var(--border-highlight)" },
-        minHeight: "calc(0.6rem * 2 + 0.9rem * 2 + 2px)",
+        minHeight: "48px",
         height: "auto",
+        borderWidth: "2px",
+        borderRadius: "10px",
+        fontSize: "0.95rem",
+        fontWeight: "500",
       }),
-      valueContainer: (provided: any) => ({ ...provided, padding: "calc(0.6rem - 2px) 0.9rem" }),
+      valueContainer: (provided: any) => ({
+        ...provided,
+        padding: "8px 16px",
+        minHeight: "44px",
+      }),
       input: (provided: any) => ({
         ...provided,
         color: "var(--text-primary)",
         margin: "0px",
         padding: "0px",
+        fontSize: "0.95rem",
       }),
-      placeholder: (provided: any) => ({ ...provided, color: "var(--text-muted)" }),
-      singleValue: (provided: any) => ({ ...provided, color: "var(--text-primary)" }),
+      placeholder: (provided: any) => ({
+        ...provided,
+        color: "var(--text-muted)",
+        fontSize: "0.95rem",
+        fontWeight: "400",
+      }),
+      singleValue: (provided: any) => ({
+        ...provided,
+        color: "var(--text-primary)",
+        fontSize: "0.95rem",
+        fontWeight: "500",
+      }),
       multiValue: (provided: any) => ({
         ...provided,
         backgroundColor: "var(--accent-secondary)",
-        borderRadius: "4px",
+        borderRadius: "6px",
+        margin: "2px",
       }),
-      multiValueLabel: (provided: any) => ({ ...provided, color: "var(--text-primary)", fontWeight: "500" }),
+      multiValueLabel: (provided: any) => ({
+        ...provided,
+        color: "var(--text-primary)",
+        fontWeight: "600",
+        fontSize: "0.85rem",
+        padding: "4px 8px",
+      }),
       multiValueRemove: (provided: any) => ({
         ...provided,
         color: "var(--text-primary)",
         "&:hover": { backgroundColor: "var(--accent-secondary-hover)", color: "white" },
+        borderRadius: "0 4px 4px 0",
+        width: "24px",
+        height: "24px",
       }),
-      menu: (provided: any) => ({ ...provided, backgroundColor: "var(--bg-dark)", zIndex: 5 }),
+      menu: (provided: any) => ({
+        ...provided,
+        backgroundColor: "var(--bg-dark)",
+        zIndex: 99999,
+        borderRadius: "12px",
+        border: "2px solid var(--border-color)",
+        boxShadow: "0 20px 60px rgba(0, 0, 0, 0.4)",
+      }),
       option: (provided: any, state: any) => ({
         ...provided,
         backgroundColor: state.isSelected
@@ -232,12 +267,19 @@ const FilterBar: React.FC<FilterBarProps> = ({
           : "var(--bg-dark)",
         color: state.isSelected ? "var(--bg-deep-dark)" : "var(--text-primary)",
         "&:active": { backgroundColor: "var(--accent-primary-hover)" },
+        padding: "16px 20px",
+        fontSize: "1rem",
+        fontWeight: state.isSelected ? "600" : "500",
+        minHeight: "52px",
+        display: "flex",
+        alignItems: "center",
       }),
       indicatorSeparator: () => ({ display: "none" }),
       dropdownIndicator: (provided: any) => ({
         ...provided,
         color: "var(--text-muted)",
         "&:hover": { color: "var(--text-primary)" },
+        padding: "0 12px",
       }),
     }),
     [] // Empty dependency array since styles don't depend on props/state
@@ -256,10 +298,10 @@ const FilterBar: React.FC<FilterBarProps> = ({
       styles: customSelectStyles,
       isDisabled: filtersLoading || loading,
       classNamePrefix: "react-select",
-      menuPortalTarget: document.body,
       menuPlacement: "auto" as const,
-      menuShouldScrollIntoView: false,
+      menuPortalTarget: document.body,
       isSearchable: true,
+      closeMenuOnScroll: false,
     }),
     [customSelectStyles, filtersLoading, loading]
   );
@@ -277,15 +319,41 @@ const FilterBar: React.FC<FilterBarProps> = ({
       styles: customSelectStyles,
       isDisabled: filtersLoading || loading,
       classNamePrefix: "react-select",
-      menuPortalTarget: document.body,
       menuPlacement: "auto" as const,
-      menuShouldScrollIntoView: false,
+      menuPortalTarget: document.body,
       isSearchable: true,
       isMulti: true,
       closeMenuOnSelect: false,
+      closeMenuOnScroll: false,
+      blurInputOnSelect: false,
+      onMenuOpen: () => {
+        // Scroll multi-select containers to top when menu opens
+        setTimeout(() => {
+          const containers = document.querySelectorAll(".react-select__value-container--is-multi");
+          containers.forEach((container) => {
+            if (container.scrollTop > 0) {
+              container.scrollTo({ top: 0, behavior: "smooth" });
+            }
+          });
+        }, 100);
+      },
     }),
     [customSelectStyles, filtersLoading, loading]
   );
+
+  /**
+   * Helper function to scroll multi-select containers to top
+   */
+  const scrollMultiSelectToTop = useCallback(() => {
+    setTimeout(() => {
+      const containers = document.querySelectorAll(".react-select__value-container--is-multi");
+      containers.forEach((container) => {
+        if (container.scrollTop > 0) {
+          container.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      });
+    }, 50);
+  }, []);
 
   /**
    * Type-safe wrapper functions for react-select onChange handlers
@@ -296,40 +364,49 @@ const FilterBar: React.FC<FilterBarProps> = ({
   const handleGenreChangeWrapper = useCallback(
     (newValue: any) => {
       handleGenreChange(newValue as readonly any[] | null);
+      scrollMultiSelectToTop();
     },
-    [handleGenreChange]
+    [handleGenreChange, scrollMultiSelectToTop]
   );
 
   const handleThemeChangeWrapper = useCallback(
     (newValue: any) => {
       handleThemeChange(newValue as readonly any[] | null);
+      scrollMultiSelectToTop();
     },
-    [handleThemeChange]
+    [handleThemeChange, scrollMultiSelectToTop]
   );
 
   const handleDemographicChangeWrapper = useCallback(
     (newValue: any) => {
       handleDemographicChange(newValue as readonly any[] | null);
+      scrollMultiSelectToTop();
     },
-    [handleDemographicChange]
+    [handleDemographicChange, scrollMultiSelectToTop]
   );
 
   const handleStudioChangeWrapper = useCallback(
     (newValue: any) => {
       handleStudioChange(newValue as readonly any[] | null);
+      scrollMultiSelectToTop();
     },
-    [handleStudioChange]
+    [handleStudioChange, scrollMultiSelectToTop]
   );
 
   const handleAuthorChangeWrapper = useCallback(
     (newValue: any) => {
       handleAuthorChange(newValue as readonly any[] | null);
+      scrollMultiSelectToTop();
     },
-    [handleAuthorChange]
+    [handleAuthorChange, scrollMultiSelectToTop]
   );
 
   return (
-    <section className="filter-bar" role="search" aria-label="Filter options">
+    <section
+      className={`filter-bar ${loading || filtersLoading ? "loading" : ""}`}
+      role="search"
+      aria-label="Filter options"
+    >
       {/* Sort By Selector */}
       <div className="filter-group sort-by-selector">
         <label htmlFor="sortBy">Sort by:</label>
@@ -343,12 +420,6 @@ const FilterBar: React.FC<FilterBarProps> = ({
           <option value="start_date_asc">Release Date (Oldest)</option>
         </select>
       </div>
-
-      {/* Professional Loading Banner */}
-      <LoadingBanner
-        message={filtersLoading ? "Loading filters..." : "Loading content..."}
-        isVisible={loading || filtersLoading}
-      />
 
       {/* Media Type Filter */}
       <div className="filter-group">
@@ -374,7 +445,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           options={genreOptions}
           value={selectedGenre}
           onChange={handleGenreChangeWrapper}
-          placeholder="Select genres..."
+          placeholder="Genres..."
           aria-label="Filter by genres"
         />
       </div>
@@ -389,7 +460,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           options={themeOptions}
           value={selectedTheme}
           onChange={handleThemeChangeWrapper}
-          placeholder="Select themes..."
+          placeholder="Themes..."
           aria-label="Filter by themes"
         />
       </div>
@@ -403,7 +474,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           options={demographicOptions}
           value={selectedDemographic}
           onChange={handleDemographicChangeWrapper}
-          placeholder="Select demographics..."
+          placeholder="Demographics..."
           aria-label="Filter by demographics"
         />
       </div>
@@ -417,7 +488,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           options={studioOptions}
           value={selectedStudio}
           onChange={handleStudioChangeWrapper}
-          placeholder="Select studios..."
+          placeholder="Studios..."
           aria-label="Filter by studios"
         />
       </div>
@@ -431,7 +502,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
           options={authorOptions}
           value={selectedAuthor}
           onChange={handleAuthorChangeWrapper}
-          placeholder="Select authors..."
+          placeholder="Authors..."
           aria-label="Filter by authors"
         />
       </div>
@@ -487,8 +558,8 @@ const FilterBar: React.FC<FilterBarProps> = ({
         </span>
       </div>
 
-      {/* Reset Button */}
-      <div className="filter-actions">
+      {/* Reset Button - Outside Grid */}
+      <div className="filter-reset-container">
         <button
           onClick={handleResetFilters}
           className="reset-filters-btn"
