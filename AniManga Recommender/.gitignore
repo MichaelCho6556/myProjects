@@ -52,4 +52,6 @@ PROJECT_DOCUMENTATION.md
 apm_artifacts/
 .cursor/rules/
 
+CLAUDE.md
+
 .env
