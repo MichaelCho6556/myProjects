@@ -60,8 +60,18 @@ describe("Test Setup Configuration", () => {
 import "@testing-library/jest-dom";
 
 // Mock IntersectionObserver for virtual scrolling tests
-global.IntersectionObserver = class IntersectionObserver {
-  constructor(public callback: IntersectionObserverCallback, public options?: IntersectionObserverInit) {}
+global.IntersectionObserver = class MockIntersectionObserver {
+  root: Element | null = null;
+  rootMargin: string = "0px";
+  thresholds: ReadonlyArray<number> = [0];
+
+  constructor(public callback: IntersectionObserverCallback, public options?: IntersectionObserverInit) {
+    if (options?.root && options.root instanceof Element) this.root = options.root;
+    if (options?.rootMargin) this.rootMargin = options.rootMargin;
+    if (options?.threshold) {
+      this.thresholds = Array.isArray(options.threshold) ? options.threshold : [options.threshold];
+    }
+  }
 
   observe() {
     // Mock implementation
@@ -74,7 +84,11 @@ global.IntersectionObserver = class IntersectionObserver {
   disconnect() {
     // Mock implementation
   }
-};
+
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+} as any;
 
 // Mock ResizeObserver for responsive components
 global.ResizeObserver = class ResizeObserver {
@@ -211,7 +225,7 @@ export const createMockAuthContext = (userOverrides = {}) => ({
   signOut: jest.fn(),
 });
 
-export const createMockRecommendationItem = (overrides = {}) => ({
+export const createMockRecommendationItem = (overrides: any = {}) => ({
   item: {
     uid: "test-item-001",
     title: "Test Anime",
