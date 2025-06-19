@@ -731,7 +731,7 @@ class TestRecommendationEdgeCases:
             assert response.status_code == 500
             data = json.loads(response.data)
             assert 'error' in data
-            assert 'Could not generate recommendations' in data['error']
+            assert 'Could not generate related items' in data['error']
 
 
 class TestFieldMapping:

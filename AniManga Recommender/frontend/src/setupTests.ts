@@ -45,27 +45,88 @@ afterAll(() => {
 Element.prototype.scrollIntoView = jest.fn();
 
 // Mock IntersectionObserver for any components that might use it
-Object.defineProperty(window, "IntersectionObserver", {
-  writable: true,
-  value: jest.fn().mockImplementation(() => ({
-    observe: jest.fn(),
+global.IntersectionObserver = jest.fn().mockImplementation((callback: IntersectionObserverCallback, options?: IntersectionObserverInit) => {
+  return {
+    observe: jest.fn((target: Element) => {
+      // Simulate immediate intersection to trigger lazy loading
+      setTimeout(() => {
+        callback([
+          {
+            target,
+            isIntersecting: true,
+            intersectionRatio: 1,
+            boundingClientRect: target.getBoundingClientRect(),
+            intersectionRect: target.getBoundingClientRect(),
+            rootBounds: null,
+            time: Date.now(),
+          } as IntersectionObserverEntry,
+        ], {
+          observe: jest.fn(),
+          unobserve: jest.fn(),
+          disconnect: jest.fn(),
+        } as any);
+      }, 0);
+    }),
     unobserve: jest.fn(),
     disconnect: jest.fn(),
-    root: null,
-    rootMargin: "",
-    thresholds: [],
+    root: options?.root || null,
+    rootMargin: options?.rootMargin || "",
+    thresholds: Array.isArray(options?.threshold) ? options.threshold : [options?.threshold || 0],
     takeRecords: jest.fn(() => []),
-  })),
+  };
 });
 
-// Mock ResizeObserver
+// Also set it on window for components that check for window.IntersectionObserver
+Object.defineProperty(window, "IntersectionObserver", {
+  writable: true,
+  value: global.IntersectionObserver,
+});
+
+// Mock ResizeObserver with proper callback support
+global.ResizeObserver = class ResizeObserver {
+  callback: ResizeObserverCallback;
+  
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+  
+  observe(element: Element) {
+    // Mock implementation - trigger callback immediately with a mock entry
+    const mockEntry = {
+      target: element,
+      contentRect: {
+        width: 320,
+        height: 200,
+        top: 0,
+        left: 0,
+        bottom: 200,
+        right: 320,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      },
+      borderBoxSize: [],
+      contentBoxSize: [],
+      devicePixelContentBoxSize: []
+    } as ResizeObserverEntry;
+    
+    setTimeout(() => {
+      this.callback([mockEntry], this);
+    }, 0);
+  }
+  
+  unobserve() {
+    // Mock implementation
+  }
+  
+  disconnect() {
+    // Mock implementation
+  }
+};
+
 Object.defineProperty(window, "ResizeObserver", {
   writable: true,
-  value: jest.fn().mockImplementation(() => ({
-    observe: jest.fn(),
-    unobserve: jest.fn(),
-    disconnect: jest.fn(),
-  })),
+  value: global.ResizeObserver,
 });
 
 // Mock window.scrollTo
@@ -87,6 +148,27 @@ Object.defineProperty(window, "matchMedia", {
     removeEventListener: jest.fn(),
     dispatchEvent: jest.fn(),
   })),
+});
+
+// Mock document.visibilityState for Supabase Auth
+Object.defineProperty(document, "visibilityState", {
+  writable: true,
+  value: "visible",
+});
+
+Object.defineProperty(document, "hidden", {
+  writable: true,
+  value: false,
+});
+
+// Mock document.addEventListener for visibility change events
+const originalAddEventListener = document.addEventListener;
+document.addEventListener = jest.fn((event, handler, options) => {
+  if (event === "visibilitychange") {
+    // Don't actually add the listener to avoid Supabase errors
+    return;
+  }
+  return originalAddEventListener.call(document, event, handler, options);
 });
 
 // Mock HTMLFormElement.prototype.submit to fix form submission tests

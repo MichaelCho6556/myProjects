@@ -181,7 +181,7 @@ describe("HomePage Integration Tests", () => {
       // Verify basic component structure is present
       expect(screen.getByRole("button", { name: /hide filters/i })).toBeInTheDocument();
       expect(screen.getByLabelText(/sort by/i)).toBeInTheDocument();
-      expect(screen.getByText("Type:")).toBeInTheDocument();
+      expect(screen.getByLabelText(/filter by media type/i)).toBeInTheDocument();
 
       // Verify filter bar structure is present
       expect(screen.getByRole("search", { name: /filter options/i })).toBeInTheDocument();
@@ -222,14 +222,14 @@ describe("HomePage Integration Tests", () => {
         expect(screen.getByLabelText(/sort by/i)).toBeInTheDocument();
       });
 
-      // Verify all filter controls are present
-      expect(screen.getByText("Type:")).toBeInTheDocument();
-      expect(screen.getByText("Genres:")).toBeInTheDocument();
-      expect(screen.getByText("Status:")).toBeInTheDocument();
-      expect(screen.getByText("Themes:")).toBeInTheDocument();
-      expect(screen.getByText("Demographics:")).toBeInTheDocument();
-      expect(screen.getByText("Studios:")).toBeInTheDocument();
-      expect(screen.getByText("Authors:")).toBeInTheDocument();
+      // Verify all filter controls are present by looking for their specific aria labels
+      expect(screen.getByLabelText(/filter by media type/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/filter by genres/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/filter by status/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/filter by themes/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/filter by demographics/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/filter by studios/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/filter by authors/i)).toBeInTheDocument();
     });
 
     it("allows filter bar toggle functionality", async () => {
@@ -350,11 +350,14 @@ describe("HomePage Integration Tests", () => {
       });
 
       // Look for score and year inputs (they may have different labels)
-      const scoreInput = screen.queryByLabelText(/score/i) || screen.queryByPlaceholderText(/score/i);
-      const yearInput = screen.queryByLabelText(/year/i) || screen.queryByPlaceholderText(/year/i);
+      const scoreInputs = screen.queryAllByLabelText(/score/i);
+      const yearInputs = screen.queryAllByLabelText(/year/i);
+      const placeholderScoreInputs = screen.queryAllByPlaceholderText(/score/i);
+      const placeholderYearInputs = screen.queryAllByPlaceholderText(/year/i);
 
       // At least one of these should be present in a filtering interface
-      expect(scoreInput || yearInput).toBeTruthy();
+      const hasScoreOrYearInput = scoreInputs.length > 0 || yearInputs.length > 0 || placeholderScoreInputs.length > 0 || placeholderYearInputs.length > 0;
+      expect(hasScoreOrYearInput).toBeTruthy();
     });
   });
 
@@ -382,7 +385,7 @@ describe("HomePage Integration Tests", () => {
       });
 
       // Component should still render basic structure even with API errors
-      expect(screen.getByText("Type:")).toBeInTheDocument();
+      expect(screen.getByLabelText(/filter by media type/i)).toBeInTheDocument();
     });
   });
 
@@ -454,7 +457,7 @@ describe("HomePage Integration Tests", () => {
         });
 
         // Verify basic structure renders for all URLs
-        expect(screen.getByText("Type:")).toBeInTheDocument();
+        expect(screen.getByLabelText(/filter by media type/i)).toBeInTheDocument();
 
         unmount();
       }
@@ -480,7 +483,7 @@ describe("HomePage Integration Tests", () => {
         expect(screen.getByLabelText(/sort by/i)).toBeInTheDocument();
       });
 
-      expect(screen.getByText("Type:")).toBeInTheDocument();
+      expect(screen.getByLabelText(/filter by media type/i)).toBeInTheDocument();
     });
   });
 });
