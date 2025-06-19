@@ -10,6 +10,7 @@ import HomePage from "../../pages/HomePage";
 import ItemDetailPage from "../../pages/ItemDetailPage";
 import Navbar from "../../components/Navbar";
 import { AuthProvider } from "../../context/AuthContext";
+import { ToastProvider } from "../../components/Feedback/ToastProvider";
 import axios from "axios";
 
 // Mock axios directly
@@ -72,18 +73,20 @@ const createMockDistinctValues = (overrides = {}) => ({
 });
 
 const App = () => (
-  <AuthProvider>
-    <div className="App">
-      <Navbar />
-      <main className="app-container">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/search" element={<HomePage />} />
-          <Route path="/item/:uid" element={<ItemDetailPage />} />
-        </Routes>
-      </main>
-    </div>
-  </AuthProvider>
+  <ToastProvider>
+    <AuthProvider>
+      <div className="App">
+        <Navbar />
+        <main className="app-container">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/search" element={<HomePage />} />
+            <Route path="/item/:uid" element={<ItemDetailPage />} />
+          </Routes>
+        </main>
+      </div>
+    </AuthProvider>
+  </ToastProvider>
 );
 
 const renderWithRouter = (initialEntries = ["/"], component = <App />) => {
@@ -134,7 +137,7 @@ const setupMockResponses = (testItem: any, relatedItems: any[] = []) => {
           items: [testItem],
           total_items: 1,
           total_pages: 1,
-          current_page: 1,
+          page: 1,
           items_per_page: 30,
         },
       });
@@ -147,7 +150,7 @@ const setupMockResponses = (testItem: any, relatedItems: any[] = []) => {
         items: [],
         total_items: 0,
         total_pages: 1,
-        current_page: 1,
+        page: 1,
         items_per_page: 30,
       },
     });

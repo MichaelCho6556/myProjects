@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
 import { AnimeItem } from "../types";
@@ -31,6 +31,24 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
   const [rating, setRating] = useState<number | undefined>(undefined);
   const [ratingInput, setRatingInput] = useState(""); // Raw input string for typing
   const [notes, setNotes] = useState("");
+
+  // Memoize max progress to avoid excessive function calls
+  const maxProgress = useMemo(() => {
+    if (item.media_type === "anime") {
+      return Math.max(item.episodes || 0, 1);
+    } else {
+      return Math.max(item.chapters || 0, 1);
+    }
+  }, [item.episodes, item.chapters, item.media_type]);
+
+  // Memoize progress label 
+  const progressLabel = useMemo(() => {
+    if (item.media_type === "anime") {
+      return "Episodes watched";
+    } else {
+      return "Chapters read";
+    }
+  }, [item.media_type]);
 
   const statusOptions = [
     { value: "plan_to_watch", label: "Plan to Watch", color: "#3b82f6" },
@@ -81,10 +99,8 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
       let finalProgress = progress;
 
       if (selectedStatus === "completed") {
-        const maxProgress = getMaxProgress();
         finalProgress = maxProgress;
         setProgress(maxProgress);
-        console.log(`Auto-setting progress to ${maxProgress} for completed anime/manga`);
       }
 
       const updateData: any = {
@@ -104,7 +120,6 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
         updateData.completion_date = new Date().toISOString();
       }
 
-      console.log("Sending update data:", updateData);
 
       const result = await updateUserItemStatus(item.uid, updateData);
 
@@ -139,9 +154,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
     setSelectedStatus(newStatus);
 
     if (newStatus === "completed") {
-      const maxProgress = getMaxProgress();
       setProgress(maxProgress);
-      console.log(`Auto-setting progress to ${maxProgress} for completed status`);
     }
   };
 
@@ -157,10 +170,16 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
     
     // Allow typing decimal numbers - basic validation only
     if (/^\d*\.?\d*$/.test(value)) {
+      const numValue = parseFloat(value);
+      
+      // Prevent invalid values from being entered in the input field
+      if (!isNaN(numValue) && numValue > 10) {
+        return; // Don't update input if value exceeds 10
+      }
+      
       setRatingInput(value);
       
       // Update rating state only if it's a valid complete number
-      const numValue = parseFloat(value);
       if (!isNaN(numValue) && numValue >= 0 && numValue <= 10) {
         setRating(numValue);
       }
@@ -217,25 +236,6 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
     }
   };
 
-  const getMaxProgress = () => {
-    if (item.media_type === "anime") {
-      const episodes = item.episodes || 0;
-      console.log(`Anime episodes available: ${episodes}`);
-      return Math.max(episodes, 1);
-    } else {
-      const chapters = item.chapters || 0;
-      console.log(`Manga chapters available: ${chapters}`);
-      return Math.max(chapters, 1);
-    }
-  };
-
-  const getProgressLabel = () => {
-    if (item.media_type === "anime") {
-      return "Episodes watched";
-    } else {
-      return "Chapters read";
-    }
-  };
 
   if (!user) {
     return (
@@ -284,7 +284,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
 
             {userItem.progress > 0 && (
               <span className="progress-display">
-                {userItem.progress} / {getMaxProgress()}{" "}
+                {userItem.progress} / {maxProgress}{" "}
                 {item.media_type === "anime" ? "episodes" : "chapters"}
               </span>
             )}
@@ -321,20 +321,20 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
           </div>
 
           <div className="form-group">
-            <label htmlFor="progress-input">{getProgressLabel()}:</label>
+            <label htmlFor="progress-input">{progressLabel}:</label>
             <div className="progress-input-wrapper">
               <input
                 id="progress-input"
                 type="number"
                 min="0"
-                max={getMaxProgress()}
+                max={maxProgress}
                 value={progress}
                 onChange={(e) =>
-                  setProgress(Math.max(0, Math.min(getMaxProgress(), parseInt(e.target.value) || 0)))
+                  setProgress(Math.max(0, Math.min(maxProgress, parseInt(e.target.value) || 0)))
                 }
                 disabled={loading}
               />
-              <span className="progress-max">/ {getMaxProgress()}</span>
+              <span className="progress-max">/ {maxProgress}</span>
             </div>
           </div>
 
