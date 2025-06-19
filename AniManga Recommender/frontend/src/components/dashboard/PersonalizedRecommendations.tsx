@@ -658,9 +658,7 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
             {section.items.length > 0 ? (
               section.items.length > 20 ? (
                 // Use virtual grid for large sections (>20 items)
-                (() => {
-                  console.log(`🔧 Using VirtualGrid for ${section.title} with ${section.items.length} items`);
-                  return <VirtualGrid
+                <VirtualGrid
                   items={section.items}
                   renderItem={(item: any, itemIndex: number) => (
                     <RecommendationCard
@@ -682,16 +680,13 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
                   )}
                   itemHeight={380}
                   itemWidth={320}
-                  containerHeight={800}
+                  containerHeight={1200}
                   gap={16}
                   className="recommendation-virtual-grid"
                 />
-                })()
               ) : (
                 // Use regular grid for smaller sections
-                (() => {
-                  console.log(`🔧 Using Regular Grid for ${section.title} with ${section.items.length} items`);
-                  return <div className="recommendation-grid">
+                <div className="recommendation-grid">
                   {section.items.map((item: any, itemIndex: number) => (
                     <RecommendationCard
                       key={`${section.sectionType}-${item.item?.uid || item.uid}-${itemIndex}`}
@@ -719,7 +714,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
                     onLoadMore={() => loadMoreItems(section.sectionType)}
                   />
                 </div>
-                })()
               )
             ) : (
               <div className="section-empty">
