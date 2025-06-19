@@ -433,20 +433,13 @@ export const mockErrorResponse = (error: any = {}) => {
 
 // Helper for item detail responses
 export const mockItemDetailResponse = (item: any) => {
+  // Store the specific item response
   endpointResponses.set(`/items/${item.uid}`, { data: item });
 
   mockAxios.get.mockImplementation((url: string): Promise<any> => {
     const normalizedUrl = url.replace(/^https?:\/\/[^\/]+/, "").replace(/^\/api/, "");
 
-    // Check for specific endpoint responses first
-    const endpoints = Array.from(endpointResponses.entries());
-    for (const [endpoint, response] of endpoints) {
-      if (normalizedUrl.includes(endpoint)) {
-        return Promise.resolve(response);
-      }
-    }
-
-    // Handle item detail requests - check for specific UID pattern
+    // Handle item detail requests - check for specific UID pattern first
     const itemDetailMatch = normalizedUrl.match(/\/items\/([^\/\?]+)/);
     if (itemDetailMatch && !normalizedUrl.includes("/recommendations")) {
       const itemUid = itemDetailMatch[1];
@@ -466,12 +459,26 @@ export const mockItemDetailResponse = (item: any) => {
       const recMatch = normalizedUrl.match(/\/recommendations\/([^\/\?]+)/);
       if (recMatch) {
         const itemUid = recMatch[1];
-        const recResponse = endpointResponses.get(`/recommendations/${itemUid}`);
+        const recResponse = endpointResponses.get(`/recommendations/${itemUid}`) || endpointResponses.get("/recommendations/");
         if (recResponse) {
           return Promise.resolve(recResponse);
         }
       }
-      return Promise.resolve({ data: [] });
+      return Promise.resolve({
+        data: {
+          source_item_uid: item.uid,
+          source_item_title: item.title,
+          recommendations: [],
+        },
+      });
+    }
+
+    // Check for other specific endpoint responses
+    const endpoints = Array.from(endpointResponses.entries());
+    for (const [endpoint, response] of endpoints) {
+      if (normalizedUrl.includes(endpoint)) {
+        return Promise.resolve(response);
+      }
     }
 
     if (normalizedUrl.includes("/distinct-values")) {
@@ -515,6 +522,93 @@ export const mockRelatedItemsResponse = (relatedItems: any[] = []) => {
       source_item_title: "Test Anime Title",
       recommendations: relatedItems, // Keep API field name for compatibility
     },
+  });
+  
+  // Update the main mock implementation to handle recommendations endpoints
+  mockAxios.get.mockImplementation((url: string): Promise<any> => {
+    const normalizedUrl = url.replace(/^https?:\/\/[^\/]+/, "").replace(/^\/api/, "");
+
+    // Check for specific endpoint responses first
+    const endpoints = Array.from(endpointResponses.entries());
+    for (const [endpoint, response] of endpoints) {
+      if (normalizedUrl.includes(endpoint)) {
+        return Promise.resolve(response);
+      }
+    }
+
+    // Handle recommendations endpoints specifically
+    if (normalizedUrl.includes("/recommendations/")) {
+      return Promise.resolve({
+        data: {
+          source_item_uid: "test-uid-1",
+          source_item_title: "Test Anime Title",
+          recommendations: relatedItems,
+        },
+      });
+    }
+
+    // Handle item detail endpoints (e.g., /items/123)
+    if (normalizedUrl.match(/\/items\/[^\/\?]+(?:\?|$)/)) {
+      return Promise.resolve({
+        data: {
+          uid: "test-uid-1",
+          title: "Test Anime Title",
+          media_type: "anime",
+          genres: ["Action", "Adventure"],
+          themes: ["School", "Military"],
+          demographics: ["Shounen"],
+          score: 8.5,
+          scored_by: 10000,
+          status: "Finished Airing",
+          episodes: 24,
+          start_date: "2020-01-01",
+          rating: "PG-13",
+          popularity: 100,
+          members: 50000,
+          favorites: 5000,
+          synopsis: "Test synopsis for anime",
+          producers: ["Test Producer"],
+          licensors: ["Test Licensor"],
+          studios: ["Test Studio"],
+          authors: [],
+          serializations: [],
+          image_url: "https://example.com/test-image.jpg",
+          title_synonyms: ["Alt Title"],
+        },
+      });
+    }
+
+    // Default handlers
+    if (normalizedUrl.includes("/distinct-values")) {
+      return Promise.resolve({
+        data: {
+          media_types: ["anime", "manga"],
+          genres: ["Action", "Adventure", "Comedy", "Drama"],
+          themes: ["School", "Military", "Romance"],
+          demographics: ["Shounen", "Shoujo"],
+          statuses: ["Finished Airing", "Currently Airing"],
+          studios: ["Studio A", "Studio B"],
+          authors: ["Author X", "Author Y"],
+          sources: ["Manga", "Light Novel"],
+          ratings: ["G", "PG", "PG-13"],
+        },
+      });
+    }
+
+    if (normalizedUrl.includes("/items") && !normalizedUrl.match(/\/items\/[^\/\?]+/)) {
+      return Promise.resolve({
+        data: {
+          items: [],
+          total_items: 0,
+          total_pages: 1,
+          current_page: 1,
+          items_per_page: 30,
+        },
+      });
+    }
+
+    // Fallback for unknown endpoints
+    return Promise.resolve({ data: {} });
   });
 };
 

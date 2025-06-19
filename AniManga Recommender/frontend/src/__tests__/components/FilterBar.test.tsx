@@ -241,13 +241,17 @@ describe("FilterBar Component", () => {
 
       render(<FilterBar {...loadingProps} />);
 
-      // Check for loading banner and disabled select components
-      expect(screen.getByText(/loading filters/i)).toBeInTheDocument();
-      expect(screen.getByRole("status")).toBeInTheDocument();
+      // Check that the main container has loading class
+      const filterSection = screen.getByRole("search");
+      expect(filterSection).toHaveClass("loading");
 
       // Check that select components are disabled during loading
       const mediaTypeSelect = screen.getByLabelText(/type/i);
       expect(mediaTypeSelect.closest(".react-select--is-disabled")).toBeInTheDocument();
+
+      // Check that native select elements are also disabled
+      const sortSelect = screen.getByLabelText(/sort by/i);
+      expect(sortSelect).toBeDisabled();
     });
 
     it("disables reset button when loading", () => {

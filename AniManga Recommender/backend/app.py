@@ -100,11 +100,12 @@ def create_app(config: Optional[Any] = None) -> Flask:
         test_app.config['SECRET_KEY'] = 'test-secret-key'
         test_app.config['JWT_SECRET_KEY'] = 'test-jwt-secret'
     
-    # Copy all routes from main app to test app
+    # Copy all routes from main app to test app (skip static endpoint to avoid conflicts)
     for rule in app.url_map.iter_rules():
-        test_app.add_url_rule(rule.rule, rule.endpoint, 
-                             view_func=app.view_functions.get(rule.endpoint),
-                             methods=rule.methods)
+        if rule.endpoint != 'static':  # Skip static endpoint to prevent conflicts
+            test_app.add_url_rule(rule.rule, rule.endpoint, 
+                                 view_func=app.view_functions.get(rule.endpoint),
+                                 methods=rule.methods)
     
     return test_app
 
