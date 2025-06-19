@@ -58,7 +58,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = memo(({
     const animeData = item.item || item;
     const title = animeData.title || "Unknown Title";
     const rating = animeData.score ? `${parseFloat(animeData.score).toFixed(1)}` : "N/A";
-    const mediaType = animeData.media_type || "Unknown";
+    const mediaType = animeData.mediaType || animeData.media_type || "Unknown";
     const genres = Array.isArray(animeData.genres) ? animeData.genres : [];
     const reasoning = item.reasoning || item.reason || "Based on your preferences";
     const score = item.score || item.recommendation_score || 0.5;
@@ -357,6 +357,11 @@ const RecommendationCard: React.FC<RecommendationCardProps> = memo(({
 
       <Link to={`/item/${itemData.itemUid}`} className="recommendation-card-link" onClick={handleCardClick}>
         <article className="recommendation-card">
+          <div className={`content-type-indicator-top ${typeIndicator.className}`}>
+            <span className="type-icon">{typeIndicator.icon}</span>
+            <span className="type-label">{typeIndicator.label}</span>
+          </div>
+          
           <div className="recommendation-image">
             <LazyImage
               src={itemData.imageUrl}
@@ -365,11 +370,6 @@ const RecommendationCard: React.FC<RecommendationCardProps> = memo(({
               title={itemData.title}
               className="aspect-cover"
             />
-            
-            <div className={`content-type-indicator ${typeIndicator.className}`}>
-              <span className="type-icon">{typeIndicator.icon}</span>
-              <span className="type-label">{typeIndicator.label}</span>
-            </div>
 
             {predictedRating && (
               <div className="predicted-rating" title={`We think you'll rate this: ${predictedRating}/10`}>

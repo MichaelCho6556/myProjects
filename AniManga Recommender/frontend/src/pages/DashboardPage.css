@@ -1609,6 +1609,41 @@
   border-color: rgba(128, 128, 128, 0.3);
 }
 
+/* Content type indicator at top of card */
+.content-type-indicator-top {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px 8px 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  margin-bottom: 0;
+}
+
+.content-type-indicator-top .type-icon {
+  font-size: 0.9rem;
+}
+
+.content-type-indicator-top .type-label {
+  color: white;
+}
+
+/* Content type colors for top indicator */
+.content-type-indicator-top.content-type-anime {
+  background: linear-gradient(135deg, rgba(0, 120, 255, 0.95), rgba(0, 100, 215, 0.95));
+}
+
+.content-type-indicator-top.content-type-manga {
+  background: linear-gradient(135deg, rgba(255, 140, 0, 0.95), rgba(220, 120, 0, 0.95));
+}
+
+.content-type-indicator-top.content-type-unknown {
+  background: linear-gradient(135deg, rgba(128, 128, 128, 0.95), rgba(100, 100, 100, 0.95));
+}
+
 /* Adjust image container to accommodate badge */
 .recommendation-image-container {
   position: relative;
