@@ -322,17 +322,20 @@ describe("UserListActions Component", () => {
 
       render(<UserListActions item={mockAnimeItem} onStatusUpdate={mockOnStatusUpdate} />);
 
+      // Wait for component to render
       await waitFor(() => {
-        const ratingInput = screen.getByLabelText(/Rating \(0\.0 - 10\.0, optional\)/) as HTMLInputElement;
-
-        // Test invalid high rating
-        fireEvent.change(ratingInput, { target: { value: "15" } });
-        expect(ratingInput.value).not.toBe("15");
-
-        // Test valid rating
-        fireEvent.change(ratingInput, { target: { value: "8.5" } });
-        expect(ratingInput).toHaveValue(8.5);
+        expect(screen.getByLabelText(/Rating \(0\.0 - 10\.0, optional\)/)).toBeInTheDocument();
       });
+
+      const ratingInput = screen.getByLabelText(/Rating \(0\.0 - 10\.0, optional\)/) as HTMLInputElement;
+
+      // Test invalid high rating - should be rejected
+      fireEvent.change(ratingInput, { target: { value: "15" } });
+      expect(ratingInput.value).toBe(""); // Should remain empty since 15 > 10
+
+      // Test valid rating - should be accepted
+      fireEvent.change(ratingInput, { target: { value: "8.5" } });
+      expect(ratingInput.value).toBe("8.5");
     });
 
     test("handles decimal ratings correctly", async () => {

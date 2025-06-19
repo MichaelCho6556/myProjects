@@ -16,10 +16,17 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import ItemLists from "../../../components/dashboard/ItemLists";
+import { AuthProvider } from "../../../context/AuthContext";
 import { UserItem } from "../../../types";
 
 const renderWithRouter = (component: React.ReactElement) => {
-  return render(<BrowserRouter>{component}</BrowserRouter>);
+  return render(
+    <BrowserRouter>
+      <AuthProvider>
+        {component}
+      </AuthProvider>
+    </BrowserRouter>
+  );
 };
 
 // Mock user items data with correct types
