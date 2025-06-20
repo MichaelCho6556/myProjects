@@ -38,7 +38,7 @@ const ItemLists: React.FC<ItemListsProps> = ({
   };
 
   const handleDeleteItem = async (itemUid: string, itemTitle: string) => {
-    if (!confirm(`Remove "${itemTitle}" from your list?`)) {
+    if (!window.confirm(`Remove "${itemTitle}" from your list?`)) {
       return;
     }
 
