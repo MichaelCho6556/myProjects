@@ -1,0 +1,554 @@
+/* ABOUTME: Styles for appeal submission page with form layout and appeals history */
+/* ABOUTME: Provides professional interface for users to submit and track moderation appeals */
+
+.appeal-submission-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.page-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color, #e9ecef);
+}
+
+.page-header h1 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary, #333333);
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.page-header p {
+  margin: 0;
+  color: var(--text-secondary, #666666);
+  font-size: 1.125rem;
+}
+
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.appeal-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+/* Form Section */
+.appeal-form-section {
+  background-color: var(--bg-secondary, #f8f9fa);
+  border: 1px solid var(--border-color, #e9ecef);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.appeal-form-section h2 {
+  margin: 0 0 1.5rem 0;
+  color: var(--text-primary, #333333);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.success-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  background-color: #d1edff;
+  border: 1px solid #b3d7ff;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+}
+
+.success-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.success-content h3 {
+  margin: 0 0 0.5rem 0;
+  color: #0c5460;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.success-content p {
+  margin: 0;
+  color: #0c5460;
+  font-size: 0.875rem;
+}
+
+.appeal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary, #333333);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 0.75rem;
+  border: 1px solid var(--border-color, #e9ecef);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color, #007bff);
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.field-help {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #666666);
+  text-align: right;
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  color: #721c24;
+  font-size: 0.875rem;
+}
+
+.error-icon {
+  font-size: 1rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.submit-button,
+.cancel-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.submit-button {
+  background-color: var(--primary-color, #007bff);
+  color: white;
+}
+
+.submit-button:hover:not(:disabled) {
+  background-color: var(--primary-hover, #0056b3);
+}
+
+.submit-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cancel-button {
+  background-color: var(--secondary-color, #6c757d);
+  color: white;
+}
+
+.cancel-button:hover {
+  background-color: var(--secondary-hover, #545b62);
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Appeals History Section */
+.appeals-history-section {
+  background-color: var(--bg-secondary, #f8f9fa);
+  border: 1px solid var(--border-color, #e9ecef);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.appeals-history-section h2 {
+  margin: 0 0 1.5rem 0;
+  color: var(--text-primary, #333333);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.loading-state,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.loading-state {
+  gap: 1rem;
+  color: var(--text-secondary, #666666);
+}
+
+.empty-state {
+  gap: 1rem;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary, #333333);
+  font-size: 1.25rem;
+}
+
+.empty-state p {
+  margin: 0;
+  color: var(--text-secondary, #666666);
+  max-width: 300px;
+}
+
+.appeals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.appeal-card {
+  background-color: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-color, #e9ecef);
+  border-radius: 6px;
+  padding: 1.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.appeal-card:hover {
+  border-color: var(--primary-color, #007bff);
+}
+
+.appeal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.appeal-info h4 {
+  margin: 0 0 0.25rem 0;
+  color: var(--text-primary, #333333);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.appeal-type {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #666666);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.appeal-badges {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.status-badge,
+.priority-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-badge.status-pending {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status-badge.status-approved {
+  background-color: #d1edff;
+  color: #0c5460;
+}
+
+.status-badge.status-rejected {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.status-badge.status-escalated {
+  background-color: #e2e3e5;
+  color: #383d41;
+}
+
+.priority-badge.priority-low {
+  background-color: #d4e6f1;
+  color: #1b4f72;
+}
+
+.priority-badge.priority-medium {
+  background-color: #fdeaa7;
+  color: #7e4b00;
+}
+
+.priority-badge.priority-high {
+  background-color: #fadbd8;
+  color: #922b21;
+}
+
+.priority-badge.priority-urgent {
+  background-color: #e8daef;
+  color: #6c3483;
+}
+
+.appeal-content {
+  margin-bottom: 1rem;
+}
+
+.appeal-field {
+  margin-bottom: 1rem;
+}
+
+.appeal-field label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary, #666666);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
+}
+
+.appeal-field span,
+.appeal-field p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-primary, #333333);
+  line-height: 1.5;
+}
+
+.appeal-resolution {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: var(--bg-secondary, #f8f9fa);
+  border: 1px solid var(--border-color, #e9ecef);
+  border-radius: 4px;
+}
+
+.appeal-resolution h5 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary, #333333);
+}
+
+.appeal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color, #e9ecef);
+}
+
+.appeal-date {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #666666);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .appeal-submission-page {
+    padding: 1rem;
+  }
+
+  .appeal-sections {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .submit-button,
+  .cancel-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .appeal-header {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .appeal-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .page-header h1,
+  .appeal-form-section h2,
+  .appeals-history-section h2,
+  .empty-state h3,
+  .appeal-info h4,
+  .appeal-resolution h5,
+  .form-group label,
+  .appeal-field span,
+  .appeal-field p {
+    color: var(--text-primary-dark, #ffffff);
+  }
+
+  .page-header p,
+  .appeal-type,
+  .field-help,
+  .empty-state p,
+  .appeal-date,
+  .loading-state {
+    color: var(--text-secondary-dark, #cccccc);
+  }
+
+  .appeal-form-section,
+  .appeals-history-section {
+    background-color: var(--bg-secondary-dark, #2d2d2d);
+    border-color: var(--border-color-dark, #404040);
+  }
+
+  .appeal-card {
+    background-color: var(--bg-primary-dark, #1a1a1a);
+    border-color: var(--border-color-dark, #404040);
+  }
+
+  .appeal-card:hover {
+    border-color: var(--primary-color, #007bff);
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    background-color: var(--bg-primary-dark, #1a1a1a);
+    border-color: var(--border-color-dark, #404040);
+    color: var(--text-primary-dark, #ffffff);
+  }
+
+  .appeal-resolution {
+    background-color: var(--bg-primary-dark, #1a1a1a);
+    border-color: var(--border-color-dark, #404040);
+  }
+
+  .appeal-footer {
+    border-top-color: var(--border-color-dark, #404040);
+  }
+
+  .success-banner {
+    background-color: #1e3a5f;
+    border-color: #2c5282;
+  }
+
+  .success-content h3,
+  .success-content p {
+    color: #b3d7ff;
+  }
+
+  .status-badge.status-pending {
+    background-color: #663d00;
+    color: #ffc107;
+  }
+
+  .status-badge.status-approved {
+    background-color: #004085;
+    color: #b3d7ff;
+  }
+
+  .status-badge.status-rejected {
+    background-color: #721c24;
+    color: #f5c6cb;
+  }
+
+  .status-badge.status-escalated {
+    background-color: #495057;
+    color: #f8f9fa;
+  }
+
+  .priority-badge.priority-low {
+    background-color: #1b4f72;
+    color: #d4e6f1;
+  }
+
+  .priority-badge.priority-medium {
+    background-color: #7e4b00;
+    color: #fdeaa7;
+  }
+
+  .priority-badge.priority-high {
+    background-color: #922b21;
+    color: #fadbd8;
+  }
+
+  .priority-badge.priority-urgent {
+    background-color: #6c3483;
+    color: #e8daef;
+  }
+}

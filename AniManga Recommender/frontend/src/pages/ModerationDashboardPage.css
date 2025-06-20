@@ -1,0 +1,181 @@
+/* ABOUTME: Styles for the moderation dashboard page layout and access control */
+/* ABOUTME: Provides responsive design and professional styling for moderation interface */
+
+.moderation-dashboard-page {
+  min-height: 100vh;
+  background-color: var(--bg-primary, #ffffff);
+  color: var(--text-primary, #333333);
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 1rem;
+}
+
+.loading-container p {
+  color: var(--text-secondary, #666666);
+  font-size: 1rem;
+}
+
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 2rem;
+  text-align: center;
+  gap: 1.5rem;
+}
+
+.error-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.error-container h2 {
+  color: var(--text-primary, #333333);
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.error-container p {
+  color: var(--text-secondary, #666666);
+  font-size: 1.1rem;
+  max-width: 500px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.back-button {
+  padding: 0.75rem 1.5rem;
+  background-color: var(--primary-color, #007bff);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.back-button:hover {
+  background-color: var(--primary-hover, #0056b3);
+}
+
+.moderation-header {
+  background-color: var(--bg-secondary, #f8f9fa);
+  border-bottom: 1px solid var(--border-color, #e9ecef);
+  padding: 2rem 0;
+}
+
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.moderation-header h1 {
+  margin: 0;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-primary, #333333);
+}
+
+.header-stats {
+  display: flex;
+  gap: 2rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #666666);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--primary-color, #007bff);
+  text-transform: capitalize;
+}
+
+.moderation-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem;
+  min-height: calc(100vh - 200px);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .moderation-header h1 {
+    font-size: 2rem;
+  }
+
+  .header-stats {
+    justify-content: center;
+  }
+
+  .moderation-content {
+    padding: 1rem;
+  }
+
+  .error-container {
+    padding: 1rem;
+  }
+
+  .error-container h2 {
+    font-size: 1.5rem;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .moderation-dashboard-page {
+    background-color: var(--bg-primary-dark, #1a1a1a);
+    color: var(--text-primary-dark, #ffffff);
+  }
+
+  .moderation-header {
+    background-color: var(--bg-secondary-dark, #2d2d2d);
+    border-bottom-color: var(--border-color-dark, #404040);
+  }
+
+  .moderation-header h1 {
+    color: var(--text-primary-dark, #ffffff);
+  }
+
+  .error-container h2 {
+    color: var(--text-primary-dark, #ffffff);
+  }
+
+  .loading-container p,
+  .error-container p,
+  .stat-label {
+    color: var(--text-secondary-dark, #cccccc);
+  }
+}
