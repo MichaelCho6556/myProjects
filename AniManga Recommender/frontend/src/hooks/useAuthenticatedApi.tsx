@@ -50,6 +50,11 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
  */
 interface UseAuthenticatedApiReturn {
   makeAuthenticatedRequest: (endpoint: string, options?: RequestInit) => Promise<any>;
+  get: (endpoint: string) => Promise<any>;
+  post: (endpoint: string, data?: any) => Promise<any>;
+  put: (endpoint: string, data?: any) => Promise<any>;
+  patch: (endpoint: string, data?: any) => Promise<any>;
+  delete: (endpoint: string) => Promise<any>;
   getUserProfile: () => Promise<any>;
   updateUserProfile: (updates: any) => Promise<any>;
   getUserItems: (status?: string) => Promise<any>;
@@ -447,8 +452,92 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    */
   const getDashboardData = (): Promise<any> => makeAuthenticatedRequest("/api/auth/dashboard");
 
+  /**
+   * Makes a GET request to the specified endpoint.
+   *
+   * @async
+   * @function get
+   * @param {string} endpoint - API endpoint path
+   * @returns {Promise<any>} Promise resolving to response data
+   */
+  const get = (endpoint: string): Promise<any> => 
+    makeAuthenticatedRequest(endpoint, { method: "GET" });
+
+  /**
+   * Makes a POST request to the specified endpoint with optional data.
+   *
+   * @async
+   * @function post
+   * @param {string} endpoint - API endpoint path
+   * @param {any} [data] - Data to send in request body
+   * @returns {Promise<any>} Promise resolving to response data
+   */
+  const post = (endpoint: string, data?: any): Promise<any> => {
+    const options: RequestInit = {
+      method: "POST",
+    };
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+    return makeAuthenticatedRequest(endpoint, options);
+  };
+
+  /**
+   * Makes a PUT request to the specified endpoint with optional data.
+   *
+   * @async
+   * @function put
+   * @param {string} endpoint - API endpoint path
+   * @param {any} [data] - Data to send in request body
+   * @returns {Promise<any>} Promise resolving to response data
+   */
+  const put = (endpoint: string, data?: any): Promise<any> => {
+    const options: RequestInit = {
+      method: "PUT",
+    };
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+    return makeAuthenticatedRequest(endpoint, options);
+  };
+
+  /**
+   * Makes a PATCH request to the specified endpoint with optional data.
+   *
+   * @async
+   * @function patch
+   * @param {string} endpoint - API endpoint path
+   * @param {any} [data] - Data to send in request body
+   * @returns {Promise<any>} Promise resolving to response data
+   */
+  const patch = (endpoint: string, data?: any): Promise<any> => {
+    const options: RequestInit = {
+      method: "PATCH",
+    };
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+    return makeAuthenticatedRequest(endpoint, options);
+  };
+
+  /**
+   * Makes a DELETE request to the specified endpoint.
+   *
+   * @async
+   * @function delete
+   * @param {string} endpoint - API endpoint path
+   * @returns {Promise<any>} Promise resolving to response data
+   */
+  const deleteMethod = (endpoint: string): Promise<any> =>
+    makeAuthenticatedRequest(endpoint, { method: "DELETE" });
+
   return {
     makeAuthenticatedRequest,
+    get,
+    post,
+    put,
+    patch,
+    delete: deleteMethod,
     getUserProfile,
     updateUserProfile,
     getUserItems,
