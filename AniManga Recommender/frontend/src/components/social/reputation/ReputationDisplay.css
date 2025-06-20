@@ -1,0 +1,409 @@
+/* ABOUTME: Styles for reputation display component with badges, progress bars, and breakdown sections */
+/* ABOUTME: Provides visual hierarchy for reputation scores, titles, and detailed community metrics */
+
+.reputation-display {
+  background-color: var(--bg-secondary, #f8f9fa);
+  border: 1px solid var(--border-color, #e9ecef);
+  border-radius: 8px;
+  padding: 1rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Loading and Error States */
+.reputation-loading,
+.reputation-error,
+.reputation-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-secondary, #666666);
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color, #e9ecef);
+  border-top: 2px solid var(--primary-color, #007bff);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.reputation-error {
+  color: var(--error-color, #dc3545);
+}
+
+.error-icon,
+.placeholder-icon {
+  font-size: 1.2rem;
+}
+
+/* Header Section */
+.reputation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.reputation-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.reputation-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.reputation-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.reputation-score {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.reputation-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary, #666666);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Reputation Color Schemes */
+.reputation-score.newcomer {
+  color: #6c757d;
+}
+
+.reputation-score.member {
+  color: #28a745;
+}
+
+.reputation-score.active {
+  color: #17a2b8;
+}
+
+.reputation-score.trusted {
+  color: #007bff;
+}
+
+.reputation-score.veteran {
+  color: #6f42c1;
+}
+
+.reputation-score.legendary {
+  color: #fd7e14;
+  text-shadow: 0 0 8px rgba(253, 126, 20, 0.3);
+}
+
+/* Details Toggle */
+.details-toggle {
+  background: none;
+  border: 1px solid var(--border-color, #e9ecef);
+  border-radius: 4px;
+  padding: 0.5rem;
+  cursor: pointer;
+  color: var(--text-secondary, #666666);
+  transition: all 0.2s ease;
+}
+
+.details-toggle:hover {
+  background-color: var(--bg-primary, #ffffff);
+  border-color: var(--primary-color, #007bff);
+  color: var(--primary-color, #007bff);
+}
+
+.toggle-icon {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  font-size: 0.75rem;
+}
+
+.toggle-icon.expanded {
+  transform: rotate(180deg);
+}
+
+/* Progress Section */
+.reputation-progress {
+  margin-bottom: 1rem;
+}
+
+.progress-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary, #666666);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background-color: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-color, #e9ecef);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+  border-radius: 3px;
+}
+
+.progress-fill.newcomer {
+  background-color: #6c757d;
+}
+
+.progress-fill.member {
+  background-color: #28a745;
+}
+
+.progress-fill.active {
+  background-color: #17a2b8;
+}
+
+.progress-fill.trusted {
+  background-color: #007bff;
+}
+
+.progress-fill.veteran {
+  background-color: #6f42c1;
+}
+
+.progress-fill.legendary {
+  background: linear-gradient(90deg, #fd7e14, #ffc107);
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #666666);
+  text-align: center;
+}
+
+/* Breakdown Section */
+.reputation-breakdown {
+  border-top: 1px solid var(--border-color, #e9ecef);
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+
+.reputation-breakdown h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #333333);
+}
+
+.breakdown-section {
+  margin-bottom: 1.5rem;
+}
+
+.breakdown-section h5 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary, #333333);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.breakdown-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.breakdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-color, #e9ecef);
+  border-radius: 6px;
+}
+
+.item-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-primary, #333333);
+}
+
+.item-icon {
+  font-size: 1rem;
+}
+
+.item-value {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary, #333333);
+}
+
+.item-points {
+  font-size: 0.75rem;
+  color: var(--success-color, #28a745);
+  font-weight: normal;
+}
+
+/* Penalty Section */
+.penalty-section {
+  border: 1px solid #ffeaa7;
+  background-color: #fffbf0;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.penalty-section h5 {
+  color: #d63031;
+}
+
+.penalty-item {
+  background-color: #fff5f5;
+  border-color: #fecaca;
+}
+
+.penalty-item .item-label {
+  color: #dc2626;
+}
+
+.penalty-item .item-value {
+  color: #dc2626;
+}
+
+.penalty-total {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #dc2626;
+  text-align: center;
+}
+
+/* Footer */
+.breakdown-footer {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color, #e9ecef);
+  text-align: center;
+}
+
+.last-updated {
+  font-size: 0.75rem;
+  color: var(--text-muted, #999999);
+  font-style: italic;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .reputation-display {
+    padding: 0.75rem;
+  }
+
+  .reputation-badge {
+    gap: 0.5rem;
+  }
+
+  .reputation-icon {
+    font-size: 1.5rem;
+  }
+
+  .reputation-score {
+    font-size: 1.25rem;
+  }
+
+  .breakdown-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .item-value {
+    align-self: flex-end;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .reputation-display {
+    background-color: var(--bg-secondary-dark, #2d2d2d);
+    border-color: var(--border-color-dark, #404040);
+  }
+
+  .reputation-title,
+  .progress-label,
+  .progress-text,
+  .last-updated {
+    color: var(--text-secondary-dark, #cccccc);
+  }
+
+  .reputation-breakdown h4,
+  .breakdown-section h5,
+  .item-label,
+  .item-value {
+    color: var(--text-primary-dark, #ffffff);
+  }
+
+  .breakdown-item {
+    background-color: var(--bg-primary-dark, #1a1a1a);
+    border-color: var(--border-color-dark, #404040);
+  }
+
+  .progress-bar {
+    background-color: var(--bg-primary-dark, #1a1a1a);
+    border-color: var(--border-color-dark, #404040);
+  }
+
+  .details-toggle {
+    border-color: var(--border-color-dark, #404040);
+    color: var(--text-secondary-dark, #cccccc);
+  }
+
+  .details-toggle:hover {
+    background-color: var(--bg-primary-dark, #1a1a1a);
+    border-color: var(--primary-color, #007bff);
+    color: var(--primary-color, #007bff);
+  }
+
+  .penalty-section {
+    background-color: #2d1b0e;
+    border-color: #d4a574;
+  }
+
+  .penalty-item {
+    background-color: #2d1a1a;
+    border-color: #d4a574;
+  }
+
+  .penalty-total {
+    background-color: #2d1a1a;
+    border-color: #d4a574;
+    color: #ff6b6b;
+  }
+}
