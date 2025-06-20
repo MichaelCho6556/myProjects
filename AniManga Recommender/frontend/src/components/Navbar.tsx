@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthModal } from "./Auth/AuthModal";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
 import { csrfUtils, sanitizeInput, sanitizeSearchInput } from "../utils/security"; // ✅ NEW: Import security utilities
+import EnhancedSearch from "./EnhancedSearch";
 import "./Navbar.css";
 
 /**
@@ -75,10 +76,6 @@ const Navbar: React.FC = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [navSearchValue, setNavSearchValue] = useState<string>(searchParams.get("q") || "");
-  const [csrfToken, setCsrfToken] = useState(""); // ✅ NEW: CSRF token for search
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
 
@@ -87,17 +84,7 @@ const Navbar: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
 
-  // ✅ NEW: Generate CSRF token on component mount
-  useEffect(() => {
-    const token = csrfUtils.generateToken();
-    setCsrfToken(token);
-  }, []);
-
-  // Sync navbar search input with URL parameters
-  useEffect(() => {
-    const urlQuery = searchParams.get("q") || "";
-    setNavSearchValue(urlQuery);
-  }, [searchParams]);
+  // Note: Search functionality is handled by EnhancedSearch component
 
   // Handle click outside dropdown to close it
   useEffect(() => {
@@ -136,8 +123,8 @@ const Navbar: React.FC = () => {
     try {
       setNotificationsLoading(true);
       const response = await api.get("/api/auth/notifications?limit=10");
-      setNotifications(response.data.notifications);
-      setUnreadCount(response.data.unread_count);
+      setNotifications(response.notifications || []);
+      setUnreadCount(response.unread_count || 0);
     } catch (error) {
       console.error("Failed to fetch notifications:", error);
     } finally {
@@ -177,55 +164,6 @@ const Navbar: React.FC = () => {
     }
   };
 
-  // ✅ UPDATED: Handle search from navbar with security
-  const handleNavSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    // ✅ NEW: CSRF validation
-    if (!csrfUtils.validateToken(csrfToken)) {
-      console.warn("Invalid CSRF token in search");
-      return;
-    }
-
-    // ✅ FIXED: Apply the same sanitization for form submission
-    const sanitizedSearchValue = navSearchValue
-      .replace(/[<>]/g, "") // Remove < and > to prevent basic XSS
-      .replace(/javascript:/gi, "") // Remove javascript: protocol
-      .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
-      .replace(/\.\.\//g, "") // Block path traversal attacks
-      .replace(/\{\{.*?\}\}/g, "") // Block template injection
-      .replace(/\$\{.*?\}/g, "") // Block expression injection
-      .replace(/;\s*(echo|cat|ls|rm|curl|wget|nc|bash|sh)/gi, "") // Block command injection
-      .replace(/(DROP|DELETE|INSERT|UPDATE|CREATE|ALTER)\s+(TABLE|DATABASE)/gi, ""); // Block SQL injection
-
-    if (sanitizedSearchValue.trim()) {
-      // Navigate to homepage with search term
-      const newParams = new URLSearchParams(searchParams);
-      newParams.set("q", sanitizedSearchValue.trim());
-      newParams.set("page", "1");
-      navigate(`/?${newParams.toString()}`);
-    }
-  };
-
-  const handleNavSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    // ✅ FIXED: Apply sanitization that preserves spaces for search
-    const rawValue = event.target.value;
-
-    // ✅ ENHANCED: More careful sanitization that preserves search functionality
-    const sanitizedValue = rawValue
-      .replace(/[<>]/g, "") // Remove < and > to prevent basic XSS
-      .replace(/javascript:/gi, "") // Remove javascript: protocol
-      .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
-      .replace(/\.\.\//g, "") // Block path traversal attacks
-      .replace(/\{\{.*?\}\}/g, "") // Block template injection
-      .replace(/\$\{.*?\}/g, "") // Block expression injection
-      .replace(/;\s*(echo|cat|ls|rm|curl|wget|nc|bash|sh)/gi, "") // Block command injection
-      .replace(/(DROP|DELETE|INSERT|UPDATE|CREATE|ALTER)\s+(TABLE|DATABASE)/gi, ""); // Block SQL injection
-    // Note: Removed the space normalization that might have been causing issues
-
-    setNavSearchValue(sanitizedValue);
-  };
-
   // Get display name from user metadata or fallback to email
   const getDisplayName = () => {
     if (!user) return "";
@@ -249,31 +187,10 @@ const Navbar: React.FC = () => {
             AniMangaRecommender
           </Link>
 
-          {/* ✅ UPDATED: Search bar with CSRF protection */}
-          <form onSubmit={handleNavSearchSubmit} className="navbar-search-form">
-            {/* ✅ NEW: CSRF token hidden field */}
-            <input type="hidden" name="csrf_token" value={csrfToken} />
-
-            <label htmlFor="navbar-search-input" className="sr-only">
-              Search anime and manga titles from navigation
-            </label>
-            <input
-              id="navbar-search-input"
-              type="text"
-              placeholder="Search titles..."
-              value={navSearchValue}
-              onChange={handleNavSearchChange}
-              className="navbar-search-input"
-              aria-describedby="navbar-search-help"
-              maxLength={100} // ✅ NEW: Input length limit
-            />
-            <span id="navbar-search-help" className="sr-only">
-              Enter keywords to search for anime and manga titles
-            </span>
-            <button type="submit" className="navbar-search-btn" aria-label="Submit search">
-              🔍
-            </button>
-          </form>
+          {/* Enhanced Search Component */}
+          <div className="navbar-search-container">
+            <EnhancedSearch className="navbar-enhanced-search" />
+          </div>
 
           {/* Navigation Menu */}
           <ul className="nav-menu" role="menubar">

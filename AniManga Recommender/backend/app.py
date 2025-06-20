@@ -194,6 +194,16 @@ uid_to_idx: Optional[pd.Series] = None
 supabase_client: Optional[SupabaseClient] = None
 auth_client: Optional[SupabaseAuthClient] = None
 
+# Initialize clients
+try:
+    supabase_client = SupabaseClient()
+    auth_client = SupabaseAuthClient()
+    print("✅ Supabase clients initialized successfully")
+except Exception as e:
+    print(f"❌ Failed to initialize Supabase clients: {e}")
+    supabase_client = None
+    auth_client = None
+
 # Simple in-memory cache for media types
 _media_type_cache: Dict[str, Any] = {}
 
@@ -5056,22 +5066,89 @@ def get_public_user_profile(username):
         GET /api/users/animelov3r/profile
     """
     try:
-        # Get viewer ID from auth if available (optional for public endpoint)
+        # Get viewer ID and user info from auth if available (optional for public endpoint)
         viewer_id = None
+        user_info = None
         auth_header = request.headers.get('Authorization')
+        
         if auth_header:
             try:
                 user_info = auth_client.verify_jwt_token(auth_header)
                 viewer_id = user_info.get('user_id') or user_info.get('sub')
-            except:
+            except Exception as auth_error:
+                print(f"Auth error (non-fatal): {auth_error}")
                 pass  # Ignore auth errors for public endpoint
         
-        profile = supabase_client.get_user_profile_by_username(username, viewer_id)
+        profile = auth_client.get_user_profile_by_username(username, viewer_id)
         
         if profile:
             return jsonify(profile)
-        else:
-            return jsonify({'error': 'User not found or profile is private'}), 404
+        
+        # If no profile found and user is authenticated, check if this is their own profile
+        # and create it if it doesn't exist
+        if viewer_id and user_info:
+            try:
+                user_email = user_info.get('email')
+                user_metadata = user_info.get('user_metadata', {})
+                existing_username = user_metadata.get('username')
+                
+                # Check if the requested username matches the user's metadata username or email prefix
+                is_own_profile = (
+                    (existing_username and username == existing_username) or
+                    (user_email and username == user_email.split('@')[0])
+                )
+                
+                if is_own_profile:
+                    # This is the user's own profile, create it
+                    print(f"Auto-creating profile for user {username} (ID: {viewer_id})")
+                    created_profile = auth_client.create_user_profile(
+                        user_id=viewer_id,
+                        username=username,
+                        display_name=username
+                    )
+                    
+                    if created_profile:
+                        print(f"Profile created successfully for {username}")
+                        # Fetch the complete profile data after creation
+                        profile = auth_client.get_user_profile_by_username(username, viewer_id)
+                        if profile:
+                            return jsonify(profile)
+                        else:
+                            print(f"Failed to fetch created profile for {username}")
+                    else:
+                        # Profile creation failed - might already exist, try to fetch it
+                        print(f"Profile creation failed for {username}, attempting to fetch existing profile")
+                        profile = auth_client.get_user_profile_by_username(username, viewer_id)
+                        if profile:
+                            print(f"Found existing profile for {username}")
+                            return jsonify(profile)
+                        else:
+                            # If username lookup fails, try direct lookup by user ID
+                            # This handles cases where the stored username differs from the requested one
+                            try:
+                                import requests
+                                direct_response = requests.get(
+                                    f"{auth_client.base_url}/rest/v1/user_profiles",
+                                    headers=auth_client.headers,
+                                    params={
+                                        'id': f'eq.{viewer_id}',
+                                        'select': '*'
+                                    }
+                                )
+                                if direct_response.status_code == 200 and direct_response.json():
+                                    profile_data = direct_response.json()[0]
+                                    return jsonify(profile_data)
+                            except Exception:
+                                pass
+                            
+                            print(f"Failed to create and fetch profile for {username}")
+                    
+            except Exception as create_error:
+                print(f"Error auto-creating profile: {create_error}")
+                import traceback
+                traceback.print_exc()
+        
+        return jsonify({'error': 'User not found or profile is private'}), 404
             
     except Exception as e:
         print(f"Error getting user profile: {e}")
@@ -5105,7 +5182,7 @@ def get_public_user_stats(username):
                 pass
         
         # First get user ID from username
-        profile = supabase_client.get_user_profile_by_username(username, viewer_id)
+        profile = auth_client.get_user_profile_by_username(username, viewer_id)
         if not profile:
             return jsonify({'error': 'User not found or profile is private'}), 404
             
@@ -5160,7 +5237,7 @@ def toggle_follow_user(username):
         if not user_id:
             return jsonify({'error': 'User ID not found in token'}), 400
         
-        result = supabase_client.toggle_user_follow(user_id, username)
+        result = auth_client.toggle_user_follow(user_id, username)
         
         if result['success']:
             return jsonify(result)
