@@ -1902,9 +1902,11 @@ class SupabaseAuthClient:
             
             if response.status_code in [200, 201]:
                 return response.json()
-            return None
+            else:
+                print(f"Failed to create user profile - Status: {response.status_code}, Response: {response.text}")
+                return None
         except Exception as e:
-            print(f"Error creating user profile: {e}")
+            print(f"Exception creating user profile: {e}")
             return None
     
     def update_user_profile(self, user_id: str, updates: dict) -> dict:
@@ -2111,6 +2113,7 @@ class SupabaseAuthClient:
                     'select': '*'
                 }
             )
+            
             
             if response.status_code != 200 or not response.json():
                 return None
