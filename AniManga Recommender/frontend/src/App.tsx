@@ -7,6 +7,11 @@ import HomePage from "./pages/HomePage";
 import ItemDetailPage from "./pages/ItemDetailPage";
 import DashboardPage from "./pages/DashboardPage";
 import UserListsPage from "./pages/lists/UserListsPage";
+import { MyCustomListsPage } from "./pages/lists/MyCustomListsPage";
+import { CustomListDetailPage } from "./pages/lists/CustomListDetailPage";
+import { UserProfilePage } from "./pages/UserProfilePage";
+import { PrivacySettingsPage } from "./pages/PrivacySettingsPage";
+import { ListDiscoveryPage } from "./pages/ListDiscoveryPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import NetworkStatus from "./components/Feedback/NetworkStatus";
 import "./App.css";
@@ -30,6 +35,11 @@ const App: React.FC = () => {
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/lists" element={<UserListsPage />} />
                 <Route path="/profile" element={<UserListsPage />} />
+                <Route path="/my-lists" element={<MyCustomListsPage />} />
+                <Route path="/lists/:listId" element={<CustomListDetailPage />} />
+                <Route path="/user/:username" element={<UserProfilePage />} />
+                <Route path="/settings/privacy" element={<PrivacySettingsPage />} />
+                <Route path="/discover/lists" element={<ListDiscoveryPage />} />
               </Routes>
             </div>
           </Router>
