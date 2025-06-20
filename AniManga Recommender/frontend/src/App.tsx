@@ -10,6 +10,7 @@ import UserListsPage from "./pages/lists/UserListsPage";
 import { MyCustomListsPage } from "./pages/lists/MyCustomListsPage";
 import { CustomListDetailPage } from "./pages/lists/CustomListDetailPage";
 import { UserProfilePage } from "./pages/UserProfilePage";
+import UserSearchPage from "./pages/UserSearchPage";
 import { PrivacySettingsPage } from "./pages/PrivacySettingsPage";
 import { ListDiscoveryPage } from "./pages/ListDiscoveryPage";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -37,7 +38,8 @@ const App: React.FC = () => {
                 <Route path="/profile" element={<UserListsPage />} />
                 <Route path="/my-lists" element={<MyCustomListsPage />} />
                 <Route path="/lists/:listId" element={<CustomListDetailPage />} />
-                <Route path="/user/:username" element={<UserProfilePage />} />
+                <Route path="/users/:username" element={<UserProfilePage />} />
+                <Route path="/search/users" element={<UserSearchPage />} />
                 <Route path="/settings/privacy" element={<PrivacySettingsPage />} />
                 <Route path="/discover/lists" element={<ListDiscoveryPage />} />
               </Routes>

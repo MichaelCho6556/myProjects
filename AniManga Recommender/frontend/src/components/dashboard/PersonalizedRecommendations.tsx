@@ -638,8 +638,8 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
       </div>
 
       <div className="recommendations-content">
-        {sections.map((section, index) => (
-          <div key={index} className="recommendation-section">
+        {sections.map((section, sectionIndex) => (
+          <div key={`section-${sectionIndex}-${section.sectionType}`} className="recommendation-section">
             <div className="section-header">
               <div className="section-title-group">
                 <h3>{section.title}</h3>
@@ -662,7 +662,7 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
                   items={section.items}
                   renderItem={(item: any, itemIndex: number) => (
                     <RecommendationCard
-                      key={`${section.sectionType}-${item.item?.uid || item.uid}-${itemIndex}`}
+                      key={`s${sectionIndex}-${section.sectionType}-${item.item?.uid || item.uid}-${itemIndex}`}
                       item={item}
                       sectionType={section.sectionType}
                       removedItems={removedItems}
@@ -689,7 +689,7 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
                 <div className="recommendation-grid">
                   {section.items.map((item: any, itemIndex: number) => (
                     <RecommendationCard
-                      key={`${section.sectionType}-${item.item?.uid || item.uid}-${itemIndex}`}
+                      key={`s${sectionIndex}-${section.sectionType}-${item.item?.uid || item.uid}-${itemIndex}`}
                       item={item}
                       sectionType={section.sectionType}
                       removedItems={removedItems}
