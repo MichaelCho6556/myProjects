@@ -1,0 +1,280 @@
+.comment-reactions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.primary-reactions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.secondary-reactions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #f3f4f6;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  animation: slideIn 0.2s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.reaction-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+  line-height: 1;
+  min-height: 24px;
+}
+
+.reaction-button:hover:not(.disabled):not(:disabled) {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  transform: scale(1.05);
+}
+
+.reaction-button.primary {
+  background: white;
+}
+
+.reaction-button.primary:hover:not(.disabled):not(:disabled) {
+  background: #f9fafb;
+}
+
+.reaction-button.secondary {
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+
+.reaction-button.secondary:hover:not(.disabled):not(:disabled) {
+  background: #e5e7eb;
+}
+
+.reaction-button.disabled,
+.reaction-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.reaction-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.reaction-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  min-width: 12px;
+  text-align: center;
+}
+
+.more-reactions-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: bold;
+  color: #6b7280;
+}
+
+.more-reactions-button:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  transform: scale(1.1);
+}
+
+.more-reactions-icon {
+  line-height: 1;
+}
+
+.total-reactions {
+  margin-left: 8px;
+}
+
+.total-reactions-count {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+  .comment-reactions {
+    gap: 6px;
+  }
+  
+  .primary-reactions {
+    gap: 3px;
+  }
+  
+  .secondary-reactions {
+    gap: 3px;
+    padding: 3px 6px;
+  }
+  
+  .reaction-button {
+    padding: 3px 6px;
+    font-size: 11px;
+    min-height: 22px;
+  }
+  
+  .reaction-button.secondary {
+    padding: 2px 3px;
+  }
+  
+  .reaction-emoji {
+    font-size: 13px;
+  }
+  
+  .reaction-count {
+    font-size: 10px;
+  }
+  
+  .more-reactions-button {
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .secondary-reactions {
+    background: #374151;
+    border-color: #4b5563;
+  }
+  
+  .reaction-button {
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+  
+  .reaction-button:hover:not(.disabled):not(:disabled) {
+    background: #374151;
+    border-color: #6b7280;
+  }
+  
+  .reaction-button.primary {
+    background: #1f2937;
+  }
+  
+  .reaction-button.primary:hover:not(.disabled):not(:disabled) {
+    background: #111827;
+  }
+  
+  .reaction-button.secondary:hover:not(.disabled):not(:disabled) {
+    background: #4b5563;
+  }
+  
+  .reaction-count {
+    color: #f3f4f6;
+  }
+  
+  .more-reactions-button {
+    background: #374151;
+    border-color: #4b5563;
+    color: #9ca3af;
+  }
+  
+  .more-reactions-button:hover {
+    background: #4b5563;
+    border-color: #6b7280;
+  }
+  
+  .total-reactions-count {
+    color: #9ca3af;
+  }
+}
+
+/* Focus styles for accessibility */
+.reaction-button:focus-visible,
+.more-reactions-button:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Animation for reaction count changes */
+.reaction-count {
+  transition: all 0.2s ease;
+}
+
+.reaction-button:active .reaction-count {
+  transform: scale(1.2);
+}
+
+/* Tooltip-like hover effects */
+.reaction-button:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 1000;
+  margin-bottom: 4px;
+  opacity: 0;
+  pointer-events: none;
+  animation: tooltipFadeIn 0.3s ease forwards;
+}
+
+@keyframes tooltipFadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+.reaction-button {
+  position: relative;
+}
