@@ -1,0 +1,528 @@
+.comment-moderation-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.moderation-tool-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.moderation-tool-btn:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.report-btn:hover {
+  color: #ef4444;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.moderate-btn:hover {
+  color: #3b82f6;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.moderator-tools {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.moderation-actions {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 1000;
+  min-width: 100px;
+  margin-top: 4px;
+}
+
+.mod-action-btn {
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #374151;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.mod-action-btn:hover {
+  background: #f3f4f6;
+}
+
+.hide-btn:hover {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.delete-btn:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.warn-btn:hover {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+/* Report Modal Styles */
+.report-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.report-modal {
+  background: white;
+  border-radius: 8px;
+  padding: 0;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.report-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.report-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.report-form {
+  padding: 24px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+}
+
+.report-reasons {
+  margin-bottom: 24px;
+}
+
+.reason-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reason-option:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.reason-option:has(input:checked) {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.reason-option input[type="radio"] {
+  margin: 2px 0 0 0;
+  cursor: pointer;
+}
+
+.reason-content {
+  flex: 1;
+}
+
+.reason-label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.reason-description {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.additional-context {
+  margin-bottom: 20px;
+}
+
+.context-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  margin-bottom: 4px;
+}
+
+.context-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.character-count {
+  font-size: 12px;
+  color: #6b7280;
+  text-align: right;
+}
+
+.report-options {
+  margin-bottom: 24px;
+}
+
+.anonymous-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+}
+
+.anonymous-option input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.report-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.cancel-button,
+.submit-button {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-button {
+  background: transparent;
+  border: 1px solid #d1d5db;
+  color: #374151;
+}
+
+.cancel-button:hover {
+  background: #f3f4f6;
+}
+
+.submit-button {
+  background: #dc2626;
+  border: 1px solid #dc2626;
+  color: white;
+}
+
+.submit-button:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.submit-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+  .report-modal-overlay {
+    padding: 10px;
+  }
+  
+  .report-modal {
+    max-height: 95vh;
+  }
+  
+  .report-modal-header {
+    padding: 16px 20px;
+  }
+  
+  .report-modal-header h3 {
+    font-size: 16px;
+  }
+  
+  .report-form {
+    padding: 20px;
+  }
+  
+  .reason-option {
+    padding: 10px;
+  }
+  
+  .moderation-tool-btn {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+  
+  .moderation-actions {
+    min-width: 90px;
+  }
+  
+  .mod-action-btn {
+    font-size: 11px;
+    padding: 5px 6px;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .moderation-tool-btn {
+    border-color: #374151;
+    color: #9ca3af;
+  }
+  
+  .moderation-tool-btn:hover {
+    background: #374151;
+    border-color: #4b5563;
+  }
+  
+  .report-btn:hover {
+    background: #450a0a;
+    border-color: #dc2626;
+    color: #f87171;
+  }
+  
+  .moderate-btn:hover {
+    background: #1e3a8a;
+    border-color: #3b82f6;
+    color: #93c5fd;
+  }
+  
+  .moderation-actions {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  
+  .mod-action-btn {
+    color: #f3f4f6;
+  }
+  
+  .mod-action-btn:hover {
+    background: #374151;
+  }
+  
+  .hide-btn:hover {
+    background: #451a03;
+    color: #fbbf24;
+  }
+  
+  .delete-btn:hover {
+    background: #450a0a;
+    color: #f87171;
+  }
+  
+  .warn-btn:hover {
+    background: #451a03;
+    color: #fbbf24;
+  }
+  
+  .report-modal {
+    background: #1f2937;
+  }
+  
+  .report-modal-header {
+    border-bottom-color: #374151;
+  }
+  
+  .report-modal-header h3 {
+    color: #f9fafb;
+  }
+  
+  .close-button {
+    color: #9ca3af;
+  }
+  
+  .close-button:hover {
+    background: #374151;
+    color: #f3f4f6;
+  }
+  
+  .form-label {
+    color: #f9fafb;
+  }
+  
+  .reason-option {
+    border-color: #374151;
+    background: #111827;
+  }
+  
+  .reason-option:hover {
+    background: #374151;
+    border-color: #4b5563;
+  }
+  
+  .reason-option:has(input:checked) {
+    background: #1e3a8a;
+    border-color: #3b82f6;
+  }
+  
+  .reason-label {
+    color: #f9fafb;
+  }
+  
+  .reason-description {
+    color: #9ca3af;
+  }
+  
+  .context-textarea {
+    background: #111827;
+    border-color: #374151;
+    color: #f9fafb;
+  }
+  
+  .context-textarea:focus {
+    border-color: #60a5fa;
+  }
+  
+  .character-count {
+    color: #9ca3af;
+  }
+  
+  .anonymous-option {
+    color: #f9fafb;
+  }
+  
+  .cancel-button {
+    border-color: #374151;
+    color: #f9fafb;
+  }
+  
+  .cancel-button:hover {
+    background: #374151;
+  }
+}
+
+/* Focus styles for accessibility */
+.moderation-tool-btn:focus-visible,
+.mod-action-btn:focus-visible,
+.close-button:focus-visible,
+.reason-option:focus-visible,
+.context-textarea:focus-visible,
+.anonymous-option:focus-visible,
+.cancel-button:focus-visible,
+.submit-button:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Animation for modal */
+.report-modal-overlay {
+  animation: modalFadeIn 0.2s ease;
+}
+
+.report-modal {
+  animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Animation for moderation actions dropdown */
+.moderation-actions {
+  animation: dropdownSlideIn 0.2s ease;
+}
+
+@keyframes dropdownSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
