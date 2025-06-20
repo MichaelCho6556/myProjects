@@ -2088,6 +2088,1425 @@ class SupabaseAuthClient:
             print(f"Error updating user item status: {e}")
             return None
 
+    # ===== SOCIAL FEATURES METHODS =====
+    
+    def get_user_profile_by_username(self, username: str, viewer_id: str = None) -> dict:
+        """
+        Get user profile by username with privacy filtering.
+        
+        Args:
+            username (str): Username to lookup
+            viewer_id (str, optional): ID of the user viewing the profile
+            
+        Returns:
+            dict: User profile data filtered by privacy settings
+        """
+        try:
+            # Get user profile
+            response = requests.get(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers=self.headers,
+                params={
+                    'username': f'eq.{username}',
+                    'select': '*'
+                }
+            )
+            
+            if response.status_code != 200 or not response.json():
+                return None
+                
+            profile = response.json()[0]
+            user_id = profile['id']
+            
+            # Get privacy settings
+            privacy_response = requests.get(
+                f"{self.base_url}/rest/v1/user_privacy_settings",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': '*'
+                }
+            )
+            
+            privacy_settings = {}
+            if privacy_response.status_code == 200 and privacy_response.json():
+                privacy_settings = privacy_response.json()[0]
+            
+            # Check if viewer is following this user
+            is_following = False
+            if viewer_id and viewer_id != user_id:
+                follow_response = requests.get(
+                    f"{self.base_url}/rest/v1/user_follows",
+                    headers=self.headers,
+                    params={
+                        'follower_id': f'eq.{viewer_id}',
+                        'following_id': f'eq.{user_id}',
+                        'select': 'id'
+                    }
+                )
+                is_following = bool(follow_response.json())
+            
+            # Apply privacy filtering
+            is_self = viewer_id == user_id
+            is_friend = is_following  # Simplified - in full implementation, check mutual follows
+            
+            profile_visibility = privacy_settings.get('profile_visibility', 'public')
+            
+            # Check access permissions
+            if profile_visibility == 'private' and not is_self:
+                return None
+            elif profile_visibility == 'friends_only' and not (is_self or is_friend):
+                return None
+                
+            # Filter sensitive data based on privacy settings
+            filtered_profile = {
+                'id': profile['id'],
+                'username': profile['username'],
+                'display_name': profile['display_name'],
+                'avatar_url': profile['avatar_url'],
+                'bio': profile['bio'],
+                'created_at': profile['created_at'],
+                'is_following': is_following,
+                'is_self': is_self
+            }
+            
+            # Add optional fields based on privacy settings
+            if privacy_settings.get('show_statistics', True) or is_self:
+                filtered_profile.update({
+                    'follower_count': profile.get('follower_count', 0),
+                    'following_count': profile.get('following_count', 0),
+                    'list_count': profile.get('list_count', 0)
+                })
+                
+            if privacy_settings.get('show_followers', True) or is_self:
+                filtered_profile['show_followers'] = True
+                
+            if privacy_settings.get('show_following', True) or is_self:
+                filtered_profile['show_following'] = True
+            
+            return filtered_profile
+            
+        except Exception as e:
+            print(f"Error getting user profile by username: {e}")
+            return None
+    
+    def get_user_stats(self, user_id: str, viewer_id: str = None) -> dict:
+        """
+        Get comprehensive user statistics.
+        
+        Args:
+            user_id (str): User ID to get stats for
+            viewer_id (str, optional): ID of the user viewing the stats
+            
+        Returns:
+            dict: User statistics data
+        """
+        try:
+            # Check privacy settings
+            privacy_response = requests.get(
+                f"{self.base_url}/rest/v1/user_privacy_settings",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': '*'
+                }
+            )
+            
+            privacy_settings = {}
+            if privacy_response.status_code == 200 and privacy_response.json():
+                privacy_settings = privacy_response.json()[0]
+                
+            # Check if viewer can see statistics
+            is_self = viewer_id == user_id
+            if not privacy_settings.get('show_statistics', True) and not is_self:
+                return None
+            
+            # Get user statistics
+            stats_response = requests.get(
+                f"{self.base_url}/rest/v1/user_statistics",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': '*'
+                }
+            )
+            
+            if stats_response.status_code == 200 and stats_response.json():
+                return stats_response.json()[0]
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error getting user stats: {e}")
+            return None
+    
+    def toggle_user_follow(self, follower_id: str, username: str) -> dict:
+        """
+        Follow or unfollow a user by username.
+        
+        Args:
+            follower_id (str): ID of the user doing the following
+            username (str): Username to follow/unfollow
+            
+        Returns:
+            dict: Result with success status and is_following boolean
+        """
+        try:
+            # Get user ID from username
+            profile_response = requests.get(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers=self.headers,
+                params={
+                    'username': f'eq.{username}',
+                    'select': 'id'
+                }
+            )
+            
+            if profile_response.status_code != 200 or not profile_response.json():
+                return {'success': False, 'error': 'User not found'}
+                
+            following_id = profile_response.json()[0]['id']
+            
+            # Prevent self-following
+            if follower_id == following_id:
+                return {'success': False, 'error': 'Cannot follow yourself'}
+            
+            # Check if already following
+            existing_follow = requests.get(
+                f"{self.base_url}/rest/v1/user_follows",
+                headers=self.headers,
+                params={
+                    'follower_id': f'eq.{follower_id}',
+                    'following_id': f'eq.{following_id}',
+                    'select': 'id'
+                }
+            )
+            
+            if existing_follow.json():
+                # Unfollow
+                response = requests.delete(
+                    f"{self.base_url}/rest/v1/user_follows",
+                    headers=self.headers,
+                    params={
+                        'follower_id': f'eq.{follower_id}',
+                        'following_id': f'eq.{following_id}'
+                    }
+                )
+                
+                if response.status_code == 204:
+                    return {'success': True, 'is_following': False, 'action': 'unfollowed'}
+            else:
+                # Follow
+                response = requests.post(
+                    f"{self.base_url}/rest/v1/user_follows",
+                    headers=self.headers,
+                    json={
+                        'follower_id': follower_id,
+                        'following_id': following_id
+                    }
+                )
+                
+                if response.status_code == 201:
+                    return {'success': True, 'is_following': True, 'action': 'followed'}
+            
+            return {'success': False, 'error': 'Follow operation failed'}
+            
+        except Exception as e:
+            print(f"Error toggling user follow: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    def update_privacy_settings(self, user_id: str, settings: dict) -> dict:
+        """
+        Update user privacy settings.
+        
+        Args:
+            user_id (str): User ID
+            settings (dict): Privacy settings to update
+            
+        Returns:
+            dict: Updated privacy settings or None if failed
+        """
+        try:
+            # Check if privacy settings exist
+            existing_response = requests.get(
+                f"{self.base_url}/rest/v1/user_privacy_settings",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': 'user_id'
+                }
+            )
+            
+            settings['updated_at'] = 'now()'
+            
+            if existing_response.json():
+                # Update existing settings
+                response = requests.patch(
+                    f"{self.base_url}/rest/v1/user_privacy_settings",
+                    headers=self.headers,
+                    params={'user_id': f'eq.{user_id}'},
+                    json=settings
+                )
+            else:
+                # Create new settings
+                settings['user_id'] = user_id
+                response = requests.post(
+                    f"{self.base_url}/rest/v1/user_privacy_settings",
+                    headers=self.headers,
+                    json=settings
+                )
+            
+            if response.status_code in [200, 201]:
+                return response.json()
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error updating privacy settings: {e}")
+            return None
+    
+    def create_custom_list(self, user_id: str, list_data: dict) -> dict:
+        """
+        Create a new custom list.
+        
+        Args:
+            user_id (str): User ID creating the list
+            list_data (dict): List data including title, description, tags, etc.
+            
+        Returns:
+            dict: Created list data or None if failed
+        """
+        try:
+            # Generate slug from title
+            import re
+            title = list_data.get('title', '')
+            slug = re.sub(r'[^\w\s-]', '', title.lower())
+            slug = re.sub(r'[-\s]+', '-', slug).strip('-')
+            
+            # Ensure unique slug for user
+            counter = 1
+            original_slug = slug
+            while True:
+                existing_response = requests.get(
+                    f"{self.base_url}/rest/v1/custom_lists",
+                    headers=self.headers,
+                    params={
+                        'user_id': f'eq.{user_id}',
+                        'slug': f'eq.{slug}',
+                        'select': 'slug'
+                    }
+                )
+                
+                if not existing_response.json():
+                    break
+                    
+                slug = f"{original_slug}-{counter}"
+                counter += 1
+            
+            # Create list
+            list_record = {
+                'user_id': user_id,
+                'title': list_data.get('title'),
+                'description': list_data.get('description'),
+                'slug': slug,
+                'is_public': list_data.get('is_public', True),
+                'is_collaborative': list_data.get('is_collaborative', False)
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                json=list_record
+            )
+            
+            if response.status_code != 201:
+                return None
+                
+            created_list = response.json()[0]
+            list_id = created_list['id']
+            
+            # Handle tags if provided
+            tags = list_data.get('tags', [])
+            if tags:
+                self._handle_list_tags(list_id, tags)
+            
+            return created_list
+            
+        except Exception as e:
+            print(f"Error creating custom list: {e}")
+            return None
+    
+    def _handle_list_tags(self, list_id: int, tags: List[str]):
+        """Helper method to handle list tags."""
+        try:
+            for tag_name in tags:
+                # Get or create tag
+                tag_response = requests.get(
+                    f"{self.base_url}/rest/v1/list_tags",
+                    headers=self.headers,
+                    params={
+                        'name': f'eq.{tag_name}',
+                        'select': 'id'
+                    }
+                )
+                
+                if tag_response.json():
+                    tag_id = tag_response.json()[0]['id']
+                else:
+                    # Create new tag
+                    create_response = requests.post(
+                        f"{self.base_url}/rest/v1/list_tags",
+                        headers=self.headers,
+                        json={'name': tag_name}
+                    )
+                    if create_response.status_code == 201:
+                        tag_id = create_response.json()[0]['id']
+                    else:
+                        continue
+                
+                # Associate tag with list
+                requests.post(
+                    f"{self.base_url}/rest/v1/list_tag_associations",
+                    headers=self.headers,
+                    json={
+                        'list_id': list_id,
+                        'tag_id': tag_id
+                    }
+                )
+                
+        except Exception as e:
+            print(f"Error handling list tags: {e}")
+    
+    def discover_lists(self, search: str = None, tags: List[str] = None, 
+                      sort_by: str = 'updated_at', page: int = 1, limit: int = 20) -> dict:
+        """
+        Discover public custom lists with search and filtering.
+        
+        Args:
+            search (str, optional): Search query for list titles/descriptions
+            tags (List[str], optional): Filter by tag names
+            sort_by (str): Sort field (updated_at, created_at, title)
+            page (int): Page number for pagination
+            limit (int): Items per page
+            
+        Returns:
+            dict: Lists data with pagination info
+        """
+        try:
+            offset = (page - 1) * limit
+            
+            # Build query parameters
+            params = {
+                'is_public': 'eq.true',
+                'select': '''
+                    *,
+                    user_profiles!custom_lists_user_id_fkey(username, display_name, avatar_url)
+                ''',
+                'limit': limit,
+                'offset': offset,
+                'order': f'{sort_by}.desc'
+            }
+            
+            # Add search filter
+            if search:
+                params['or'] = f'title.ilike.%{search}%,description.ilike.%{search}%'
+            
+            response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params=params
+            )
+            
+            if response.status_code != 200:
+                return {'lists': [], 'total': 0, 'page': page, 'limit': limit}
+            
+            lists = response.json()
+            
+            # Get total count for pagination
+            count_params = {'is_public': 'eq.true', 'select': 'count'}
+            if search:
+                count_params['or'] = f'title.ilike.%{search}%,description.ilike.%{search}%'
+                
+            count_response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers={**self.headers, 'Prefer': 'count=exact'},
+                params=count_params
+            )
+            
+            total = 0
+            if count_response.status_code == 200:
+                total = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
+            
+            # Filter by tags if specified
+            if tags and lists:
+                # This is simplified - in production, use a proper join query
+                filtered_lists = []
+                for list_item in lists:
+                    list_tags_response = requests.get(
+                        f"{self.base_url}/rest/v1/list_tag_associations",
+                        headers=self.headers,
+                        params={
+                            'list_id': f'eq.{list_item["id"]}',
+                            'select': 'list_tags!inner(name)'
+                        }
+                    )
+                    
+                    if list_tags_response.status_code == 200:
+                        list_tag_names = [tag['list_tags']['name'] for tag in list_tags_response.json()]
+                        if any(tag in list_tag_names for tag in tags):
+                            filtered_lists.append(list_item)
+                
+                lists = filtered_lists
+                total = len(lists)  # Approximate for tag filtering
+            
+            return {
+                'lists': lists,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'has_more': (page * limit) < total
+            }
+            
+        except Exception as e:
+            print(f"Error discovering lists: {e}")
+            return {'lists': [], 'total': 0, 'page': page, 'limit': limit}
+    
+    def reorder_list_items(self, list_id: int, user_id: str, item_positions: List[dict]) -> bool:
+        """
+        Reorder items in a custom list.
+        
+        Args:
+            list_id (int): List ID
+            user_id (str): User ID (must be list owner)
+            item_positions (List[dict]): List of {item_id, position} objects
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            # Verify list ownership
+            list_response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={
+                    'id': f'eq.{list_id}',
+                    'user_id': f'eq.{user_id}',
+                    'select': 'id'
+                }
+            )
+            
+            if not list_response.json():
+                return False
+            
+            # Update positions
+            for item in item_positions:
+                requests.patch(
+                    f"{self.base_url}/rest/v1/custom_list_items",
+                    headers=self.headers,
+                    params={
+                        'list_id': f'eq.{list_id}',
+                        'item_id': f'eq.{item["item_id"]}'
+                    },
+                    json={'position': item['position']}
+                )
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error reordering list items: {e}")
+            return False
+
+    def get_list_comments(self, list_id: int, page: int = 1, limit: int = 20) -> dict:
+        """
+        Get comments for a specific list with pagination.
+        
+        Args:
+            list_id (int): List ID
+            page (int): Page number
+            limit (int): Items per page
+            
+        Returns:
+            dict: Comments data with pagination info
+        """
+        try:
+            # Check if list exists
+            list_response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={
+                    'id': f'eq.{list_id}',
+                    'select': 'id'
+                }
+            )
+            
+            if not list_response.json():
+                return None
+            
+            # Calculate offset
+            offset = (page - 1) * limit
+            
+            # Get comments with user info
+            comments_response = requests.get(
+                f"{self.base_url}/rest/v1/list_comments",
+                headers=self.headers,
+                params={
+                    'list_id': f'eq.{list_id}',
+                    'select': '''
+                        id, content, is_spoiler, parent_comment_id, created_at,
+                        user_profiles(id, username, display_name, avatar_url)
+                    ''',
+                    'order': 'created_at.asc',
+                    'offset': offset,
+                    'limit': limit
+                }
+            )
+            
+            comments = comments_response.json()
+            
+            # Get total count
+            count_response = requests.get(
+                f"{self.base_url}/rest/v1/list_comments",
+                headers={**self.headers, 'Prefer': 'count=exact'},
+                params={
+                    'list_id': f'eq.{list_id}',
+                    'select': 'id'
+                }
+            )
+            
+            total = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
+            
+            return {
+                'comments': comments,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'has_more': offset + limit < total
+            }
+            
+        except Exception as e:
+            print(f"Error getting list comments: {e}")
+            return {
+                'comments': [],
+                'total': 0,
+                'page': page,
+                'limit': limit,
+                'has_more': False
+            }
+
+    def create_list_comment(self, list_id: int, user_id: str, content: str, 
+                           is_spoiler: bool = False, parent_comment_id: int = None) -> Optional[dict]:
+        """
+        Create a new comment on a list.
+        
+        Args:
+            list_id (int): List ID
+            user_id (str): Author's user ID
+            content (str): Comment content
+            is_spoiler (bool): Whether comment contains spoilers
+            parent_comment_id (int): Parent comment for replies
+            
+        Returns:
+            dict: Created comment data or None if failed
+        """
+        try:
+            # Check if list exists
+            list_response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={
+                    'id': f'eq.{list_id}',
+                    'select': 'id'
+                }
+            )
+            
+            if not list_response.json():
+                return None
+            
+            # Create comment
+            comment_data = {
+                'list_id': list_id,
+                'author_id': user_id,
+                'content': content,
+                'is_spoiler': is_spoiler
+            }
+            
+            if parent_comment_id:
+                comment_data['parent_comment_id'] = parent_comment_id
+            
+            comment_response = requests.post(
+                f"{self.base_url}/rest/v1/list_comments",
+                headers=self.headers,
+                json=comment_data
+            )
+            
+            if comment_response.status_code == 201:
+                # Fetch the created comment with user info
+                created_comment = comment_response.json()[0]
+                
+                comment_with_user = requests.get(
+                    f"{self.base_url}/rest/v1/list_comments",
+                    headers=self.headers,
+                    params={
+                        'id': f'eq.{created_comment["id"]}',
+                        'select': '''
+                            id, content, is_spoiler, parent_comment_id, created_at,
+                            user_profiles(id, username, display_name, avatar_url)
+                        '''
+                    }
+                ).json()[0]
+                
+                return comment_with_user
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error creating list comment: {e}")
+            return None
+
+    def search_users(self, query: str, page: int = 1, limit: int = 20) -> dict:
+        """
+        Search for users by username or display name.
+        
+        Args:
+            query (str): Search query
+            page (int): Page number
+            limit (int): Items per page
+            
+        Returns:
+            dict: Search results with pagination info
+        """
+        try:
+            # Calculate offset
+            offset = (page - 1) * limit
+            
+            # Search users by username or display name
+            users_response = requests.get(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers=self.headers,
+                params={
+                    'or': f'username.ilike.%{query}%,display_name.ilike.%{query}%',
+                    'select': '''
+                        id, username, display_name, bio, avatar_url,
+                        user_statistics(total_anime_watched, total_manga_read)
+                    ''',
+                    'order': 'username.asc',
+                    'offset': offset,
+                    'limit': limit
+                }
+            )
+            
+            users = users_response.json()
+            
+            # Get follower counts for each user
+            for user in users:
+                followers_response = requests.get(
+                    f"{self.base_url}/rest/v1/user_follows",
+                    headers={**self.headers, 'Prefer': 'count=exact'},
+                    params={
+                        'following_id': f'eq.{user["id"]}',
+                        'select': 'id'
+                    }
+                )
+                
+                user['followersCount'] = int(followers_response.headers.get('Content-Range', '0').split('/')[-1])
+                user['completedAnime'] = user.get('user_statistics', {}).get('total_anime_watched', 0) if user.get('user_statistics') else 0
+                user['completedManga'] = user.get('user_statistics', {}).get('total_manga_read', 0) if user.get('user_statistics') else 0
+                user['avatarUrl'] = user.get('avatar_url')
+                user['displayName'] = user.get('display_name') or user.get('username')
+            
+            # Get total count
+            count_response = requests.get(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers={**self.headers, 'Prefer': 'count=exact'},
+                params={
+                    'or': f'username.ilike.%{query}%,display_name.ilike.%{query}%',
+                    'select': 'id'
+                }
+            )
+            
+            total = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
+            
+            return {
+                'users': users,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'has_more': offset + limit < total
+            }
+            
+        except Exception as e:
+            print(f"Error searching users: {e}")
+            return {
+                'users': [],
+                'total': 0,
+                'page': page,
+                'limit': limit,
+                'has_more': False
+            }
+
+    def get_user_activity_feed(self, user_id: str, page: int = 1, limit: int = 20) -> dict:
+        """
+        Get activity feed for a user (activities from followed users).
+        
+        Args:
+            user_id (str): User ID requesting the feed
+            page (int): Page number
+            limit (int): Items per page
+            
+        Returns:
+            dict: Activity feed data with pagination info
+        """
+        try:
+            # Get users that the current user follows
+            follows_response = requests.get(
+                f"{self.base_url}/rest/v1/user_follows",
+                headers=self.headers,
+                params={
+                    'follower_id': f'eq.{user_id}',
+                    'select': 'following_id'
+                }
+            )
+            
+            following_ids = [follow['following_id'] for follow in follows_response.json()]
+            
+            if not following_ids:
+                return {
+                    'activities': [],
+                    'total': 0,
+                    'page': page,
+                    'limit': limit,
+                    'has_more': False
+                }
+            
+            # Calculate offset
+            offset = (page - 1) * limit
+            
+            # Get activities from followed users
+            activities_response = requests.get(
+                f"{self.base_url}/rest/v1/user_activity",
+                headers=self.headers,
+                params={
+                    'user_id': f'in.({",".join(following_ids)})',
+                    'select': '''
+                        id, user_id, activity_type, item_uid, activity_data, created_at,
+                        user_profiles(id, username, display_name, avatar_url)
+                    ''',
+                    'order': 'created_at.desc',
+                    'offset': offset,
+                    'limit': limit
+                }
+            )
+            
+            activities = activities_response.json()
+            
+            # Enrich activities with item details
+            for activity in activities:
+                if activity.get('item_uid'):
+                    # Get item details
+                    item_response = requests.get(
+                        f"{self.base_url}/rest/v1/items",
+                        headers=self.headers,
+                        params={
+                            'uid': f'eq.{activity["item_uid"]}',
+                            'select': 'uid, title, image_url, media_type'
+                        }
+                    )
+                    
+                    item_data = item_response.json()
+                    if item_data:
+                        activity['item'] = item_data[0]
+            
+            # Get total count
+            count_response = requests.get(
+                f"{self.base_url}/rest/v1/user_activity",
+                headers={**self.headers, 'Prefer': 'count=exact'},
+                params={
+                    'user_id': f'in.({",".join(following_ids)})',
+                    'select': 'id'
+                }
+            )
+            
+            total = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
+            
+            return {
+                'activities': activities,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'has_more': offset + limit < total
+            }
+            
+        except Exception as e:
+            print(f"Error getting activity feed: {e}")
+            return {
+                'activities': [],
+                'total': 0,
+                'page': page,
+                'limit': limit,
+                'has_more': False
+            }
+
+    def create_notification(self, user_id: str, type: str, title: str, message: str, data: dict = None) -> Optional[dict]:
+        """
+        Create a notification for a user.
+        
+        Args:
+            user_id (str): User ID to notify
+            type (str): Notification type (follow, comment, like, etc.)
+            title (str): Notification title
+            message (str): Notification message
+            data (dict): Additional notification data
+            
+        Returns:
+            Optional[dict]: Created notification or None if failed
+        """
+        try:
+            notification_data = {
+                'user_id': user_id,
+                'type': type,
+                'title': title,
+                'message': message,
+                'data': data or {},
+                'read': False,
+                'created_at': datetime.now().isoformat()
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/rest/v1/notifications",
+                headers=self.headers,
+                json=notification_data
+            )
+            
+            if response.status_code == 201:
+                return response.json()[0]
+            else:
+                print(f"Failed to create notification: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            print(f"Error creating notification: {e}")
+            return None
+
+    def get_user_notifications(self, user_id: str, page: int = 1, limit: int = 20, unread_only: bool = False) -> dict:
+        """
+        Get notifications for a user with pagination.
+        
+        Args:
+            user_id (str): User ID
+            page (int): Page number (starts from 1)
+            limit (int): Items per page
+            unread_only (bool): Only return unread notifications
+            
+        Returns:
+            dict: Paginated notifications response
+        """
+        try:
+            offset = (page - 1) * limit
+            
+            # Build query parameters
+            params = {
+                'user_id': f'eq.{user_id}',
+                'select': '*',
+                'order': 'created_at.desc',
+                'limit': limit,
+                'offset': offset
+            }
+            
+            if unread_only:
+                params['read'] = 'eq.false'
+            
+            # Get notifications
+            response = requests.get(
+                f"{self.base_url}/rest/v1/notifications",
+                headers=self.headers,
+                params=params
+            )
+            
+            if response.status_code != 200:
+                print(f"Failed to get notifications: {response.status_code}")
+                return {
+                    'notifications': [],
+                    'total': 0,
+                    'page': page,
+                    'limit': limit,
+                    'has_more': False,
+                    'unread_count': 0
+                }
+            
+            notifications = response.json()
+            
+            # Get total count
+            count_params = {
+                'user_id': f'eq.{user_id}',
+                'select': 'id'
+            }
+            if unread_only:
+                count_params['read'] = 'eq.false'
+                
+            count_response = requests.get(
+                f"{self.base_url}/rest/v1/notifications",
+                headers={**self.headers, 'Prefer': 'count=exact'},
+                params=count_params
+            )
+            
+            total = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
+            
+            # Get unread count separately if not already filtered
+            unread_count = 0
+            if not unread_only:
+                unread_response = requests.get(
+                    f"{self.base_url}/rest/v1/notifications",
+                    headers={**self.headers, 'Prefer': 'count=exact'},
+                    params={
+                        'user_id': f'eq.{user_id}',
+                        'read': 'eq.false',
+                        'select': 'id'
+                    }
+                )
+                unread_count = int(unread_response.headers.get('Content-Range', '0').split('/')[-1])
+            else:
+                unread_count = total
+            
+            return {
+                'notifications': notifications,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'has_more': offset + limit < total,
+                'unread_count': unread_count
+            }
+            
+        except Exception as e:
+            print(f"Error getting notifications: {e}")
+            return {
+                'notifications': [],
+                'total': 0,
+                'page': page,
+                'limit': limit,
+                'has_more': False,
+                'unread_count': 0
+            }
+
+    def mark_notification_read(self, notification_id: int, user_id: str) -> bool:
+        """
+        Mark a notification as read.
+        
+        Args:
+            notification_id (int): Notification ID
+            user_id (str): User ID (for security check)
+            
+        Returns:
+            bool: True if successful
+        """
+        try:
+            response = requests.patch(
+                f"{self.base_url}/rest/v1/notifications",
+                headers=self.headers,
+                params={'id': f'eq.{notification_id}', 'user_id': f'eq.{user_id}'},
+                json={'read': True}
+            )
+            
+            return response.status_code in [200, 204]
+            
+        except Exception as e:
+            print(f"Error marking notification as read: {e}")
+            return False
+
+    def mark_all_notifications_read(self, user_id: str) -> bool:
+        """
+        Mark all notifications as read for a user.
+        
+        Args:
+            user_id (str): User ID
+            
+        Returns:
+            bool: True if successful
+        """
+        try:
+            response = requests.patch(
+                f"{self.base_url}/rest/v1/notifications",
+                headers=self.headers,
+                params={'user_id': f'eq.{user_id}', 'read': 'eq.false'},
+                json={'read': True}
+            )
+            
+            return response.status_code in [200, 204]
+            
+        except Exception as e:
+            print(f"Error marking all notifications as read: {e}")
+            return False
+
+    # =============================================================================
+    # REVIEW SYSTEM METHODS
+    # =============================================================================
+    
+    def create_review(self, user_id: str, item_uid: str, review_data: dict) -> Optional[dict]:
+        """
+        Create a new review for an item.
+        
+        Args:
+            user_id (str): User ID creating the review
+            item_uid (str): Item UID being reviewed
+            review_data (dict): Review data including title, content, ratings, etc.
+            
+        Returns:
+            Optional[dict]: Created review or None if failed
+        """
+        try:
+            from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
+            
+            # Analyze review content for inappropriate material
+            title = review_data.get('title', '')
+            content = review_data.get('content', '')
+            combined_text = f"{title} {content}"
+            
+            # Perform content analysis
+            analysis_result = analyze_content(combined_text, 'review')
+            
+            # Check if content should be auto-moderated (blocked)
+            auto_moderate, moderation_details = should_auto_moderate(combined_text, 'review')
+            if auto_moderate:
+                print(f"Auto-moderated review from user {user_id}: {moderation_details}")
+                return None  # Block the review creation
+            
+            # Check if content should be auto-flagged
+            auto_flag, flag_details = should_auto_flag(combined_text, 'review')
+            
+            # Prepare review data with required fields
+            review = {
+                'user_id': user_id,
+                'item_uid': item_uid,
+                'title': review_data.get('title'),
+                'content': review_data.get('content'),
+                'overall_rating': review_data.get('overall_rating'),
+                'story_rating': review_data.get('story_rating'),
+                'characters_rating': review_data.get('characters_rating'),
+                'art_rating': review_data.get('art_rating'),
+                'sound_rating': review_data.get('sound_rating'),
+                'contains_spoilers': review_data.get('contains_spoilers', False),
+                'spoiler_level': review_data.get('spoiler_level'),
+                'recommended_for': review_data.get('recommended_for', []),
+                'status': 'published',
+                'analysis_data': analysis_result.to_dict() if analysis_result else None
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/rest/v1/user_reviews",
+                headers=self.headers,
+                json=review
+            )
+            
+            if response.status_code == 201:
+                created_review = response.json()[0] if isinstance(response.json(), list) else response.json()
+                
+                # Auto-flag review if needed
+                if auto_flag:
+                    try:
+                        auto_report_data = {
+                            'review_id': created_review['id'],
+                            'reporter_id': None,  # System-generated report
+                            'report_reason': 'inappropriate',  # Default reason for auto-flagged content
+                            'additional_context': f'Auto-flagged by content analysis. {flag_details.get("reasons", [])}',
+                            'anonymous': True,
+                            'status': 'pending',
+                            'priority': flag_details.get('priority', 'medium'),
+                            'auto_generated': True
+                        }
+                        
+                        flag_response = requests.post(
+                            f"{self.base_url}/rest/v1/review_reports",
+                            headers=self.headers,
+                            json=auto_report_data
+                        )
+                        
+                        if flag_response.status_code == 201:
+                            print(f"Auto-flagged review {created_review['id']} for review: {flag_details}")
+                        else:
+                            print(f"Failed to auto-flag review {created_review['id']}: {flag_response.text}")
+                            
+                    except Exception as e:
+                        print(f"Error creating auto-report for review {created_review['id']}: {e}")
+                        # Don't fail the review creation if reporting fails
+                
+                return created_review
+            else:
+                print(f"Failed to create review: {response.status_code} - {response.text}")
+                return None
+                
+        except Exception as e:
+            print(f"Error creating review: {e}")
+            return None
+    
+    def get_reviews_for_item(self, item_uid: str, page: int = 1, limit: int = 10, sort_by: str = 'helpfulness') -> dict:
+        """
+        Get reviews for a specific item with pagination and sorting.
+        
+        Args:
+            item_uid (str): Item UID to get reviews for
+            page (int): Page number (1-based)
+            limit (int): Number of reviews per page
+            sort_by (str): Sort criteria ('helpfulness', 'newest', 'oldest', 'rating')
+            
+        Returns:
+            dict: Paginated reviews response
+        """
+        try:
+            offset = (page - 1) * limit
+            
+            # Determine sort order
+            sort_mapping = {
+                'helpfulness': 'helpfulness_score.desc',
+                'newest': 'created_at.desc',
+                'oldest': 'created_at.asc',
+                'rating': 'overall_rating.desc'
+            }
+            order = sort_mapping.get(sort_by, 'helpfulness_score.desc')
+            
+            # Get reviews with user profile information
+            params = {
+                'item_uid': f'eq.{item_uid}',
+                'status': 'eq.published',
+                'select': '*,user_profiles!inner(username,display_name,avatar_url)',
+                'order': order,
+                'offset': offset,
+                'limit': limit
+            }
+            
+            response = requests.get(
+                f"{self.base_url}/rest/v1/reviews",
+                headers=self.headers,
+                params=params
+            )
+            
+            if response.status_code == 200:
+                reviews = response.json()
+                
+                # Get total count for pagination
+                count_response = requests.get(
+                    f"{self.base_url}/rest/v1/reviews",
+                    headers={**self.headers, 'Prefer': 'count=exact'},
+                    params={
+                        'item_uid': f'eq.{item_uid}',
+                        'status': 'eq.published',
+                        'select': 'id'
+                    }
+                )
+                
+                total_count = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
+                has_more = offset + len(reviews) < total_count
+                
+                return {
+                    'reviews': reviews,
+                    'total': total_count,
+                    'page': page,
+                    'limit': limit,
+                    'has_more': has_more
+                }
+            else:
+                print(f"Failed to get reviews: {response.status_code}")
+                return {'reviews': [], 'total': 0, 'page': page, 'limit': limit, 'has_more': False}
+                
+        except Exception as e:
+            print(f"Error getting reviews: {e}")
+            return {'reviews': [], 'total': 0, 'page': page, 'limit': limit, 'has_more': False}
+    
+    def vote_on_review(self, review_id: int, user_id: str, vote_type: str, reason: str = None) -> bool:
+        """
+        Vote on a review's helpfulness.
+        
+        Args:
+            review_id (int): Review ID to vote on
+            user_id (str): User ID voting
+            vote_type (str): 'helpful' or 'not_helpful'
+            reason (str, optional): Reason for the vote
+            
+        Returns:
+            bool: True if successful
+        """
+        try:
+            vote_data = {
+                'review_id': review_id,
+                'user_id': user_id,
+                'vote_type': vote_type,
+                'reason': reason
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/rest/v1/review_votes",
+                headers=self.headers,
+                json=vote_data
+            )
+            
+            return response.status_code == 201
+            
+        except Exception as e:
+            print(f"Error voting on review: {e}")
+            return False
+    
+    def get_review_vote_stats(self, review_id: int, user_id: str = None) -> dict:
+        """
+        Get vote statistics for a review.
+        
+        Args:
+            review_id (int): Review ID
+            user_id (str, optional): User ID to check for existing vote
+            
+        Returns:
+            dict: Vote statistics
+        """
+        try:
+            # Get vote counts
+            response = requests.get(
+                f"{self.base_url}/rest/v1/review_votes",
+                headers={**self.headers, 'Prefer': 'count=exact'},
+                params={'review_id': f'eq.{review_id}', 'select': 'vote_type'}
+            )
+            
+            if response.status_code == 200:
+                votes = response.json()
+                total_votes = len(votes)
+                helpful_votes = len([v for v in votes if v['vote_type'] == 'helpful'])
+                
+                stats = {
+                    'total_votes': total_votes,
+                    'helpful_votes': helpful_votes,
+                    'helpfulness_percentage': (helpful_votes / total_votes * 100) if total_votes > 0 else 0,
+                    'user_vote': None
+                }
+                
+                # Check user's vote if user_id provided
+                if user_id:
+                    user_vote_response = requests.get(
+                        f"{self.base_url}/rest/v1/review_votes",
+                        headers=self.headers,
+                        params={
+                            'review_id': f'eq.{review_id}',
+                            'user_id': f'eq.{user_id}',
+                            'select': 'vote_type'
+                        }
+                    )
+                    if user_vote_response.status_code == 200:
+                        user_votes = user_vote_response.json()
+                        if user_votes:
+                            stats['user_vote'] = user_votes[0]['vote_type']
+                
+                return stats
+            else:
+                return {'total_votes': 0, 'helpful_votes': 0, 'helpfulness_percentage': 0, 'user_vote': None}
+                
+        except Exception as e:
+            print(f"Error getting review vote stats: {e}")
+            return {'total_votes': 0, 'helpful_votes': 0, 'helpfulness_percentage': 0, 'user_vote': None}
+    
+    def report_review(self, review_id: int, reporter_id: str, report_reason: str, additional_context: str = None, anonymous: bool = False) -> bool:
+        """
+        Report a review for moderation.
+        
+        Args:
+            review_id (int): Review ID to report
+            reporter_id (str): User ID reporting (can be None for anonymous)
+            report_reason (str): Reason for report
+            additional_context (str, optional): Additional context
+            anonymous (bool): Whether to report anonymously
+            
+        Returns:
+            bool: True if successful
+        """
+        try:
+            report_data = {
+                'review_id': review_id,
+                'reporter_id': None if anonymous else reporter_id,
+                'report_reason': report_reason,
+                'additional_context': additional_context,
+                'anonymous': anonymous,
+                'status': 'pending'
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/rest/v1/review_reports",
+                headers=self.headers,
+                json=report_data
+            )
+            
+            return response.status_code == 201
+            
+        except Exception as e:
+            print(f"Error reporting review: {e}")
+            return False
+    
+    def update_review(self, review_id: int, user_id: str, review_data: dict) -> Optional[dict]:
+        """
+        Update an existing review (user can only update their own reviews).
+        
+        Args:
+            review_id (int): Review ID to update
+            user_id (str): User ID updating the review
+            review_data (dict): Updated review data
+            
+        Returns:
+            Optional[dict]: Updated review or None if failed
+        """
+        try:
+            # Only allow certain fields to be updated
+            allowed_fields = ['title', 'content', 'overall_rating', 'story_rating', 
+                            'characters_rating', 'art_rating', 'sound_rating', 
+                            'contains_spoilers', 'spoiler_level', 'recommended_for']
+            
+            update_data = {k: v for k, v in review_data.items() if k in allowed_fields}
+            update_data['updated_at'] = 'now()'
+            
+            response = requests.patch(
+                f"{self.base_url}/rest/v1/reviews",
+                headers=self.headers,
+                params={'id': f'eq.{review_id}', 'user_id': f'eq.{user_id}'},
+                json=update_data
+            )
+            
+            if response.status_code in [200, 204]:
+                # Get the updated review
+                get_response = requests.get(
+                    f"{self.base_url}/rest/v1/reviews",
+                    headers=self.headers,
+                    params={
+                        'id': f'eq.{review_id}',
+                        'select': '*,user_profiles!inner(username,display_name,avatar_url)'
+                    }
+                )
+                if get_response.status_code == 200:
+                    reviews = get_response.json()
+                    return reviews[0] if reviews else None
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error updating review: {e}")
+            return None
+    
+    def delete_review(self, review_id: int, user_id: str) -> bool:
+        """
+        Delete a review (soft delete by setting status to 'deleted').
+        
+        Args:
+            review_id (int): Review ID to delete
+            user_id (str): User ID deleting the review
+            
+        Returns:
+            bool: True if successful
+        """
+        try:
+            response = requests.patch(
+                f"{self.base_url}/rest/v1/reviews",
+                headers=self.headers,
+                params={'id': f'eq.{review_id}', 'user_id': f'eq.{user_id}'},
+                json={'status': 'deleted', 'updated_at': 'now()'}
+            )
+            
+            return response.status_code in [200, 204]
+            
+        except Exception as e:
+            print(f"Error deleting review: {e}")
+            return False
+
 # 🆕 AUTHENTICATION DECORATOR - ADD THIS TOO:
 def require_auth(f):
     """
