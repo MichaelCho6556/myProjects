@@ -28,6 +28,7 @@
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { RateLimiter } from "../utils/security";
+import { useCallback, useMemo } from "react";
 
 /**
  * Base URL for API endpoints.
@@ -163,7 +164,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
   const { user } = useAuth();
 
   // Initialize rate limiter with 10 requests per minute limit
-  const rateLimiter = new RateLimiter(10, 60000);
+  const rateLimiter = useMemo(() => new RateLimiter(10, 60000), []);
 
   /**
    * Makes an authenticated HTTP request to the backend API.
@@ -206,7 +207,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * });
    * ```
    */
-  const makeAuthenticatedRequest = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
+  const makeAuthenticatedRequest = useCallback(async (endpoint: string, options: RequestInit = {}): Promise<any> => {
     // Validate user authentication
     if (!user) {
       throw new Error("User not authenticated");
@@ -269,7 +270,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
 
     // Return success indicator for non-JSON responses
     return { success: true };
-  };
+  }, [user, rateLimiter]);
 
   /**
    * Resets rate limiting for the current user.
@@ -289,11 +290,11 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * await performBatchOperations();
    * ```
    */
-  const resetRateLimit = (): void => {
+  const resetRateLimit = useCallback((): void => {
     if (user) {
       rateLimiter.reset(user.id);
     }
-  };
+  }, [user, rateLimiter]);
 
   /**
    * Retrieves the authenticated user's profile data.
@@ -308,7 +309,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * console.log(profile.display_name);
    * ```
    */
-  const getUserProfile = (): Promise<any> => makeAuthenticatedRequest("/api/auth/profile");
+  const getUserProfile = useCallback((): Promise<any> => makeAuthenticatedRequest("/api/auth/profile"), [makeAuthenticatedRequest]);
 
   /**
    * Updates the authenticated user's profile information.
@@ -326,11 +327,11 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * });
    * ```
    */
-  const updateUserProfile = (updates: any): Promise<any> =>
+  const updateUserProfile = useCallback((updates: any): Promise<any> =>
     makeAuthenticatedRequest("/api/auth/profile", {
       method: "PUT",
       body: JSON.stringify(updates),
-    });
+    }), [makeAuthenticatedRequest]);
 
   /**
    * Retrieves the user's anime/manga items, optionally filtered by status.
@@ -349,10 +350,10 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * const watchingItems = await getUserItems("watching");
    * ```
    */
-  const getUserItems = (status?: string): Promise<any> => {
+  const getUserItems = useCallback((status?: string): Promise<any> => {
     const params = status ? `?status=${status}` : "";
     return makeAuthenticatedRequest(`/api/auth/user-items${params}`);
-  };
+  }, [makeAuthenticatedRequest]);
 
   /**
    * Updates the status and progress of a user's anime/manga item.
@@ -372,11 +373,11 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * });
    * ```
    */
-  const updateUserItemStatus = (itemUid: string, data: any): Promise<any> =>
+  const updateUserItemStatus = useCallback((itemUid: string, data: any): Promise<any> =>
     makeAuthenticatedRequest(`/api/auth/user-items/${itemUid}`, {
       method: "POST",
       body: JSON.stringify(data),
-    });
+    }), [makeAuthenticatedRequest]);
 
   /**
    * Removes an item from the user's anime/manga list.
@@ -392,10 +393,10 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * console.log("Item removed from list");
    * ```
    */
-  const removeUserItem = (itemUid: string): Promise<any> =>
+  const removeUserItem = useCallback((itemUid: string): Promise<any> =>
     makeAuthenticatedRequest(`/api/auth/user-items/${itemUid}`, {
       method: "DELETE",
-    });
+    }), [makeAuthenticatedRequest]);
 
   /**
    * Cleans up orphaned user items that reference non-existent anime/manga.
@@ -410,10 +411,10 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * console.log(`Removed ${result.removed_count} orphaned items`);
    * ```
    */
-  const cleanupOrphanedItems = (): Promise<any> =>
+  const cleanupOrphanedItems = useCallback((): Promise<any> =>
     makeAuthenticatedRequest("/api/auth/cleanup-orphaned-items", {
       method: "POST",
-    });
+    }), [makeAuthenticatedRequest]);
 
   /**
    * Forces refresh of user statistics cache.
@@ -428,10 +429,10 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * console.log("Statistics refreshed:", stats);
    * ```
    */
-  const forceRefreshStats = (): Promise<any> =>
+  const forceRefreshStats = useCallback((): Promise<any> =>
     makeAuthenticatedRequest("/api/auth/force-refresh-stats", {
       method: "POST",
-    });
+    }), [makeAuthenticatedRequest]);
 
   /**
    * Retrieves comprehensive dashboard data for the authenticated user.
@@ -450,7 +451,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * console.log(dashboardData.recent_activity);
    * ```
    */
-  const getDashboardData = (): Promise<any> => makeAuthenticatedRequest("/api/auth/dashboard");
+  const getDashboardData = useCallback((): Promise<any> => makeAuthenticatedRequest("/api/auth/dashboard"), [makeAuthenticatedRequest]);
 
   /**
    * Makes a GET request to the specified endpoint.
@@ -460,8 +461,8 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * @param {string} endpoint - API endpoint path
    * @returns {Promise<any>} Promise resolving to response data
    */
-  const get = (endpoint: string): Promise<any> => 
-    makeAuthenticatedRequest(endpoint, { method: "GET" });
+  const get = useCallback((endpoint: string): Promise<any> => 
+    makeAuthenticatedRequest(endpoint, { method: "GET" }), [makeAuthenticatedRequest]);
 
   /**
    * Makes a POST request to the specified endpoint with optional data.
@@ -472,7 +473,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * @param {any} [data] - Data to send in request body
    * @returns {Promise<any>} Promise resolving to response data
    */
-  const post = (endpoint: string, data?: any): Promise<any> => {
+  const post = useCallback((endpoint: string, data?: any): Promise<any> => {
     const options: RequestInit = {
       method: "POST",
     };
@@ -480,7 +481,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
       options.body = JSON.stringify(data);
     }
     return makeAuthenticatedRequest(endpoint, options);
-  };
+  }, [makeAuthenticatedRequest]);
 
   /**
    * Makes a PUT request to the specified endpoint with optional data.
@@ -491,7 +492,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * @param {any} [data] - Data to send in request body
    * @returns {Promise<any>} Promise resolving to response data
    */
-  const put = (endpoint: string, data?: any): Promise<any> => {
+  const put = useCallback((endpoint: string, data?: any): Promise<any> => {
     const options: RequestInit = {
       method: "PUT",
     };
@@ -499,7 +500,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
       options.body = JSON.stringify(data);
     }
     return makeAuthenticatedRequest(endpoint, options);
-  };
+  }, [makeAuthenticatedRequest]);
 
   /**
    * Makes a PATCH request to the specified endpoint with optional data.
@@ -510,7 +511,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * @param {any} [data] - Data to send in request body
    * @returns {Promise<any>} Promise resolving to response data
    */
-  const patch = (endpoint: string, data?: any): Promise<any> => {
+  const patch = useCallback((endpoint: string, data?: any): Promise<any> => {
     const options: RequestInit = {
       method: "PATCH",
     };
@@ -518,7 +519,7 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
       options.body = JSON.stringify(data);
     }
     return makeAuthenticatedRequest(endpoint, options);
-  };
+  }, [makeAuthenticatedRequest]);
 
   /**
    * Makes a DELETE request to the specified endpoint.
@@ -528,10 +529,10 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
    * @param {string} endpoint - API endpoint path
    * @returns {Promise<any>} Promise resolving to response data
    */
-  const deleteMethod = (endpoint: string): Promise<any> =>
-    makeAuthenticatedRequest(endpoint, { method: "DELETE" });
+  const deleteMethod = useCallback((endpoint: string): Promise<any> =>
+    makeAuthenticatedRequest(endpoint, { method: "DELETE" }), [makeAuthenticatedRequest]);
 
-  return {
+  return useMemo(() => ({
     makeAuthenticatedRequest,
     get,
     post,
@@ -547,5 +548,21 @@ export const useAuthenticatedApi = (): UseAuthenticatedApiReturn => {
     forceRefreshStats,
     getDashboardData,
     resetRateLimit,
-  };
+  }), [
+    makeAuthenticatedRequest,
+    get,
+    post,
+    put,
+    patch,
+    deleteMethod,
+    getUserProfile,
+    updateUserProfile,
+    getUserItems,
+    updateUserItemStatus,
+    removeUserItem,
+    cleanupOrphanedItems,
+    forceRefreshStats,
+    getDashboardData,
+    resetRateLimit,
+  ]);
 };

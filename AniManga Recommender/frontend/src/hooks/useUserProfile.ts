@@ -19,21 +19,20 @@ export function useUserProfile(username: string) {
     setError(null);
 
     try {
-      // Fetch profile data
-      const profileResponse = await api.get(`/api/users/${username}/profile`);
-      const rawProfile = profileResponse.data;
+      // Fetch profile data - the API returns the profile data directly
+      const rawProfile = await api.get(`/api/users/${username}/profile`);
 
       // Transform backend response to frontend format
       const transformedProfile: UserProfile = {
-        id: rawProfile.id,
-        username: rawProfile.username,
-        displayName: rawProfile.display_name || rawProfile.username,
-        joinDate: rawProfile.created_at,
-        avatarUrl: rawProfile.avatar_url,
-        bio: rawProfile.bio,
+        id: rawProfile.id || '',
+        username: rawProfile.username || '',
+        displayName: rawProfile.display_name || rawProfile.username || 'Unknown User',
+        joinDate: rawProfile.created_at || new Date().toISOString(),
+        avatarUrl: rawProfile.avatar_url || undefined,
+        bio: rawProfile.bio || undefined,
         isPrivate: false, // Will be determined by privacy settings
-        isCurrentUser: rawProfile.is_self,
-        isFollowing: rawProfile.is_following,
+        isCurrentUser: rawProfile.is_self || false,
+        isFollowing: rawProfile.is_following || false,
         isFollowedBy: false, // Would need additional API call
         followersCount: rawProfile.follower_count || 0,
         followingCount: rawProfile.following_count || 0,
