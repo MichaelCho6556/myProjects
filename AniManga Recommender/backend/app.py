@@ -42,6 +42,7 @@ from datetime import datetime, timedelta
 import json
 import ast
 from typing import Dict, List, Optional, Any
+from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
 
 load_dotenv()
 
@@ -5024,6 +5025,441 @@ def submit_recommendation_feedback():
         traceback.print_exc()
         return jsonify({'error': f'Failed to submit feedback: {str(e)}'}), 500
 
+# ===== SOCIAL FEATURES API ENDPOINTS =====
+
+@app.route('/api/users/<username>/profile', methods=['GET'])
+def get_public_user_profile(username):
+    """
+    Get user profile by username with privacy filtering.
+    
+    This endpoint returns user profile information based on privacy settings
+    and the relationship between the viewer and profile owner.
+    
+    Path Parameters:
+        username (str): Username of the profile to view
+        
+    Query Parameters:
+        None
+        
+    Returns:
+        JSON Response containing:
+            - Profile data filtered by privacy settings
+            - Follow relationship status
+            - Statistics (if visible)
+            
+    HTTP Status Codes:
+        200: Success - Profile retrieved
+        404: Not Found - User not found or profile private
+        500: Server Error - Database error
+        
+    Example:
+        GET /api/users/animelov3r/profile
+    """
+    try:
+        # Get viewer ID from auth if available (optional for public endpoint)
+        viewer_id = None
+        auth_header = request.headers.get('Authorization')
+        if auth_header:
+            try:
+                user_info = auth_client.verify_jwt_token(auth_header)
+                viewer_id = user_info.get('user_id') or user_info.get('sub')
+            except:
+                pass  # Ignore auth errors for public endpoint
+        
+        profile = supabase_client.get_user_profile_by_username(username, viewer_id)
+        
+        if profile:
+            return jsonify(profile)
+        else:
+            return jsonify({'error': 'User not found or profile is private'}), 404
+            
+    except Exception as e:
+        print(f"Error getting user profile: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<username>/stats', methods=['GET'])
+def get_public_user_stats(username):
+    """
+    Get user statistics by username with privacy filtering.
+    
+    Path Parameters:
+        username (str): Username to get stats for
+        
+    Returns:
+        JSON Response containing user statistics
+        
+    HTTP Status Codes:
+        200: Success - Statistics retrieved
+        404: Not Found - User not found or stats private
+        500: Server Error - Database error
+    """
+    try:
+        # Get viewer ID from auth if available
+        viewer_id = None
+        auth_header = request.headers.get('Authorization')
+        if auth_header:
+            try:
+                user_info = auth_client.verify_jwt_token(auth_header)
+                viewer_id = user_info.get('user_id') or user_info.get('sub')
+            except:
+                pass
+        
+        # First get user ID from username
+        profile = supabase_client.get_user_profile_by_username(username, viewer_id)
+        if not profile:
+            return jsonify({'error': 'User not found or profile is private'}), 404
+            
+        user_id = profile['id']
+        stats = supabase_client.get_user_stats(user_id, viewer_id)
+        
+        if stats:
+            return jsonify(stats)
+        else:
+            return jsonify({'error': 'Statistics not available'}), 404
+            
+    except Exception as e:
+        print(f"Error getting user stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/follow/<username>', methods=['POST'])
+@require_auth
+def toggle_follow_user(username):
+    """
+    Follow or unfollow a user by username.
+    
+    Authentication: Required
+    
+    Path Parameters:
+        username (str): Username to follow/unfollow
+        
+    Returns:
+        JSON Response containing:
+            - success: Boolean indicating operation success
+            - is_following: Boolean indicating new follow status
+            - action: 'followed' or 'unfollowed'
+            
+    HTTP Status Codes:
+        200: Success - Follow status toggled
+        400: Bad Request - Cannot follow yourself or user not found
+        401: Unauthorized - Invalid authentication
+        500: Server Error - Database error
+        
+    Example Request:
+        POST /api/auth/follow/animelov3r
+        Authorization: Bearer token
+        
+    Example Response:
+        {
+            "success": true,
+            "is_following": true,
+            "action": "followed"
+        }
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        result = supabase_client.toggle_user_follow(user_id, username)
+        
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        print(f"Error toggling follow: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/privacy-settings', methods=['PUT'])
+@require_auth
+def update_privacy_settings():
+    """
+    Update user privacy settings.
+    
+    Authentication: Required
+    
+    Request Body (JSON):
+        Any combination of privacy settings:
+        - profile_visibility (str): 'public', 'friends_only', 'private'
+        - list_visibility (str): 'public', 'friends_only', 'private'
+        - activity_visibility (str): 'public', 'friends_only', 'private'
+        - show_following (bool): Whether to show following list
+        - show_followers (bool): Whether to show followers list
+        - show_statistics (bool): Whether to show user statistics
+        - allow_friend_requests (bool): Whether to allow friend requests
+        - show_recently_watched (bool): Whether to show recently watched items
+        
+    Returns:
+        JSON Response containing updated privacy settings
+        
+    HTTP Status Codes:
+        200: Success - Settings updated
+        400: Bad Request - Invalid settings or missing user ID
+        401: Unauthorized - Invalid authentication
+        500: Server Error - Database error
+        
+    Example Request:
+        PUT /api/auth/privacy-settings
+        {
+            "profile_visibility": "friends_only",
+            "show_statistics": false
+        }
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        # Validate settings
+        valid_visibility_options = ['public', 'friends_only', 'private']
+        visibility_fields = ['profile_visibility', 'list_visibility', 'activity_visibility']
+        
+        for field in visibility_fields:
+            if field in data and data[field] not in valid_visibility_options:
+                return jsonify({
+                    'error': f'Invalid {field}. Must be one of: {", ".join(valid_visibility_options)}'
+                }), 400
+        
+        result = supabase_client.update_privacy_settings(user_id, data)
+        
+        if result:
+            return jsonify(result)
+        else:
+            return jsonify({'error': 'Failed to update privacy settings'}), 500
+            
+    except Exception as e:
+        print(f"Error updating privacy settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/lists/custom', methods=['POST'])
+@require_auth
+def create_custom_list():
+    """
+    Create a new custom list.
+    
+    Authentication: Required
+    
+    Request Body (JSON):
+        - title (str): List title (required)
+        - description (str, optional): List description
+        - tags (List[str], optional): List of tag names
+        - is_public (bool, optional): Whether list is public (default: true)
+        - is_collaborative (bool, optional): Whether list allows collaboration (default: false)
+        
+    Returns:
+        JSON Response containing created list data
+        
+    HTTP Status Codes:
+        201: Created - List created successfully
+        400: Bad Request - Invalid data or missing title
+        401: Unauthorized - Invalid authentication
+        500: Server Error - Database error
+        
+    Example Request:
+        POST /api/auth/lists/custom
+        {
+            "title": "My Favorite Action Anime",
+            "description": "A curated list of the best action anime series",
+            "tags": ["Action", "Must Watch"],
+            "is_public": true
+        }
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        # Validate required fields
+        if 'title' not in data or not data['title'].strip():
+            return jsonify({'error': 'Title is required'}), 400
+        
+        result = supabase_client.create_custom_list(user_id, data)
+        
+        if result:
+            return jsonify(result), 201
+        else:
+            return jsonify({'error': 'Failed to create custom list'}), 500
+            
+    except Exception as e:
+        print(f"Error creating custom list: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/lists/discover', methods=['GET'])
+def discover_lists():
+    """
+    Discover public custom lists with search and filtering.
+    
+    Query Parameters:
+        - search (str, optional): Search query for list titles/descriptions
+        - tags (str, optional): Comma-separated list of tag names to filter by
+        - sort_by (str, optional): Sort field ('updated_at', 'created_at', 'title')
+        - page (int, optional): Page number for pagination (default: 1)
+        - limit (int, optional): Items per page (default: 20, max: 50)
+        
+    Returns:
+        JSON Response containing:
+            - lists: Array of list objects with user info
+            - total: Total number of lists
+            - page: Current page number
+            - limit: Items per page
+            - has_more: Whether there are more pages
+            
+    HTTP Status Codes:
+        200: Success - Lists retrieved
+        400: Bad Request - Invalid parameters
+        500: Server Error - Database error
+        
+    Example Request:
+        GET /api/lists/discover?search=action&tags=Action,Must Watch&page=1&limit=10
+    """
+    try:
+        # Parse query parameters
+        search = request.args.get('search')
+        tags_param = request.args.get('tags')
+        tags = tags_param.split(',') if tags_param else None
+        sort_by = request.args.get('sort_by', 'updated_at')
+        
+        try:
+            page = int(request.args.get('page', 1))
+            limit = min(int(request.args.get('limit', 20)), 50)  # Max 50 per page
+        except ValueError:
+            return jsonify({'error': 'Page and limit must be integers'}), 400
+        
+        if page < 1:
+            return jsonify({'error': 'Page must be greater than 0'}), 400
+        
+        valid_sort_fields = ['updated_at', 'created_at', 'title']
+        if sort_by not in valid_sort_fields:
+            return jsonify({
+                'error': f'Invalid sort_by. Must be one of: {", ".join(valid_sort_fields)}'
+            }), 400
+        
+        result = supabase_client.discover_lists(search=search, tags=tags, sort_by=sort_by, page=page, limit=limit)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error discovering lists: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/lists/<int:list_id>/reorder', methods=['POST'])
+@require_auth
+def reorder_list_items(list_id):
+    """
+    Reorder items in a custom list with conflict detection.
+    
+    Authentication: Required
+    
+    Path Parameters:
+        list_id (int): ID of the list to reorder
+        
+    Request Body (JSON):
+        - items (List[dict]): Array of objects with item_id and position
+        - last_updated (str, optional): ISO timestamp of when list was last seen by client
+        
+    Returns:
+        JSON Response confirming reorder operation
+        
+    HTTP Status Codes:
+        200: Success - Items reordered
+        400: Bad Request - Invalid data or not list owner
+        401: Unauthorized - Invalid authentication
+        403: Forbidden - Not authorized to modify this list
+        409: Conflict - List has been modified by another user since last_updated
+        500: Server Error - Database error
+        
+    Example Request:
+        POST /api/auth/lists/123/reorder
+        {
+            "items": [
+                {"item_id": 456, "position": 0},
+                {"item_id": 789, "position": 1}
+            ],
+            "last_updated": "2024-01-15T10:30:00Z"
+        }
+        
+    Conflict Detection:
+        When last_updated is provided, the server will check if the list has been
+        modified since that timestamp. If so, a 409 Conflict response is returned
+        with the current list state, allowing the client to handle the conflict.
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        data = request.get_json()
+        if not data or 'items' not in data:
+            return jsonify({'error': 'Items array is required'}), 400
+        
+        items = data['items']
+        if not isinstance(items, list):
+            return jsonify({'error': 'Items must be an array'}), 400
+        
+        # Validate item data
+        for item in items:
+            if not isinstance(item, dict) or 'item_id' not in item or 'position' not in item:
+                return jsonify({'error': 'Each item must have item_id and position'}), 400
+        
+        # Check for conflict if last_updated timestamp is provided
+        last_updated_client = data.get('last_updated')
+        if last_updated_client:
+            try:
+                # Get current list state
+                current_list = supabase_client.get_user_list_details(list_id, user_id)
+                if not current_list:
+                    return jsonify({'error': 'List not found or not authorized'}), 404
+                
+                # Parse timestamps for comparison
+                from datetime import datetime
+                client_timestamp = datetime.fromisoformat(last_updated_client.replace('Z', '+00:00'))
+                server_timestamp = datetime.fromisoformat(current_list['updated_at'].replace('Z', '+00:00'))
+                
+                # Check if list has been modified since client's last update
+                if server_timestamp > client_timestamp:
+                    return jsonify({
+                        'error': 'List has been modified by another user',
+                        'conflict': True,
+                        'current_list': current_list,
+                        'server_updated_at': current_list['updated_at'],
+                        'client_updated_at': last_updated_client,
+                        'message': 'The list has been updated by someone else since you last viewed it. Please refresh and try again.'
+                    }), 409
+                    
+            except ValueError as ve:
+                print(f"Invalid timestamp format: {ve}")
+                return jsonify({'error': 'Invalid last_updated timestamp format. Use ISO 8601 format.'}), 400
+            except Exception as ce:
+                print(f"Conflict check error: {ce}")
+                # Continue with reorder if conflict check fails (graceful degradation)
+                pass
+        
+        success = supabase_client.reorder_list_items(list_id, user_id, items)
+        
+        if success:
+            # Get updated list information to return current timestamp
+            updated_list = supabase_client.get_user_list_details(list_id, user_id)
+            return jsonify({
+                'success': True, 
+                'message': 'List items reordered successfully',
+                'updated_at': updated_list.get('updated_at') if updated_list else datetime.now().isoformat()
+            })
+        else:
+            return jsonify({'error': 'Failed to reorder list items or not authorized'}), 403
+            
+    except Exception as e:
+        print(f"Error reordering list items: {e}")
+        return jsonify({'error': str(e)}), 500
+
 def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
     """
     Invalidate personalized recommendation cache for a specific user.
@@ -5063,6 +5499,2617 @@ def add_user_dismissed_item(user_id: str, item_uid: str):
         _user_dismissed_items[user_id] = set()
     _user_dismissed_items[user_id].add(item_uid)
     print(f"📝 Added {item_uid} to dismissed items for user {user_id}")
+
+@app.route('/api/lists/<int:list_id>/comments', methods=['GET'])
+def get_list_comments(list_id):
+    """
+    Get comments for a specific list.
+    
+    Path Parameters:
+        list_id (int): ID of the list
+        
+    Query Parameters:
+        - page (int, optional): Page number for pagination (default: 1)
+        - limit (int, optional): Items per page (default: 20, max: 50)
+        
+    Returns:
+        JSON Response containing:
+            - comments: Array of comment objects with user info
+            - total: Total number of comments
+            - page: Current page number
+            - limit: Items per page
+            - has_more: Whether there are more pages
+            
+    HTTP Status Codes:
+        200: Success - Comments retrieved
+        400: Bad Request - Invalid parameters
+        404: Not Found - List doesn't exist
+        500: Server Error - Database error
+    """
+    try:
+        # Parse pagination parameters
+        try:
+            page = int(request.args.get('page', 1))
+            limit = min(int(request.args.get('limit', 20)), 50)
+        except ValueError:
+            return jsonify({'error': 'Page and limit must be integers'}), 400
+        
+        if page < 1:
+            return jsonify({'error': 'Page must be greater than 0'}), 400
+        
+        result = supabase_client.get_list_comments(list_id, page=page, limit=limit)
+        
+        if result is None:
+            return jsonify({'error': 'List not found'}), 404
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error getting list comments: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/lists/<int:list_id>/comments', methods=['POST'])
+@require_auth
+def create_list_comment(list_id):
+    """
+    Create a new comment on a list.
+    
+    Authentication: Required
+    
+    Path Parameters:
+        list_id (int): ID of the list to comment on
+        
+    Request Body (JSON):
+        - content (str): Comment content
+        - is_spoiler (bool, optional): Whether comment contains spoilers
+        - parent_comment_id (int, optional): ID of parent comment for replies
+        
+    Returns:
+        JSON Response containing the created comment object
+        
+    HTTP Status Codes:
+        201: Created - Comment created successfully
+        400: Bad Request - Invalid data
+        401: Unauthorized - Invalid authentication
+        404: Not Found - List or parent comment doesn't exist
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        data = request.get_json()
+        if not data or 'content' not in data:
+            return jsonify({'error': 'Content is required'}), 400
+        
+        content = data.get('content', '').strip()
+        if not content:
+            return jsonify({'error': 'Content cannot be empty'}), 400
+        
+        is_spoiler = data.get('is_spoiler', False)
+        parent_comment_id = data.get('parent_comment_id')
+        
+        comment = supabase_client.create_list_comment(
+            list_id=list_id,
+            user_id=user_id,
+            content=content,
+            is_spoiler=is_spoiler,
+            parent_comment_id=parent_comment_id
+        )
+        
+        if comment is None:
+            return jsonify({'error': 'List not found or comment creation failed'}), 404
+        
+        return jsonify(comment), 201
+        
+    except Exception as e:
+        print(f"Error creating list comment: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/search', methods=['GET'])
+def search_users():
+    """
+    Search for users by username or display name.
+    
+    Query Parameters:
+        - q (str): Search query for username or display name
+        - page (int, optional): Page number for pagination (default: 1)
+        - limit (int, optional): Items per page (default: 20, max: 50)
+        
+    Returns:
+        JSON Response containing:
+            - users: Array of user objects
+            - total: Total number of users found
+            - page: Current page number
+            - limit: Items per page
+            - has_more: Whether there are more pages
+            
+    HTTP Status Codes:
+        200: Success - Users retrieved
+        400: Bad Request - Invalid parameters or missing query
+        500: Server Error - Database error
+    """
+    try:
+        query = request.args.get('q', '').strip()
+        if not query:
+            return jsonify({'error': 'Search query is required'}), 400
+        
+        # Parse pagination parameters
+        try:
+            page = int(request.args.get('page', 1))
+            limit = min(int(request.args.get('limit', 20)), 50)
+        except ValueError:
+            return jsonify({'error': 'Page and limit must be integers'}), 400
+        
+        if page < 1:
+            return jsonify({'error': 'Page must be greater than 0'}), 400
+        
+        result = supabase_client.search_users(query, page=page, limit=limit)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error searching users: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/activity-feed', methods=['GET'])
+@require_auth
+def get_activity_feed():
+    """
+    Get activity feed for the authenticated user.
+    
+    Authentication: Required
+    
+    Query Parameters:
+        - page (int, optional): Page number for pagination (default: 1)
+        - limit (int, optional): Items per page (default: 20, max: 50)
+        
+    Returns:
+        JSON Response containing:
+            - activities: Array of activity objects with user and item info
+            - total: Total number of activities
+            - page: Current page number
+            - limit: Items per page
+            - has_more: Whether there are more pages
+            
+    HTTP Status Codes:
+        200: Success - Activity feed retrieved
+        400: Bad Request - Invalid parameters
+        401: Unauthorized - Invalid authentication
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        # Parse pagination parameters
+        try:
+            page = int(request.args.get('page', 1))
+            limit = min(int(request.args.get('limit', 20)), 50)
+        except ValueError:
+            return jsonify({'error': 'Page and limit must be integers'}), 400
+        
+        if page < 1:
+            return jsonify({'error': 'Page must be greater than 0'}), 400
+        
+        result = supabase_client.get_user_activity_feed(user_id, page=page, limit=limit)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error getting activity feed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/lists/popular', methods=['GET'])
+def get_popular_lists():
+    """
+    Get popular lists for the current week.
+    
+    Authentication: Not required (public endpoint)
+    
+    Query Parameters:
+        - page (int, optional): Page number for pagination (default: 1)
+        - limit (int, optional): Items per page (default: 20, max: 50)
+        
+    Returns:
+        JSON Response containing:
+            - lists: Array of popular list objects with popularity metrics
+            - total: Total number of popular lists
+            - page: Current page number
+            - limit: Items per page
+            - has_more: Whether there are more pages
+            - cache_info: Information about data freshness
+            
+    Popular List Object:
+        - id: List unique identifier
+        - title: List title
+        - description: List description
+        - user_profiles: Creator information (username, display_name, avatar_url)
+        - popularity_score: Calculated popularity metric
+        - item_count: Number of items in the list
+        - recent_comments: Comments in the last week
+        - total_activity: Total activity score
+        - created_at: List creation timestamp
+        - updated_at: Last modification timestamp
+            
+    HTTP Status Codes:
+        200: Success - Popular lists retrieved
+        400: Bad Request - Invalid parameters
+        500: Server Error - Database or calculation error
+    """
+    try:
+        # Parse pagination parameters
+        try:
+            page = int(request.args.get('page', 1))
+            limit = min(int(request.args.get('limit', 20)), 50)
+        except ValueError:
+            return jsonify({'error': 'Page and limit must be integers'}), 400
+        
+        if page < 1:
+            return jsonify({'error': 'Page must be greater than 0'}), 400
+        
+        # Try to load from cache first
+        try:
+            import json
+            cache_file = 'popular_lists_cache.json'
+            
+            # Check if cache file exists and is recent
+            import os
+            if os.path.exists(cache_file):
+                cache_stat = os.stat(cache_file)
+                cache_age = datetime.now().timestamp() - cache_stat.st_mtime
+                
+                # Use cache if less than 6 hours old
+                if cache_age < 6 * 3600:  # 6 hours in seconds
+                    with open(cache_file, 'r') as f:
+                        cache_data = json.load(f)
+                    
+                    # Apply pagination to cached data
+                    lists_data = cache_data.get('lists', [])
+                    start_idx = (page - 1) * limit
+                    end_idx = start_idx + limit
+                    paginated_lists = lists_data[start_idx:end_idx]
+                    
+                    return jsonify({
+                        'lists': paginated_lists,
+                        'total': len(lists_data),
+                        'page': page,
+                        'limit': limit,
+                        'has_more': end_idx < len(lists_data),
+                        'cache_info': cache_data.get('cache_info', {}),
+                        'from_cache': True
+                    })
+        except Exception as cache_error:
+            print(f"Cache read error: {cache_error}")
+        
+        # If cache is not available or stale, trigger background calculation
+        try:
+            from tasks.recommendation_tasks import calculate_popular_lists
+            task_result = calculate_popular_lists.delay()
+            print(f"Triggered popular lists calculation task: {task_result.id}")
+        except Exception as task_error:
+            print(f"Failed to trigger background task: {task_error}")
+        
+        # Return empty result with message about background processing
+        return jsonify({
+            'lists': [],
+            'total': 0,
+            'page': page,
+            'limit': limit,
+            'has_more': False,
+            'cache_info': {
+                'generated_at': datetime.now().isoformat(),
+                'status': 'calculating',
+                'message': 'Popular lists are being calculated. Please try again in a few minutes.'
+            },
+            'from_cache': False
+        })
+        
+    except Exception as e:
+        print(f"Error getting popular lists: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/recommended-lists', methods=['GET'])
+@require_auth
+def get_recommended_lists():
+    """
+    Get community-recommended lists for the authenticated user.
+    
+    Authentication: Required
+    
+    Query Parameters:
+        - page (int, optional): Page number for pagination (default: 1)
+        - limit (int, optional): Items per page (default: 20, max: 50)
+        - force_refresh (bool, optional): Force regeneration of recommendations
+        
+    Returns:
+        JSON Response containing:
+            - recommendations: Array of recommended list objects
+            - total: Total number of recommendations
+            - page: Current page number
+            - limit: Items per page
+            - has_more: Whether there are more pages
+            - cache_info: Information about recommendation freshness
+            
+    Recommended List Object:
+        - id: List unique identifier
+        - title: List title
+        - description: List description
+        - user_profiles: Creator information
+        - recommendation_score: How well it matches user preferences
+        - recommendation_reason: Human-readable explanation
+        - created_at: List creation timestamp
+        - updated_at: Last modification timestamp
+            
+    HTTP Status Codes:
+        200: Success - Recommendations retrieved
+        400: Bad Request - Invalid parameters or insufficient user data
+        401: Unauthorized - Invalid authentication
+        500: Server Error - Database or calculation error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        # Parse parameters
+        try:
+            page = int(request.args.get('page', 1))
+            limit = min(int(request.args.get('limit', 20)), 50)
+            force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        except ValueError:
+            return jsonify({'error': 'Page and limit must be integers'}), 400
+        
+        if page < 1:
+            return jsonify({'error': 'Page must be greater than 0'}), 400
+        
+        # Try to load from cache first (unless force refresh requested)
+        if not force_refresh:
+            try:
+                import json
+                cache_file = f'community_recommendations_{user_id}.json'
+                
+                # Check if cache file exists and is recent
+                import os
+                if os.path.exists(cache_file):
+                    cache_stat = os.stat(cache_file)
+                    cache_age = datetime.now().timestamp() - cache_stat.st_mtime
+                    
+                    # Use cache if less than 12 hours old
+                    if cache_age < 12 * 3600:  # 12 hours in seconds
+                        with open(cache_file, 'r') as f:
+                            cache_data = json.load(f)
+                        
+                        # Apply pagination to cached data
+                        recommendations_data = cache_data.get('recommendations', [])
+                        start_idx = (page - 1) * limit
+                        end_idx = start_idx + limit
+                        paginated_recs = recommendations_data[start_idx:end_idx]
+                        
+                        return jsonify({
+                            'recommendations': paginated_recs,
+                            'total': len(recommendations_data),
+                            'page': page,
+                            'limit': limit,
+                            'has_more': end_idx < len(recommendations_data),
+                            'cache_info': cache_data.get('cache_info', {}),
+                            'from_cache': True
+                        })
+            except Exception as cache_error:
+                print(f"Cache read error: {cache_error}")
+        
+        # If cache is not available, stale, or force refresh requested, trigger background calculation
+        try:
+            from tasks.recommendation_tasks import generate_community_recommendations
+            task_result = generate_community_recommendations.delay(user_id)
+            print(f"Triggered community recommendations task for user {user_id}: {task_result.id}")
+        except Exception as task_error:
+            print(f"Failed to trigger background task: {task_error}")
+        
+        # Return empty result with message about background processing
+        return jsonify({
+            'recommendations': [],
+            'total': 0,
+            'page': page,
+            'limit': limit,
+            'has_more': False,
+            'cache_info': {
+                'generated_at': datetime.now().isoformat(),
+                'status': 'calculating',
+                'message': 'Community recommendations are being calculated. Please try again in a few minutes.'
+            },
+            'from_cache': False
+        })
+        
+    except Exception as e:
+        print(f"Error getting recommended lists: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/notifications', methods=['GET'])
+@require_auth
+def get_notifications():
+    """
+    Get notifications for the authenticated user.
+    
+    Authentication: Required
+    
+    Query Parameters:
+        - page (int, optional): Page number for pagination (default: 1)
+        - limit (int, optional): Items per page (default: 20, max: 50)
+        - unread_only (bool, optional): Only return unread notifications (default: false)
+        
+    Returns:
+        JSON Response containing:
+            - notifications: Array of notification objects
+            - total: Total number of notifications
+            - page: Current page number
+            - limit: Items per page
+            - has_more: Whether there are more pages
+            - unread_count: Number of unread notifications
+            
+    Notification Object:
+        - id: Notification unique identifier
+        - type: Notification type (follow, comment, like, etc.)
+        - title: Notification title
+        - message: Notification message
+        - data: Additional notification data
+        - read: Whether notification has been read
+        - created_at: Notification creation timestamp
+            
+    HTTP Status Codes:
+        200: Success - Notifications retrieved
+        400: Bad Request - Invalid parameters
+        401: Unauthorized - Invalid authentication
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        # Parse query parameters
+        try:
+            page = int(request.args.get('page', 1))
+            limit = min(int(request.args.get('limit', 20)), 50)
+            unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+        except ValueError:
+            return jsonify({'error': 'Page and limit must be integers'}), 400
+        
+        if page < 1:
+            return jsonify({'error': 'Page must be greater than 0'}), 400
+        
+        result = auth_client.get_user_notifications(user_id, page=page, limit=limit, unread_only=unread_only)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error getting notifications: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/notifications/<int:notification_id>/read', methods=['PATCH'])
+@require_auth
+def mark_notification_read(notification_id):
+    """
+    Mark a notification as read.
+    
+    Authentication: Required
+    
+    Path Parameters:
+        notification_id (int): ID of the notification to mark as read
+        
+    Returns:
+        JSON Response confirming operation
+        
+    HTTP Status Codes:
+        200: Success - Notification marked as read
+        400: Bad Request - Invalid notification ID
+        401: Unauthorized - Invalid authentication
+        403: Forbidden - Not authorized to modify this notification
+        404: Not Found - Notification not found
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        success = auth_client.mark_notification_read(notification_id, user_id)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Notification marked as read'})
+        else:
+            return jsonify({'error': 'Failed to mark notification as read or not found'}), 404
+            
+    except Exception as e:
+        print(f"Error marking notification as read: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/notifications/read-all', methods=['PATCH'])
+@require_auth
+def mark_all_notifications_read():
+    """
+    Mark all notifications as read for the authenticated user.
+    
+    Authentication: Required
+        
+    Returns:
+        JSON Response confirming operation
+        
+    HTTP Status Codes:
+        200: Success - All notifications marked as read
+        401: Unauthorized - Invalid authentication
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        success = auth_client.mark_all_notifications_read(user_id)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'All notifications marked as read'})
+        else:
+            return jsonify({'error': 'Failed to mark notifications as read'}), 500
+            
+    except Exception as e:
+        print(f"Error marking all notifications as read: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# =============================================================================
+# REVIEW SYSTEM ENDPOINTS - TASK 2.1 PHASE 1
+# =============================================================================
+
+@app.route('/api/reviews', methods=['POST'])
+@require_auth
+def create_review():
+    """
+    Create a new review for an anime/manga item.
+    
+    Authentication: Required
+    
+    Request Body:
+        {
+            "item_uid": "string", // Required: Item UID being reviewed
+            "title": "string", // Required: Review title (5-100 chars)
+            "content": "string", // Required: Review content (50-5000 chars)
+            "overall_rating": 8.5, // Required: Overall rating (1.0-10.0)
+            "story_rating": 9.0, // Optional: Story rating (1.0-10.0)
+            "characters_rating": 8.0, // Optional: Characters rating (1.0-10.0)
+            "art_rating": 7.5, // Optional: Art/Animation rating (1.0-10.0)
+            "sound_rating": 8.0, // Optional: Sound/Music rating (1.0-10.0)
+            "contains_spoilers": false, // Optional: Contains spoiler content
+            "spoiler_level": "minor", // Optional: "minor" or "major"
+            "recommended_for": ["beginners", "genre_fans"] // Optional: Audience tags
+        }
+        
+    Returns:
+        JSON Response containing the created review object
+        
+    HTTP Status Codes:
+        201: Created - Review created successfully
+        400: Bad Request - Invalid data or user already reviewed this item
+        401: Unauthorized - Invalid authentication
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Validate required fields
+        required_fields = ['item_uid', 'title', 'content', 'overall_rating']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Validate field constraints
+        if len(data['title']) < 5 or len(data['title']) > 100:
+            return jsonify({'error': 'Title must be between 5 and 100 characters'}), 400
+        
+        if len(data['content']) < 50 or len(data['content']) > 5000:
+            return jsonify({'error': 'Content must be between 50 and 5000 characters'}), 400
+        
+        if not (1.0 <= data['overall_rating'] <= 10.0):
+            return jsonify({'error': 'Overall rating must be between 1.0 and 10.0'}), 400
+        
+        # Validate aspect ratings if provided
+        aspect_ratings = ['story_rating', 'characters_rating', 'art_rating', 'sound_rating']
+        for rating in aspect_ratings:
+            if rating in data and data[rating] is not None:
+                if not (1.0 <= data[rating] <= 10.0):
+                    return jsonify({'error': f'{rating} must be between 1.0 and 10.0'}), 400
+        
+        # Validate spoiler level if provided
+        if 'spoiler_level' in data and data['spoiler_level'] not in [None, 'minor', 'major']:
+            return jsonify({'error': 'Spoiler level must be "minor" or "major"'}), 400
+        
+        # Create the review
+        review = auth_client.create_review(user_id, data['item_uid'], data)
+        
+        if review:
+            return jsonify(review), 201
+        else:
+            return jsonify({'error': 'Failed to create review. You may have already reviewed this item.'}), 400
+        
+    except Exception as e:
+        print(f"Error creating review: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reviews/<item_uid>', methods=['GET'])
+def get_reviews_for_item(item_uid):
+    """
+    Get all reviews for a specific anime/manga item.
+    
+    Path Parameters:
+        item_uid (string): The UID of the item to get reviews for
+        
+    Query Parameters:
+        page (int, optional): Page number for pagination (default: 1)
+        limit (int, optional): Reviews per page (default: 10, max: 50)
+        sort_by (string, optional): Sort criteria - "helpfulness", "newest", "oldest", "rating" (default: "helpfulness")
+        
+    Returns:
+        JSON Response:
+        {
+            "reviews": [...], // Array of review objects
+            "total": 25, // Total number of reviews
+            "page": 1, // Current page
+            "limit": 10, // Reviews per page
+            "has_more": true // Whether there are more pages
+        }
+        
+    HTTP Status Codes:
+        200: Success - Reviews retrieved
+        400: Bad Request - Invalid parameters
+        500: Server Error - Database error
+    """
+    try:
+        # Get query parameters
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 10, type=int)
+        sort_by = request.args.get('sort_by', 'helpfulness')
+        
+        # Validate parameters
+        if page < 1:
+            return jsonify({'error': 'Page must be greater than 0'}), 400
+        
+        if limit < 1 or limit > 50:
+            return jsonify({'error': 'Limit must be between 1 and 50'}), 400
+        
+        if sort_by not in ['helpfulness', 'newest', 'oldest', 'rating']:
+            return jsonify({'error': 'Invalid sort_by parameter'}), 400
+        
+        # Get reviews
+        result = auth_client.get_reviews_for_item(item_uid, page, limit, sort_by)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error getting reviews: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reviews/<int:review_id>/vote', methods=['POST'])
+@require_auth
+def vote_on_review(review_id):
+    """
+    Vote on a review's helpfulness.
+    
+    Authentication: Required
+    
+    Path Parameters:
+        review_id (int): ID of the review to vote on
+        
+    Request Body:
+        {
+            "vote_type": "helpful", // Required: "helpful" or "not_helpful"
+            "reason": "string" // Optional: Reason for the vote
+        }
+        
+    Returns:
+        JSON Response confirming the vote was recorded
+        
+    HTTP Status Codes:
+        200: Success - Vote recorded/updated
+        400: Bad Request - Invalid vote type or trying to vote on own review
+        401: Unauthorized - Invalid authentication
+        409: Conflict - User already voted (use PUT to update)
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        vote_type = data.get('vote_type')
+        if vote_type not in ['helpful', 'not_helpful']:
+            return jsonify({'error': 'Vote type must be "helpful" or "not_helpful"'}), 400
+        
+        reason = data.get('reason', '')
+        
+        # Vote on the review
+        success = auth_client.vote_on_review(review_id, user_id, vote_type, reason)
+        
+        if success:
+            # Get updated vote stats
+            stats = auth_client.get_review_vote_stats(review_id, user_id)
+            return jsonify({
+                'success': True, 
+                'message': 'Vote recorded successfully',
+                'vote_stats': stats
+            })
+        else:
+            return jsonify({'error': 'Failed to record vote. You may have already voted on this review.'}), 409
+        
+    except Exception as e:
+        print(f"Error voting on review: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reviews/<int:review_id>/votes', methods=['GET'])
+def get_review_vote_stats(review_id):
+    """
+    Get voting statistics for a review.
+    
+    Path Parameters:
+        review_id (int): ID of the review to get stats for
+        
+    Query Parameters:
+        user_id (string, optional): User ID to check for existing vote
+        
+    Returns:
+        JSON Response:
+        {
+            "total_votes": 25,
+            "helpful_votes": 20,
+            "helpfulness_percentage": 80.0,
+            "user_vote": "helpful" // or null if user hasn't voted
+        }
+        
+    HTTP Status Codes:
+        200: Success - Vote stats retrieved
+        500: Server Error - Database error
+    """
+    try:
+        # Get user ID from query params (optional for public stats)
+        user_id = request.args.get('user_id')
+        
+        # Get vote statistics
+        stats = auth_client.get_review_vote_stats(review_id, user_id)
+        
+        return jsonify(stats)
+        
+    except Exception as e:
+        print(f"Error getting review vote stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reviews/<int:review_id>/report', methods=['POST'])
+@require_auth
+def report_review(review_id):
+    """
+    Report a review for moderation.
+    
+    Authentication: Required
+    
+    Path Parameters:
+        review_id (int): ID of the review to report
+        
+    Request Body:
+        {
+            "report_reason": "spam", // Required: "spam", "inappropriate", "spoilers", "harassment", "fake", "other"
+            "additional_context": "string", // Optional: Additional context (max 500 chars)
+            "anonymous": false // Optional: Submit report anonymously
+        }
+        
+    Returns:
+        JSON Response confirming the report was submitted
+        
+    HTTP Status Codes:
+        201: Created - Report submitted successfully
+        400: Bad Request - Invalid report reason or missing required data
+        401: Unauthorized - Invalid authentication
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        report_reason = data.get('report_reason')
+        valid_reasons = ['spam', 'inappropriate', 'spoilers', 'harassment', 'fake', 'other']
+        
+        if not report_reason or report_reason not in valid_reasons:
+            return jsonify({'error': f'Report reason must be one of: {", ".join(valid_reasons)}'}), 400
+        
+        additional_context = data.get('additional_context', '')
+        if len(additional_context) > 500:
+            return jsonify({'error': 'Additional context must be 500 characters or less'}), 400
+        
+        anonymous = data.get('anonymous', False)
+        
+        # Submit the report
+        success = auth_client.report_review(
+            review_id, 
+            user_id, 
+            report_reason, 
+            additional_context, 
+            anonymous
+        )
+        
+        if success:
+            return jsonify({
+                'success': True, 
+                'message': 'Report submitted successfully. Our moderation team will review it.'
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to submit report'}), 500
+        
+    except Exception as e:
+        print(f"Error reporting review: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reviews/<int:review_id>', methods=['PUT'])
+@require_auth
+def update_review(review_id):
+    """
+    Update an existing review (author only).
+    
+    Authentication: Required (must be review author)
+    
+    Path Parameters:
+        review_id (int): ID of the review to update
+        
+    Request Body: Same as create_review (all fields optional)
+        
+    Returns:
+        JSON Response containing the updated review object
+        
+    HTTP Status Codes:
+        200: Success - Review updated
+        400: Bad Request - Invalid data
+        401: Unauthorized - Invalid authentication
+        403: Forbidden - Not the review author
+        404: Not Found - Review not found
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Validate constraints for provided fields
+        if 'title' in data and (len(data['title']) < 5 or len(data['title']) > 100):
+            return jsonify({'error': 'Title must be between 5 and 100 characters'}), 400
+        
+        if 'content' in data and (len(data['content']) < 50 or len(data['content']) > 5000):
+            return jsonify({'error': 'Content must be between 50 and 5000 characters'}), 400
+        
+        if 'overall_rating' in data and not (1.0 <= data['overall_rating'] <= 10.0):
+            return jsonify({'error': 'Overall rating must be between 1.0 and 10.0'}), 400
+        
+        # Update the review
+        updated_review = auth_client.update_review(review_id, user_id, data)
+        
+        if updated_review:
+            return jsonify(updated_review)
+        else:
+            return jsonify({'error': 'Failed to update review. Review not found or you are not the author.'}), 404
+        
+    except Exception as e:
+        print(f"Error updating review: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/reviews/<int:review_id>', methods=['DELETE'])
+@require_auth
+def delete_review(review_id):
+    """
+    Delete a review (author only, soft delete).
+    
+    Authentication: Required (must be review author)
+    
+    Path Parameters:
+        review_id (int): ID of the review to delete
+        
+    Returns:
+        JSON Response confirming deletion
+        
+    HTTP Status Codes:
+        200: Success - Review deleted
+        401: Unauthorized - Invalid authentication
+        403: Forbidden - Not the review author
+        404: Not Found - Review not found
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        # Delete the review
+        success = auth_client.delete_review(review_id, user_id)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Review deleted successfully'})
+        else:
+            return jsonify({'error': 'Failed to delete review. Review not found or you are not the author.'}), 404
+        
+    except Exception as e:
+        print(f"Error deleting review: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# =============================================================================
+# COMMENT SYSTEM API ENDPOINTS
+# =============================================================================
+
+@app.route('/api/comments', methods=['POST'])
+@require_auth
+def create_comment():
+    """
+    Create a new comment.
+    
+    Authentication: Required
+    
+    Request Body:
+        {
+            "parent_type": "string", // Required: 'item', 'list', or 'review'
+            "parent_id": "string", // Required: ID of the parent resource
+            "content": "string", // Required: Comment content (10-2000 chars)
+            "parent_comment_id": "int", // Optional: ID of parent comment for replies
+            "contains_spoilers": "boolean", // Optional: Whether comment contains spoilers
+            "mentions": ["uuid"], // Optional: Array of mentioned user IDs
+        }
+        
+    Returns:
+        201: Comment created successfully
+        400: Validation error
+        401: Authentication required
+        403: Thread depth exceeded or permission denied
+        500: Server error
+    """
+    try:
+        data = request.get_json()
+        user_id = g.user['id']
+        
+        # Validate required fields
+        if not data or not data.get('parent_type') or not data.get('parent_id') or not data.get('content'):
+            return jsonify({'error': 'Missing required fields: parent_type, parent_id, content'}), 400
+        
+        # Validate parent_type
+        valid_parent_types = ['item', 'list', 'review']
+        if data['parent_type'] not in valid_parent_types:
+            return jsonify({'error': f'Invalid parent_type. Must be one of: {valid_parent_types}'}), 400
+        
+        # Validate content length (enforced by database constraint)
+        content = data['content'].strip()
+        if len(content) < 10 or len(content) > 2000:
+            return jsonify({'error': 'Content must be between 10 and 2000 characters'}), 400
+        
+        # Perform automated content analysis
+        analysis_result = analyze_content(content, 'comment')
+        
+        # Check if content should be auto-moderated (blocked immediately)
+        auto_moderate, moderation_details = should_auto_moderate(content, 'comment')
+        if auto_moderate:
+            # Log the blocked content attempt
+            print(f"Auto-moderated comment from user {user_id}: {moderation_details}")
+            return jsonify({
+                'error': 'Your comment violates our community guidelines and cannot be posted.',
+                'details': 'Please review our community standards and try again with appropriate content.'
+            }), 403
+        
+        # Check if content should be auto-flagged for review
+        auto_flag, flag_details = should_auto_flag(content, 'comment')
+        
+        # Calculate thread depth if this is a reply
+        thread_depth = 0
+        parent_comment_id = data.get('parent_comment_id')
+        
+        if parent_comment_id:
+            # Validate parent comment exists and get its depth
+            parent_comment = supabase_client.table('comments').select('thread_depth').eq('id', parent_comment_id).execute()
+            if not parent_comment.data:
+                return jsonify({'error': 'Parent comment not found'}), 404
+            
+            thread_depth = parent_comment.data[0]['thread_depth'] + 1
+            if thread_depth > 2:  # Max depth is 2 (0, 1, 2)
+                return jsonify({'error': 'Maximum thread depth exceeded'}), 403
+        
+        # Create the comment
+        comment_data = {
+            'parent_type': data['parent_type'],
+            'parent_id': data['parent_id'],
+            'parent_comment_id': parent_comment_id,
+            'user_id': user_id,
+            'content': content,
+            'contains_spoilers': data.get('contains_spoilers', False),
+            'mentions': data.get('mentions', []),
+            'thread_depth': thread_depth,
+            'analysis_data': analysis_result.to_dict() if analysis_result else None
+        }
+        
+        result = supabase_client.table('comments').insert(comment_data).execute()
+        
+        if result.data:
+            comment = result.data[0]
+            
+            # Auto-flag content if needed
+            if auto_flag:
+                try:
+                    auto_report_data = {
+                        'comment_id': comment['id'],
+                        'reporter_id': None,  # System-generated report
+                        'report_reason': 'inappropriate',  # Default reason for auto-flagged content
+                        'additional_context': f'Auto-flagged by content analysis. {flag_details.get("reasons", [])}',
+                        'anonymous': True,
+                        'status': 'pending',
+                        'priority': flag_details.get('priority', 'medium'),
+                        'auto_generated': True
+                    }
+                    
+                    supabase_client.table('comment_reports').insert(auto_report_data).execute()
+                    print(f"Auto-flagged comment {comment['id']} for review: {flag_details}")
+                    
+                except Exception as e:
+                    print(f"Error creating auto-report for comment {comment['id']}: {e}")
+                    # Don't fail the comment creation if reporting fails
+            
+            # Get user profile for response
+            user_profile = supabase_client.table('user_profiles').select('username, display_name, avatar_url').eq('id', user_id).execute()
+            
+            if user_profile.data:
+                comment['author'] = user_profile.data[0]
+            
+            # Send notifications for mentions
+            if data.get('mentions'):
+                for mentioned_user_id in data['mentions']:
+                    try:
+                        notification_data = {
+                            'user_id': mentioned_user_id,
+                            'type': 'mention',
+                            'title': 'You were mentioned in a comment',
+                            'message': f'{user_profile.data[0]["username"] if user_profile.data else "Someone"} mentioned you in a comment',
+                            'data': {
+                                'comment_id': comment['id'],
+                                'parent_type': data['parent_type'],
+                                'parent_id': data['parent_id']
+                            }
+                        }
+                        supabase_client.table('notifications').insert(notification_data).execute()
+                    except Exception as e:
+                        print(f"Error sending mention notification: {e}")
+            
+            return jsonify({
+                'message': 'Comment created successfully',
+                'comment': comment
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to create comment'}), 500
+            
+    except Exception as e:
+        print(f"Error creating comment: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/comments/<parent_type>/<parent_id>', methods=['GET'])
+def get_comments(parent_type, parent_id):
+    """
+    Get comments for a specific parent resource.
+    
+    Path Parameters:
+        parent_type (string): Type of parent resource ('item', 'list', 'review')
+        parent_id (string): ID of the parent resource
+        
+    Query Parameters:
+        page (int, optional): Page number for pagination (default: 1)
+        limit (int, optional): Comments per page (default: 20, max: 100)
+        sort (string, optional): Sort order ('newest', 'oldest', 'most_liked') (default: 'newest')
+        
+    Returns:
+        200: Comments retrieved successfully
+        400: Invalid parameters
+        500: Server error
+    """
+    try:
+        # Validate parent_type
+        valid_parent_types = ['item', 'list', 'review']
+        if parent_type not in valid_parent_types:
+            return jsonify({'error': f'Invalid parent_type. Must be one of: {valid_parent_types}'}), 400
+        
+        # Get pagination parameters
+        page = int(request.args.get('page', 1))
+        limit = min(int(request.args.get('limit', 20)), 100)
+        sort_by = request.args.get('sort', 'newest')
+        offset = (page - 1) * limit
+        
+        # Build query based on sort option
+        sort_column = 'created_at'
+        ascending = False
+        
+        if sort_by == 'oldest':
+            ascending = True
+        elif sort_by == 'most_liked':
+            sort_column = 'like_count'
+        
+        # Get top-level comments first
+        query = (supabase_client.table('comments')
+                .select('''
+                    *, 
+                    user_profiles!comments_user_id_fkey(username, display_name, avatar_url)
+                ''')
+                .eq('parent_type', parent_type)
+                .eq('parent_id', parent_id)
+                .eq('deleted', False)
+                .is_('parent_comment_id', 'null')
+                .order(sort_column, desc=not ascending)
+                .range(offset, offset + limit - 1))
+        
+        top_level_comments = query.execute()
+        
+        # For each top-level comment, get a sample of replies
+        comments_with_replies = []
+        for comment in top_level_comments.data or []:
+            # Get replies for this comment (limit to 3 initially)
+            replies_query = (supabase_client.table('comments')
+                           .select('''
+                               *, 
+                               user_profiles!comments_user_id_fkey(username, display_name, avatar_url)
+                           ''')
+                           .eq('parent_comment_id', comment['id'])
+                           .eq('deleted', False)
+                           .order('created_at', desc=False)
+                           .limit(3))
+            
+            replies = replies_query.execute()
+            
+            # Get total reply count
+            reply_count_query = (supabase_client.table('comments')
+                               .select('id', count='exact')
+                               .eq('parent_comment_id', comment['id'])
+                               .eq('deleted', False))
+            
+            reply_count_result = reply_count_query.execute()
+            total_replies = reply_count_result.count or 0
+            
+            comment['replies'] = replies.data or []
+            comment['reply_count'] = total_replies
+            comment['has_more_replies'] = total_replies > len(comment['replies'])
+            
+            comments_with_replies.append(comment)
+        
+        # Get total count for pagination
+        total_count_query = (supabase_client.table('comments')
+                           .select('id', count='exact')
+                           .eq('parent_type', parent_type)
+                           .eq('parent_id', parent_id)
+                           .eq('deleted', False)
+                           .is_('parent_comment_id', 'null'))
+        
+        total_count_result = total_count_query.execute()
+        total_count = total_count_result.count or 0
+        
+        return jsonify({
+            'comments': comments_with_replies,
+            'pagination': {
+                'current_page': page,
+                'per_page': limit,
+                'total_count': total_count,
+                'total_pages': (total_count + limit - 1) // limit,
+                'has_next': page * limit < total_count,
+                'has_prev': page > 1
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error fetching comments: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/comments/<int:comment_id>/replies', methods=['GET'])
+def get_comment_replies(comment_id):
+    """
+    Get all replies for a specific comment.
+    
+    Path Parameters:
+        comment_id (int): ID of the parent comment
+        
+    Query Parameters:
+        page (int, optional): Page number for pagination (default: 1)
+        limit (int, optional): Replies per page (default: 10, max: 50)
+        
+    Returns:
+        200: Replies retrieved successfully
+        404: Parent comment not found
+        500: Server error
+    """
+    try:
+        # Verify parent comment exists
+        parent_comment = supabase_client.table('comments').select('id').eq('id', comment_id).execute()
+        if not parent_comment.data:
+            return jsonify({'error': 'Parent comment not found'}), 404
+        
+        # Get pagination parameters
+        page = int(request.args.get('page', 1))
+        limit = min(int(request.args.get('limit', 10)), 50)
+        offset = (page - 1) * limit
+        
+        # Get replies
+        replies_query = (supabase_client.table('comments')
+                       .select('''
+                           *, 
+                           user_profiles!comments_user_id_fkey(username, display_name, avatar_url)
+                       ''')
+                       .eq('parent_comment_id', comment_id)
+                       .eq('deleted', False)
+                       .order('created_at', desc=False)
+                       .range(offset, offset + limit - 1))
+        
+        replies = replies_query.execute()
+        
+        # Get total count
+        total_count_query = (supabase_client.table('comments')
+                           .select('id', count='exact')
+                           .eq('parent_comment_id', comment_id)
+                           .eq('deleted', False))
+        
+        total_count_result = total_count_query.execute()
+        total_count = total_count_result.count or 0
+        
+        return jsonify({
+            'replies': replies.data or [],
+            'pagination': {
+                'current_page': page,
+                'per_page': limit,
+                'total_count': total_count,
+                'total_pages': (total_count + limit - 1) // limit,
+                'has_next': page * limit < total_count,
+                'has_prev': page > 1
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error fetching comment replies: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/comments/<int:comment_id>/react', methods=['POST'])
+@require_auth
+def react_to_comment(comment_id):
+    """
+    Add or remove a reaction to a comment.
+    
+    Authentication: Required
+    
+    Path Parameters:
+        comment_id (int): ID of the comment to react to
+        
+    Request Body:
+        {
+            "reaction_type": "string" // Required: Type of reaction
+        }
+        
+    Returns:
+        200: Reaction toggled successfully
+        400: Invalid reaction type
+        404: Comment not found
+        500: Server error
+    """
+    try:
+        data = request.get_json()
+        user_id = g.user['id']
+        
+        if not data or not data.get('reaction_type'):
+            return jsonify({'error': 'Missing required field: reaction_type'}), 400
+        
+        reaction_type = data['reaction_type']
+        valid_reactions = ['like', 'dislike', 'thumbs_up', 'thumbs_down', 'laugh', 'surprise', 'sad', 'angry', 'heart', 'thinking']
+        
+        if reaction_type not in valid_reactions:
+            return jsonify({'error': f'Invalid reaction_type. Must be one of: {valid_reactions}'}), 400
+        
+        # Check if comment exists
+        comment = supabase_client.table('comments').select('id, user_id').eq('id', comment_id).execute()
+        if not comment.data:
+            return jsonify({'error': 'Comment not found'}), 404
+        
+        # Prevent self-reactions
+        if comment.data[0]['user_id'] == user_id:
+            return jsonify({'error': 'Cannot react to your own comment'}), 400
+        
+        # Check if user already reacted with this type
+        existing_reaction = (supabase_client.table('comment_reactions')
+                           .select('id')
+                           .eq('comment_id', comment_id)
+                           .eq('user_id', user_id)
+                           .eq('reaction_type', reaction_type)
+                           .execute())
+        
+        if existing_reaction.data:
+            # Remove existing reaction
+            supabase_client.table('comment_reactions').delete().eq('id', existing_reaction.data[0]['id']).execute()
+            action = 'removed'
+        else:
+            # Remove any other reactions from this user on this comment first
+            supabase_client.table('comment_reactions').delete().eq('comment_id', comment_id).eq('user_id', user_id).execute()
+            
+            # Add new reaction
+            reaction_data = {
+                'comment_id': comment_id,
+                'user_id': user_id,
+                'reaction_type': reaction_type
+            }
+            supabase_client.table('comment_reactions').insert(reaction_data).execute()
+            action = 'added'
+        
+        # Update comment reaction counts
+        reactions = supabase_client.table('comment_reactions').select('reaction_type').eq('comment_id', comment_id).execute()
+        
+        like_count = sum(1 for r in reactions.data if r['reaction_type'] in ['like', 'thumbs_up', 'heart'])
+        dislike_count = sum(1 for r in reactions.data if r['reaction_type'] in ['dislike', 'thumbs_down'])
+        total_reactions = len(reactions.data)
+        
+        supabase_client.table('comments').update({
+            'like_count': like_count,
+            'dislike_count': dislike_count,
+            'total_reactions': total_reactions
+        }).eq('id', comment_id).execute()
+        
+        return jsonify({
+            'message': f'Reaction {action}',
+            'reaction_type': reaction_type,
+            'action': action,
+            'like_count': like_count,
+            'dislike_count': dislike_count,
+            'total_reactions': total_reactions
+        }), 200
+        
+    except Exception as e:
+        print(f"Error reacting to comment: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/comments/<int:comment_id>', methods=['PUT'])
+@require_auth
+def update_comment(comment_id):
+    """
+    Update a comment (author only, within time limit).
+    
+    Authentication: Required (must be comment author)
+    
+    Path Parameters:
+        comment_id (int): ID of the comment to update
+        
+    Request Body:
+        {
+            "content": "string" // Required: Updated comment content
+        }
+        
+    Returns:
+        200: Comment updated successfully
+        400: Validation error
+        401: Authentication required
+        403: Permission denied or time limit exceeded
+        404: Comment not found
+        500: Server error
+    """
+    try:
+        data = request.get_json()
+        user_id = g.user['id']
+        
+        if not data or not data.get('content'):
+            return jsonify({'error': 'Missing required field: content'}), 400
+        
+        content = data['content'].strip()
+        if len(content) < 10 or len(content) > 2000:
+            return jsonify({'error': 'Content must be between 10 and 2000 characters'}), 400
+        
+        # Get the comment
+        comment = supabase_client.table('comments').select('*').eq('id', comment_id).execute()
+        if not comment.data:
+            return jsonify({'error': 'Comment not found'}), 404
+        
+        comment_data = comment.data[0]
+        
+        # Check if user is the author
+        if comment_data['user_id'] != user_id:
+            return jsonify({'error': 'Permission denied. You can only edit your own comments.'}), 403
+        
+        # Check if comment is deleted
+        if comment_data['deleted']:
+            return jsonify({'error': 'Cannot edit deleted comment'}), 403
+        
+        # Check time limit (15 minutes)
+        created_at = datetime.fromisoformat(comment_data['created_at'].replace('Z', '+00:00'))
+        time_limit = created_at + timedelta(minutes=15)
+        
+        if datetime.now().astimezone() > time_limit:
+            return jsonify({'error': 'Edit time limit exceeded (15 minutes)'}), 403
+        
+        # Update the comment
+        update_data = {
+            'content': content,
+            'edited': True,
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        result = supabase_client.table('comments').update(update_data).eq('id', comment_id).execute()
+        
+        if result.data:
+            return jsonify({
+                'message': 'Comment updated successfully',
+                'comment': result.data[0]
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to update comment'}), 500
+            
+    except Exception as e:
+        print(f"Error updating comment: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/comments/<int:comment_id>', methods=['DELETE'])
+@require_auth
+def delete_comment(comment_id):
+    """
+    Delete a comment (author only, soft delete).
+    
+    Authentication: Required (must be comment author)
+    
+    Path Parameters:
+        comment_id (int): ID of the comment to delete
+        
+    Returns:
+        200: Comment deleted successfully
+        401: Authentication required
+        403: Permission denied
+        404: Comment not found
+        500: Server error
+    """
+    try:
+        user_id = g.user['id']
+        
+        # Get the comment
+        comment = supabase_client.table('comments').select('user_id, deleted').eq('id', comment_id).execute()
+        if not comment.data:
+            return jsonify({'error': 'Comment not found'}), 404
+        
+        comment_data = comment.data[0]
+        
+        # Check if user is the author
+        if comment_data['user_id'] != user_id:
+            return jsonify({'error': 'Permission denied. You can only delete your own comments.'}), 403
+        
+        # Check if already deleted
+        if comment_data['deleted']:
+            return jsonify({'error': 'Comment is already deleted'}), 400
+        
+        # Soft delete the comment
+        update_data = {
+            'deleted': True,
+            'content': '[Comment deleted]',
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        result = supabase_client.table('comments').update(update_data).eq('id', comment_id).execute()
+        
+        if result.data:
+            return jsonify({'message': 'Comment deleted successfully'}), 200
+        else:
+            return jsonify({'error': 'Failed to delete comment'}), 500
+            
+    except Exception as e:
+        print(f"Error deleting comment: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/comments/<int:comment_id>/report', methods=['POST'])
+@require_auth
+def report_comment(comment_id):
+    """
+    Report a comment for moderation.
+    
+    Authentication: Required
+    
+    Path Parameters:
+        comment_id (int): ID of the comment to report
+        
+    Request Body:
+        {
+            "report_reason": "string", // Required: Reason for reporting
+            "additional_context": "string", // Optional: Additional context
+            "anonymous": "boolean" // Optional: Whether to report anonymously
+        }
+        
+    Returns:
+        201: Comment reported successfully
+        400: Validation error
+        401: Authentication required
+        404: Comment not found
+        500: Server error
+    """
+    try:
+        data = request.get_json()
+        user_id = g.user['id']
+        
+        if not data or not data.get('report_reason'):
+            return jsonify({'error': 'Missing required field: report_reason'}), 400
+        
+        report_reason = data['report_reason']
+        valid_reasons = ['spam', 'harassment', 'inappropriate', 'offensive', 'other']
+        
+        if report_reason not in valid_reasons:
+            return jsonify({'error': f'Invalid report_reason. Must be one of: {valid_reasons}'}), 400
+        
+        # Check if comment exists
+        comment = supabase_client.table('comments').select('id, user_id').eq('id', comment_id).execute()
+        if not comment.data:
+            return jsonify({'error': 'Comment not found'}), 404
+        
+        # Prevent self-reporting
+        if comment.data[0]['user_id'] == user_id:
+            return jsonify({'error': 'Cannot report your own comment'}), 400
+        
+        # Check if user already reported this comment
+        existing_report = (supabase_client.table('comment_reports')
+                         .select('id')
+                         .eq('comment_id', comment_id)
+                         .eq('reporter_id', user_id)
+                         .execute())
+        
+        if existing_report.data:
+            return jsonify({'error': 'You have already reported this comment'}), 400
+        
+        # Create the report
+        report_data = {
+            'comment_id': comment_id,
+            'reporter_id': user_id if not data.get('anonymous', False) else None,
+            'report_reason': report_reason,
+            'additional_context': data.get('additional_context', ''),
+            'anonymous': data.get('anonymous', False)
+        }
+        
+        result = supabase_client.table('comment_reports').insert(report_data).execute()
+        
+        if result.data:
+            return jsonify({
+                'message': 'Comment reported successfully',
+                'report_id': result.data[0]['id']
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to report comment'}), 500
+            
+    except Exception as e:
+        print(f"Error reporting comment: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+def require_moderator(f):
+    """
+    Decorator to require moderator role for accessing endpoint.
+    
+    This decorator extends the basic authentication to include role-based access control.
+    It ensures that only users with moderator or admin privileges can access 
+    moderation endpoints.
+    
+    Returns:
+        403: If user lacks required permissions
+        401: If user is not authenticated
+    """
+    from functools import wraps
+    
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # First check authentication
+        if not hasattr(g, 'user') or not g.user:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        try:
+            # Check user role from user_profiles table
+            user_profile = (supabase_client.table('user_profiles')
+                           .select('role')
+                           .eq('id', g.user['id'])
+                           .execute())
+            
+            if not user_profile.data:
+                return jsonify({'error': 'User profile not found'}), 403
+            
+            user_role = user_profile.data[0].get('role', 'user')
+            
+            # Allow moderators and admins
+            if user_role not in ['moderator', 'admin']:
+                return jsonify({'error': 'Moderator privileges required'}), 403
+            
+            return f(*args, **kwargs)
+            
+        except Exception as e:
+            print(f"Error checking moderator role: {e}")
+            return jsonify({'error': 'Permission check failed'}), 500
+    
+    return decorated_function
+
+# ================================
+# REPUTATION SYSTEM ENDPOINTS
+# ================================
+
+@app.route('/api/users/<user_id>/reputation', methods=['GET'])
+@require_auth
+def get_user_reputation(user_id):
+    """
+    Get reputation information for a specific user.
+    
+    Returns:
+        JSON: User reputation data including score, title, and breakdown
+    """
+    try:
+        # Verify access (users can only view their own reputation or moderators can view any)
+        current_user = g.user
+        is_moderator = False
+        
+        try:
+            user_profile = supabase_client.table('user_profiles').select('role').eq('id', current_user['sub']).execute()
+            if user_profile.data:
+                user_role = user_profile.data[0].get('role', 'user')
+                is_moderator = user_role in ['moderator', 'admin']
+        except:
+            pass
+        
+        if current_user['sub'] != user_id and not is_moderator:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Get user reputation from database
+        reputation_result = supabase_client.table('user_reputation').select('*').eq('user_id', user_id).execute()
+        
+        if not reputation_result.data:
+            # Return default reputation for new users
+            return jsonify({
+                'user_id': user_id,
+                'reputation_score': 0,
+                'reputation_title': 'Newcomer',
+                'total_reviews': 0,
+                'total_comments': 0,
+                'helpful_votes_received': 0,
+                'helpful_votes_given': 0,
+                'warnings_received': 0,
+                'content_removed': 0,
+                'temp_bans': 0,
+                'days_active': 0,
+                'consecutive_days_active': 0,
+                'review_reputation': 0,
+                'comment_reputation': 0,
+                'community_reputation': 0,
+                'moderation_penalty': 0,
+                'last_calculated': None,
+                'created_at': None,
+                'updated_at': None
+            }), 200
+        
+        reputation_data = reputation_result.data[0]
+        
+        return jsonify(reputation_data), 200
+        
+    except Exception as e:
+        print(f"Error getting user reputation: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/reputation/recalculate', methods=['POST'])
+@require_auth
+@require_moderator
+def recalculate_user_reputation(user_id):
+    """
+    Manually trigger reputation recalculation for a specific user.
+    Admin/moderator only endpoint for troubleshooting or manual updates.
+    
+    Returns:
+        JSON: Updated reputation data
+    """
+    try:
+        # Import reputation calculator
+        from jobs.reputationCalculator import ReputationCalculator
+        
+        calculator = ReputationCalculator()
+        
+        # Calculate and update reputation
+        success = calculator.update_user_reputation(user_id)
+        
+        if success:
+            # Return updated reputation data
+            reputation_result = supabase_client.table('user_reputation').select('*').eq('user_id', user_id).execute()
+            
+            if reputation_result.data:
+                return jsonify({
+                    'message': 'Reputation recalculated successfully',
+                    'reputation': reputation_result.data[0]
+                }), 200
+            else:
+                return jsonify({'error': 'Failed to retrieve updated reputation'}), 500
+        else:
+            return jsonify({'error': 'Failed to recalculate reputation'}), 500
+            
+    except Exception as e:
+        print(f"Error recalculating user reputation: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/appeals', methods=['POST'])
+@require_auth
+def create_appeal():
+    """
+    Create a new moderation appeal.
+    
+    Request Body:
+        content_type (str): Type of content ('comment', 'review', 'profile')
+        content_id (int): ID of the content being appealed
+        original_action (str): The moderation action being appealed
+        appeal_reason (str): Reason for the appeal
+        user_statement (str, optional): User's statement about the appeal
+        report_id (int, optional): Associated report ID if available
+    
+    Returns:
+        JSON: Created appeal data
+    """
+    try:
+        current_user = g.user
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['content_type', 'content_id', 'original_action', 'appeal_reason']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Validate content_type
+        valid_content_types = ['comment', 'review', 'profile']
+        if data['content_type'] not in valid_content_types:
+            return jsonify({'error': 'Invalid content_type'}), 400
+        
+        # Create appeal record
+        appeal_data = {
+            'user_id': current_user['sub'],
+            'content_type': data['content_type'],
+            'content_id': data['content_id'],
+            'original_action': data['original_action'],
+            'appeal_reason': data['appeal_reason'],
+            'user_statement': data.get('user_statement', ''),
+            'report_id': data.get('report_id'),
+            'status': 'pending',
+            'priority': 'medium'
+        }
+        
+        result = supabase_client.table('moderation_appeals').insert(appeal_data).execute()
+        
+        if result.data:
+            appeal = result.data[0]
+            
+            # Create notification for moderators about the new appeal
+            try:
+                notification_data = {
+                    'notification_type': 'new_appeal',
+                    'title': 'New Moderation Appeal',
+                    'message': f'User has submitted an appeal for {data["content_type"]} content',
+                    'action_url': f'/moderation/appeals/{appeal["id"]}',
+                    'priority': 'high',
+                    'related_type': 'appeal',
+                    'related_id': appeal['id']
+                }
+                
+                # Get all moderators and admins
+                moderators_result = supabase_client.table('user_profiles').select('id').in_('role', ['moderator', 'admin']).execute()
+                
+                if moderators_result.data:
+                    # Create notifications for all moderators
+                    notifications = []
+                    for moderator in moderators_result.data:
+                        notification = notification_data.copy()
+                        notification['user_id'] = moderator['id']
+                        notifications.append(notification)
+                    
+                    supabase_client.table('user_notifications').insert(notifications).execute()
+                    
+            except Exception as e:
+                print(f"Error creating appeal notifications: {e}")
+            
+            return jsonify({
+                'message': 'Appeal created successfully',
+                'appeal': appeal
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to create appeal'}), 500
+            
+    except Exception as e:
+        print(f"Error creating appeal: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/appeals', methods=['GET'])
+@require_auth
+def get_user_appeals():
+    """
+    Get appeals for the current user or all appeals for moderators.
+    
+    Query Parameters:
+        status (str, optional): Filter by appeal status
+        page (int, optional): Page number for pagination (default: 1)
+        limit (int, optional): Items per page (default: 20)
+    
+    Returns:
+        JSON: List of appeals with pagination info
+    """
+    try:
+        current_user = g.user
+        
+        # Check if user is moderator
+        is_moderator = False
+        try:
+            user_profile = supabase_client.table('user_profiles').select('role').eq('id', current_user['sub']).execute()
+            if user_profile.data:
+                user_role = user_profile.data[0].get('role', 'user')
+                is_moderator = user_role in ['moderator', 'admin']
+        except:
+            pass
+        
+        # Parse query parameters
+        status = request.args.get('status')
+        page = int(request.args.get('page', 1))
+        limit = min(int(request.args.get('limit', 20)), 100)
+        offset = (page - 1) * limit
+        
+        # Build query
+        query = supabase_client.table('moderation_appeals').select('*')
+        
+        if not is_moderator:
+            # Regular users can only see their own appeals
+            query = query.eq('user_id', current_user['sub'])
+        
+        if status:
+            query = query.eq('status', status)
+        
+        # Execute query with pagination
+        result = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+        
+        # Get total count for pagination
+        count_query = supabase_client.table('moderation_appeals').select('id', count='exact')
+        if not is_moderator:
+            count_query = count_query.eq('user_id', current_user['sub'])
+        if status:
+            count_query = count_query.eq('status', status)
+        
+        count_result = count_query.execute()
+        total_count = count_result.count if count_result.count is not None else 0
+        
+        appeals = result.data if result.data else []
+        
+        return jsonify({
+            'appeals': appeals,
+            'pagination': {
+                'current_page': page,
+                'per_page': limit,
+                'total_count': total_count,
+                'total_pages': (total_count + limit - 1) // limit,
+                'has_next': page * limit < total_count,
+                'has_prev': page > 1
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting appeals: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/appeals/<int:appeal_id>', methods=['PUT'])
+@require_auth
+@require_moderator
+def update_appeal(appeal_id):
+    """
+    Update an appeal status (moderator only).
+    
+    Request Body:
+        status (str): New status ('approved', 'rejected', 'escalated')
+        resolution_reason (str, optional): Reason for the resolution
+        resolution_notes (str, optional): Additional notes
+    
+    Returns:
+        JSON: Updated appeal data
+    """
+    try:
+        current_user = g.user
+        data = request.get_json()
+        
+        # Validate status
+        valid_statuses = ['pending', 'approved', 'rejected', 'escalated']
+        if data.get('status') not in valid_statuses:
+            return jsonify({'error': 'Invalid status'}), 400
+        
+        # Prepare update data
+        update_data = {
+            'status': data['status'],
+            'resolved_by': current_user['sub'],
+            'resolution_reason': data.get('resolution_reason', ''),
+            'resolution_notes': data.get('resolution_notes', '')
+        }
+        
+        if data['status'] != 'pending':
+            update_data['resolved_at'] = datetime.now().isoformat()
+        
+        # Update appeal
+        result = supabase_client.table('moderation_appeals').update(update_data).eq('id', appeal_id).execute()
+        
+        if result.data:
+            appeal = result.data[0]
+            
+            # Create notification for the user about appeal resolution
+            try:
+                if appeal.get('user_id'):
+                    notification_data = {
+                        'user_id': appeal['user_id'],
+                        'notification_type': 'appeal_resolved',
+                        'title': f'Appeal {data["status"].title()}',
+                        'message': f'Your appeal has been {data["status"]}.',
+                        'action_url': f'/appeals/{appeal_id}',
+                        'priority': 'high',
+                        'related_type': 'appeal',
+                        'related_id': appeal_id
+                    }
+                    
+                    supabase_client.table('user_notifications').insert(notification_data).execute()
+            except Exception as e:
+                print(f"Error creating appeal resolution notification: {e}")
+            
+            # Log the moderation action
+            try:
+                log_moderation_action(
+                    moderator_id=current_user['sub'],
+                    action_type=f'appeal_{data["status"]}',
+                    target_type='appeal',
+                    target_id=appeal_id,
+                    action_details={
+                        'appeal_id': appeal_id,
+                        'resolution_reason': data.get('resolution_reason', ''),
+                        'original_content_type': appeal.get('content_type'),
+                        'original_content_id': appeal.get('content_id')
+                    }
+                )
+            except Exception as e:
+                print(f"Error logging appeal action: {e}")
+            
+            return jsonify({
+                'message': 'Appeal updated successfully',
+                'appeal': appeal
+            }), 200
+        else:
+            return jsonify({'error': 'Appeal not found'}), 404
+            
+    except Exception as e:
+        print(f"Error updating appeal: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/notifications', methods=['GET'])
+@require_auth
+def get_user_notifications():
+    """
+    Get notifications for the current user.
+    
+    Query Parameters:
+        unread_only (bool): Only return unread notifications
+        page (int): Page number for pagination (default: 1)
+        limit (int): Items per page (default: 20)
+    
+    Returns:
+        JSON: List of notifications with pagination info
+    """
+    try:
+        current_user = g.user
+        
+        # Parse query parameters
+        unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+        page = int(request.args.get('page', 1))
+        limit = min(int(request.args.get('limit', 20)), 100)
+        offset = (page - 1) * limit
+        
+        # Build query
+        query = supabase_client.table('user_notifications').select('*').eq('user_id', current_user['sub'])
+        
+        if unread_only:
+            query = query.eq('is_read', False)
+        
+        # Execute query with pagination
+        result = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+        
+        # Get total count
+        count_query = supabase_client.table('user_notifications').select('id', count='exact').eq('user_id', current_user['sub'])
+        if unread_only:
+            count_query = count_query.eq('is_read', False)
+        
+        count_result = count_query.execute()
+        total_count = count_result.count if count_result.count is not None else 0
+        
+        notifications = result.data if result.data else []
+        
+        return jsonify({
+            'notifications': notifications,
+            'pagination': {
+                'current_page': page,
+                'per_page': limit,
+                'total_count': total_count,
+                'total_pages': (total_count + limit - 1) // limit,
+                'has_next': page * limit < total_count,
+                'has_prev': page > 1
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting notifications: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+
+
+@app.route('/api/users/<user_id>/notification-preferences', methods=['GET'])
+@require_auth
+def get_notification_preferences(user_id):
+    """
+    Get notification preferences for a user.
+    
+    Returns:
+        JSON: User notification preferences
+    """
+    try:
+        current_user = g.user
+        
+        # Users can only access their own preferences
+        if current_user['sub'] != user_id:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Get preferences
+        result = supabase_client.table('user_notification_preferences').select('*').eq('user_id', user_id).execute()
+        
+        if result.data:
+            return jsonify(result.data[0]), 200
+        else:
+            # Return default preferences if none exist
+            default_prefs = {
+                'user_id': user_id,
+                'email_reviews': True,
+                'email_comments': True,
+                'email_mentions': True,
+                'email_appeals': True,
+                'email_moderation': True,
+                'email_system': True,
+                'inapp_reviews': True,
+                'inapp_comments': True,
+                'inapp_mentions': True,
+                'inapp_appeals': True,
+                'inapp_moderation': True,
+                'inapp_system': True,
+                'email_frequency': 'immediate',
+                'digest_day_of_week': 1,
+                'digest_hour': 9
+            }
+            return jsonify(default_prefs), 200
+            
+    except Exception as e:
+        print(f"Error getting notification preferences: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/notification-preferences', methods=['PUT'])
+@require_auth
+def update_notification_preferences(user_id):
+    """
+    Update notification preferences for a user.
+    
+    Returns:
+        JSON: Updated preferences
+    """
+    try:
+        current_user = g.user
+        
+        # Users can only update their own preferences
+        if current_user['sub'] != user_id:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        data = request.get_json()
+        
+        # Add user_id to the data
+        data['user_id'] = user_id
+        
+        # Upsert preferences
+        result = supabase_client.table('user_notification_preferences').upsert(data).execute()
+        
+        if result.data:
+            return jsonify({
+                'message': 'Notification preferences updated successfully',
+                'preferences': result.data[0]
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to update preferences'}), 500
+            
+    except Exception as e:
+        print(f"Error updating notification preferences: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ================================
+# MODERATION ENDPOINTS
+# ================================
+
+@app.route('/api/moderation/reports', methods=['GET'])
+@require_auth
+@require_moderator
+def get_moderation_reports():
+    """
+    Get all pending moderation reports for the moderation dashboard.
+    
+    Query Parameters:
+        status (string, optional): Filter by report status ('pending', 'resolved', 'dismissed')
+        type (string, optional): Filter by report type ('comment', 'review')
+        priority (string, optional): Filter by priority ('low', 'medium', 'high')
+        page (int, optional): Page number for pagination (default: 1)
+        limit (int, optional): Items per page (default: 20, max: 100)
+        sort (string, optional): Sort order ('newest', 'oldest', 'priority')
+        
+    Returns:
+        200: Reports retrieved successfully
+        403: Insufficient permissions
+        500: Server error
+    """
+    try:
+        # Get query parameters
+        status = request.args.get('status', 'pending')
+        report_type = request.args.get('type', None)
+        priority = request.args.get('priority', None)
+        page = max(1, int(request.args.get('page', 1)))
+        limit = min(100, max(1, int(request.args.get('limit', 20))))
+        sort_by = request.args.get('sort', 'newest')
+        
+        # Build query for comment reports
+        comment_reports_query = supabase_client.table('comment_reports')
+        
+        # Apply filters
+        if status != 'all':
+            comment_reports_query = comment_reports_query.eq('status', status)
+        if priority:
+            comment_reports_query = comment_reports_query.eq('priority', priority)
+        
+        # Apply sorting
+        if sort_by == 'newest':
+            comment_reports_query = comment_reports_query.order('created_at', desc=True)
+        elif sort_by == 'oldest':
+            comment_reports_query = comment_reports_query.order('created_at', desc=False)
+        elif sort_by == 'priority':
+            comment_reports_query = comment_reports_query.order('priority', desc=True).order('created_at', desc=True)
+        
+        # Get comment reports with joined data
+        comment_reports = comment_reports_query.execute()
+        
+        # Get review reports (similar pattern)
+        review_reports_query = supabase_client.table('review_reports')
+        
+        if status != 'all':
+            review_reports_query = review_reports_query.eq('status', status)
+        if priority:
+            review_reports_query = review_reports_query.eq('priority', priority)
+        
+        if sort_by == 'newest':
+            review_reports_query = review_reports_query.order('created_at', desc=True)
+        elif sort_by == 'oldest':
+            review_reports_query = review_reports_query.order('created_at', desc=False)
+        elif sort_by == 'priority':
+            review_reports_query = review_reports_query.order('priority', desc=True).order('created_at', desc=True)
+        
+        review_reports = review_reports_query.execute()
+        
+        # Combine and enrich reports
+        all_reports = []
+        
+        # Process comment reports
+        for report in comment_reports.data or []:
+            # Get comment details
+            comment = (supabase_client.table('comments')
+                      .select('id, content, user_id, created_at, parent_type, parent_id')
+                      .eq('id', report['comment_id'])
+                      .execute())
+            
+            if comment.data:
+                comment_data = comment.data[0]
+                
+                # Get comment author info
+                author = (supabase_client.table('user_profiles')
+                         .select('username, display_name, avatar_url')
+                         .eq('id', comment_data['user_id'])
+                         .execute())
+                
+                # Get reporter info (if not anonymous)
+                reporter_info = None
+                if report.get('reporter_id'):
+                    reporter = (supabase_client.table('user_profiles')
+                               .select('username, display_name')
+                               .eq('id', report['reporter_id'])
+                               .execute())
+                    if reporter.data:
+                        reporter_info = reporter.data[0]
+                
+                enriched_report = {
+                    'id': report['id'],
+                    'type': 'comment',
+                    'status': report.get('status', 'pending'),
+                    'priority': report.get('priority', 'medium'),
+                    'report_reason': report['report_reason'],
+                    'additional_context': report.get('additional_context', ''),
+                    'created_at': report['created_at'],
+                    'anonymous': report.get('anonymous', False),
+                    'reporter': reporter_info,
+                    'content': {
+                        'id': comment_data['id'],
+                        'text': comment_data['content'],
+                        'created_at': comment_data['created_at'],
+                        'parent_type': comment_data['parent_type'],
+                        'parent_id': comment_data['parent_id'],
+                        'author': author.data[0] if author.data else None
+                    }
+                }
+                all_reports.append(enriched_report)
+        
+        # Process review reports
+        for report in review_reports.data or []:
+            # Get review details
+            review = (supabase_client.table('user_reviews')
+                     .select('id, title, content, rating, user_id, created_at, item_uid')
+                     .eq('id', report['review_id'])
+                     .execute())
+            
+            if review.data:
+                review_data = review.data[0]
+                
+                # Get review author info
+                author = (supabase_client.table('user_profiles')
+                         .select('username, display_name, avatar_url')
+                         .eq('id', review_data['user_id'])
+                         .execute())
+                
+                # Get reporter info (if not anonymous)
+                reporter_info = None
+                if report.get('reporter_id'):
+                    reporter = (supabase_client.table('user_profiles')
+                               .select('username, display_name')
+                               .eq('id', report['reporter_id'])
+                               .execute())
+                    if reporter.data:
+                        reporter_info = reporter.data[0]
+                
+                enriched_report = {
+                    'id': report['id'],
+                    'type': 'review',
+                    'status': report.get('status', 'pending'),
+                    'priority': report.get('priority', 'medium'),
+                    'report_reason': report['report_reason'],
+                    'additional_context': report.get('additional_context', ''),
+                    'created_at': report['created_at'],
+                    'anonymous': report.get('anonymous', False),
+                    'reporter': reporter_info,
+                    'content': {
+                        'id': review_data['id'],
+                        'title': review_data['title'],
+                        'text': review_data['content'],
+                        'rating': review_data['rating'],
+                        'created_at': review_data['created_at'],
+                        'item_uid': review_data['item_uid'],
+                        'author': author.data[0] if author.data else None
+                    }
+                }
+                all_reports.append(enriched_report)
+        
+        # Filter by type if specified
+        if report_type:
+            all_reports = [r for r in all_reports if r['type'] == report_type]
+        
+        # Sort combined results
+        if sort_by == 'newest':
+            all_reports.sort(key=lambda x: x['created_at'], reverse=True)
+        elif sort_by == 'oldest':
+            all_reports.sort(key=lambda x: x['created_at'])
+        elif sort_by == 'priority':
+            priority_order = {'high': 3, 'medium': 2, 'low': 1}
+            all_reports.sort(key=lambda x: (priority_order.get(x['priority'], 2), x['created_at']), reverse=True)
+        
+        # Apply pagination
+        total_count = len(all_reports)
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_reports = all_reports[start_idx:end_idx]
+        
+        return jsonify({
+            'reports': paginated_reports,
+            'pagination': {
+                'current_page': page,
+                'per_page': limit,
+                'total_count': total_count,
+                'total_pages': (total_count + limit - 1) // limit,
+                'has_next': end_idx < total_count,
+                'has_prev': page > 1
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting moderation reports: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/moderation/reports/<int:report_id>', methods=['PUT'])
+@require_auth
+@require_moderator
+def update_moderation_report(report_id):
+    """
+    Update a moderation report status and log the action.
+    
+    Request Body:
+        status (string): New status ('resolved', 'dismissed', 'pending')
+        resolution_action (string): Action taken ('remove_content', 'warn_user', 'no_action', 'temp_ban')
+        resolution_notes (string, optional): Additional notes about the resolution
+        
+    Returns:
+        200: Report updated successfully
+        400: Invalid request data
+        403: Insufficient permissions
+        404: Report not found
+        500: Server error
+    """
+    try:
+        data = request.get_json()
+        moderator_id = g.user['id']
+        
+        if not data or not data.get('status'):
+            return jsonify({'error': 'Missing required field: status'}), 400
+        
+        status = data['status']
+        resolution_action = data.get('resolution_action', 'no_action')
+        resolution_notes = data.get('resolution_notes', '')
+        
+        valid_statuses = ['pending', 'resolved', 'dismissed']
+        valid_actions = ['remove_content', 'warn_user', 'no_action', 'temp_ban', 'permanent_ban']
+        
+        if status not in valid_statuses:
+            return jsonify({'error': f'Invalid status. Must be one of: {valid_statuses}'}), 400
+            
+        if resolution_action not in valid_actions:
+            return jsonify({'error': f'Invalid resolution_action. Must be one of: {valid_actions}'}), 400
+        
+        # Check if it's a comment report or review report
+        comment_report = (supabase_client.table('comment_reports')
+                         .select('id, comment_id, status')
+                         .eq('id', report_id)
+                         .execute())
+        
+        review_report = (supabase_client.table('review_reports')
+                        .select('id, review_id, status')
+                        .eq('id', report_id)
+                        .execute())
+        
+        if comment_report.data:
+            # Update comment report
+            update_data = {
+                'status': status,
+                'resolution_action': resolution_action,
+                'resolution_notes': resolution_notes,
+                'resolved_by': moderator_id,
+                'resolved_at': datetime.now().isoformat()
+            }
+            
+            result = (supabase_client.table('comment_reports')
+                     .update(update_data)
+                     .eq('id', report_id)
+                     .execute())
+            
+            if not result.data:
+                return jsonify({'error': 'Failed to update report'}), 500
+            
+            # Log the moderation action
+            log_moderation_action(
+                moderator_id=moderator_id,
+                action_type='resolve_report',
+                target_type='comment',
+                target_id=comment_report.data[0]['comment_id'],
+                report_id=report_id,
+                action_details={
+                    'status': status,
+                    'resolution_action': resolution_action,
+                    'resolution_notes': resolution_notes
+                }
+            )
+            
+            # Execute resolution action if needed
+            if resolution_action == 'remove_content':
+                # Soft delete the comment
+                supabase_client.table('comments').update({
+                    'is_deleted': True,
+                    'deleted_reason': 'moderation',
+                    'deleted_at': datetime.now().isoformat(),
+                    'deleted_by': moderator_id
+                }).eq('id', comment_report.data[0]['comment_id']).execute()
+                
+        elif review_report.data:
+            # Update review report
+            update_data = {
+                'status': status,
+                'resolution_action': resolution_action,
+                'resolution_notes': resolution_notes,
+                'resolved_by': moderator_id,
+                'resolved_at': datetime.now().isoformat()
+            }
+            
+            result = (supabase_client.table('review_reports')
+                     .update(update_data)
+                     .eq('id', report_id)
+                     .execute())
+            
+            if not result.data:
+                return jsonify({'error': 'Failed to update report'}), 500
+            
+            # Log the moderation action
+            log_moderation_action(
+                moderator_id=moderator_id,
+                action_type='resolve_report',
+                target_type='review',
+                target_id=review_report.data[0]['review_id'],
+                report_id=report_id,
+                action_details={
+                    'status': status,
+                    'resolution_action': resolution_action,
+                    'resolution_notes': resolution_notes
+                }
+            )
+            
+            # Execute resolution action if needed
+            if resolution_action == 'remove_content':
+                # Soft delete the review
+                supabase_client.table('user_reviews').update({
+                    'is_deleted': True,
+                    'deleted_reason': 'moderation',
+                    'deleted_at': datetime.now().isoformat(),
+                    'deleted_by': moderator_id
+                }).eq('id', review_report.data[0]['review_id']).execute()
+        else:
+            return jsonify({'error': 'Report not found'}), 404
+        
+        return jsonify({
+            'message': 'Report updated successfully',
+            'report_id': report_id,
+            'status': status,
+            'resolution_action': resolution_action
+        }), 200
+        
+    except Exception as e:
+        print(f"Error updating moderation report: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/moderation/audit-log', methods=['GET'])
+@require_auth
+@require_moderator
+def get_moderation_audit_log():
+    """
+    Get moderation audit log for transparency and accountability.
+    
+    Query Parameters:
+        moderator_id (string, optional): Filter by specific moderator
+        action_type (string, optional): Filter by action type
+        target_type (string, optional): Filter by target type ('comment', 'review', 'user')
+        start_date (string, optional): Start date filter (ISO format)
+        end_date (string, optional): End date filter (ISO format)
+        page (int, optional): Page number (default: 1)
+        limit (int, optional): Items per page (default: 50, max: 100)
+        
+    Returns:
+        200: Audit log retrieved successfully
+        403: Insufficient permissions
+        500: Server error
+    """
+    try:
+        # Get query parameters
+        moderator_id = request.args.get('moderator_id')
+        action_type = request.args.get('action_type')
+        target_type = request.args.get('target_type')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        page = max(1, int(request.args.get('page', 1)))
+        limit = min(100, max(1, int(request.args.get('limit', 50))))
+        
+        # Build query
+        query = supabase_client.table('moderation_audit_log').select('*')
+        
+        # Apply filters
+        if moderator_id:
+            query = query.eq('moderator_id', moderator_id)
+        if action_type:
+            query = query.eq('action_type', action_type)
+        if target_type:
+            query = query.eq('target_type', target_type)
+        if start_date:
+            query = query.gte('created_at', start_date)
+        if end_date:
+            query = query.lte('created_at', end_date)
+        
+        # Apply pagination and ordering
+        query = query.order('created_at', desc=True).range((page - 1) * limit, page * limit - 1)
+        
+        result = query.execute()
+        
+        # Enrich with moderator information
+        enriched_logs = []
+        for log_entry in result.data or []:
+            # Get moderator info
+            moderator = (supabase_client.table('user_profiles')
+                        .select('username, display_name')
+                        .eq('id', log_entry['moderator_id'])
+                        .execute())
+            
+            enriched_entry = {
+                **log_entry,
+                'moderator': moderator.data[0] if moderator.data else None
+            }
+            enriched_logs.append(enriched_entry)
+        
+        # Get total count for pagination
+        count_query = supabase_client.table('moderation_audit_log').select('id', count='exact')
+        if moderator_id:
+            count_query = count_query.eq('moderator_id', moderator_id)
+        if action_type:
+            count_query = count_query.eq('action_type', action_type)
+        if target_type:
+            count_query = count_query.eq('target_type', target_type)
+        if start_date:
+            count_query = count_query.gte('created_at', start_date)
+        if end_date:
+            count_query = count_query.lte('created_at', end_date)
+        
+        count_result = count_query.execute()
+        total_count = count_result.count if count_result.count is not None else len(enriched_logs)
+        
+        return jsonify({
+            'audit_log': enriched_logs,
+            'pagination': {
+                'current_page': page,
+                'per_page': limit,
+                'total_count': total_count,
+                'total_pages': (total_count + limit - 1) // limit,
+                'has_next': page * limit < total_count,
+                'has_prev': page > 1
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting moderation audit log: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def log_moderation_action(moderator_id: str, action_type: str, target_type: str, 
+                         target_id: int, report_id: int = None, action_details: dict = None):
+    """
+    Log a moderation action to the audit log for accountability and transparency.
+    
+    Args:
+        moderator_id (str): ID of the moderator performing the action
+        action_type (str): Type of action ('resolve_report', 'remove_content', 'ban_user', etc.)
+        target_type (str): Type of target ('comment', 'review', 'user')
+        target_id (int): ID of the target being acted upon
+        report_id (int, optional): ID of the associated report
+        action_details (dict, optional): Additional details about the action
+    """
+    try:
+        log_data = {
+            'moderator_id': moderator_id,
+            'action_type': action_type,
+            'target_type': target_type,
+            'target_id': target_id,
+            'report_id': report_id,
+            'action_details': action_details or {}
+        }
+        
+        supabase_client.table('moderation_audit_log').insert(log_data).execute()
+        
+    except Exception as e:
+        print(f"Error logging moderation action: {e}")
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
