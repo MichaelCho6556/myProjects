@@ -197,8 +197,18 @@ auth_client: Optional[SupabaseAuthClient] = None
 # Initialize clients
 try:
     supabase_client = SupabaseClient()
-    auth_client = SupabaseAuthClient()
-    print("✅ Supabase clients initialized successfully")
+    
+    # Initialize auth client with required parameters
+    base_url = (os.getenv('SUPABASE_URL') or '').strip().rstrip('/')
+    api_key = (os.getenv('SUPABASE_KEY') or '').strip()
+    service_key = (os.getenv('SUPABASE_SERVICE_KEY') or '').strip()
+    
+    if base_url and api_key and service_key:
+        auth_client = SupabaseAuthClient(base_url, api_key, service_key)
+        print("✅ Supabase clients initialized successfully")
+    else:
+        print("⚠️  Auth client not initialized: missing environment variables")
+        auth_client = None
 except Exception as e:
     print(f"❌ Failed to initialize Supabase clients: {e}")
     supabase_client = None
@@ -5706,8 +5716,28 @@ def search_users():
         200: Success - Users retrieved
         400: Bad Request - Invalid parameters or missing query
         500: Server Error - Database error
+        503: Service Unavailable - Database connection not available
     """
     try:
+        global supabase_client
+        
+        # Check if supabase_client is available and has search_users method
+        if supabase_client is None or not hasattr(supabase_client, 'search_users'):
+            print("Error: supabase_client is not ready or missing 'search_users' — reinitializing...")
+            try:
+                supabase_client = SupabaseClient()
+                print("✅ Supabase client (with search_users) reinitialized successfully")
+            except Exception as init_error:
+                print(f"❌ Failed to reinitialize Supabase client: {init_error}")
+                return jsonify({
+                    'error': 'Database service temporarily unavailable',
+                    'users': [],
+                    'total': 0,
+                    'page': 1,
+                    'limit': 20,
+                    'has_more': False
+                }), 503
+        
         query = request.args.get('q', '').strip()
         if not query:
             return jsonify({'error': 'Search query is required'}), 400
@@ -5728,7 +5758,14 @@ def search_users():
         
     except Exception as e:
         print(f"Error searching users: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'error': 'Failed to search users',
+            'users': [],
+            'total': 0,
+            'page': 1,
+            'limit': 20,
+            'has_more': False
+        }), 500
 
 @app.route('/api/auth/activity-feed', methods=['GET'])
 @require_auth
