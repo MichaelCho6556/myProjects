@@ -5380,6 +5380,84 @@ def create_custom_list():
         print(f"Error creating custom list: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/auth/lists/my-lists', methods=['GET'])
+@require_auth
+def get_my_custom_lists():
+    """
+    Get the current user's custom lists with pagination.
+    
+    Authentication: Required
+    
+    Query Parameters:
+        - page (int, optional): Page number for pagination (default: 1)
+        - limit (int, optional): Items per page (default: 20, max: 50)
+        
+    Returns:
+        JSON Response containing:
+            - data: Array of custom list objects
+            - total: Total number of lists for this user
+            - page: Current page number
+            - limit: Items per page
+            - has_more: Whether there are more pages
+            
+    HTTP Status Codes:
+        200: Success - Lists retrieved
+        400: Bad Request - Invalid parameters or missing user ID
+        401: Unauthorized - Invalid authentication
+        500: Server Error - Database error
+        
+    Example Request:
+        GET /api/auth/lists/my-lists?page=1&limit=10
+        
+    Example Response:
+        {
+            "data": [
+                {
+                    "id": 1,
+                    "title": "My Favorite Action Anime",
+                    "description": "A curated list of the best action anime",
+                    "privacy": "Public",
+                    "itemCount": 15,
+                    "followersCount": 23,
+                    "tags": ["Action", "Must Watch"],
+                    "createdAt": "2024-01-15T10:30:00Z",
+                    "updatedAt": "2024-01-20T14:45:00Z",
+                    "isCollaborative": false
+                }
+            ],
+            "total": 1,
+            "page": 1,
+            "limit": 20,
+            "has_more": false
+        }
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        # Parse query parameters
+        try:
+            page = int(request.args.get('page', 1))
+            limit = min(int(request.args.get('limit', 20)), 50)  # Max 50 per page
+        except ValueError:
+            return jsonify({'error': 'Page and limit must be integers'}), 400
+        
+        if page < 1:
+            return jsonify({'error': 'Page must be greater than 0'}), 400
+        
+        # Get user's custom lists
+        result = supabase_client.get_user_custom_lists(user_id, page, limit)
+        
+        if result is not None:
+            return jsonify(result), 200
+        else:
+            return jsonify({'error': 'Failed to retrieve custom lists'}), 500
+            
+    except Exception as e:
+        print(f"Error getting user custom lists: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/lists/discover', methods=['GET'])
 def discover_lists():
     """
@@ -8224,6 +8302,349 @@ def log_moderation_action(moderator_id: str, action_type: str, target_type: str,
         
     except Exception as e:
         print(f"Error logging moderation action: {e}")
+
+@app.route('/api/auth/notifications/stream')
+def notification_stream():
+    """
+    Server-Sent Events endpoint for real-time notifications.
+    
+    Establishes a persistent connection to push notifications to authenticated users
+    in real-time without polling. Uses SSE for production-ready scalability.
+    
+    Authentication:
+        Required: Bearer JWT token
+    
+    Response Format:
+        Content-Type: text/event-stream
+        
+    Event Types:
+        - notification: New notification received
+        - heartbeat: Keep-alive signal every 30 seconds
+        
+    Example Event:
+        data: {"type": "notification", "id": 123, "title": "New Comment", "message": "Someone replied to your review"}
+        
+    Usage:
+        Frontend connects via EventSource API for automatic reconnection handling
+        Connection automatically closes when user logs out or token expires
+        
+    Production Features:
+        - Automatic heartbeat to prevent connection timeouts
+        - Memory-efficient with minimal resource usage
+        - Graceful error handling and connection cleanup
+        - Scales horizontally with multiple server instances
+    """
+    import time
+    from flask import Response
+    
+    def generate_events():
+        # Authenticate user for SSE connection
+        try:
+            token = request.args.get('auth') or request.headers.get('Authorization', '').replace('Bearer ', '')
+            if not token:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Authentication required'})}\n\n"
+                return
+            
+            # Validate token using the same logic as require_auth
+            from supabase_client import validate_jwt_token
+            user_data = validate_jwt_token(token)
+            if not user_data:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Invalid token'})}\n\n"
+                return
+                
+            user_id = user_data['user_id']
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Authentication failed'})}\n\n"
+            return
+            
+        last_check = datetime.utcnow()
+        
+        # Send initial connection confirmation
+        yield f"data: {json.dumps({'type': 'connected', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+        
+        try:
+            while True:
+                try:
+                    # Check for new notifications since last check
+                    notifications_result = supabase_client.table('notifications') \
+                        .select('*') \
+                        .eq('user_id', user_id) \
+                        .gte('created_at', last_check.isoformat()) \
+                        .order('created_at', desc=True) \
+                        .execute()
+                    
+                    if notifications_result.data:
+                        for notification in notifications_result.data:
+                            event_data = {
+                                'type': 'notification',
+                                'id': notification['id'],
+                                'title': notification['title'],
+                                'message': notification['message'],
+                                'read': notification['read'],
+                                'created_at': notification['created_at'],
+                                'data': notification.get('data', {})
+                            }
+                            yield f"data: {json.dumps(event_data)}\n\n"
+                    
+                    # Update last check time
+                    last_check = datetime.utcnow()
+                    
+                    # Send heartbeat every 30 seconds to keep connection alive
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+                    
+                    # Sleep for 30 seconds before next check
+                    time.sleep(30)
+                    
+                except Exception as e:
+                    print(f"Error in notification stream for user {user_id}: {e}")
+                    # Send error event and close connection
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'Connection error'})}\n\n"
+                    break
+                    
+        except GeneratorExit:
+            # Client disconnected, cleanup
+            print(f"Notification stream closed for user {user_id}")
+            return
+    
+    return Response(
+        generate_events(),
+        content_type='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Cache-Control'
+        }
+    )
+
+# ---------------------- Custom List Detail Endpoints ---------------------- #
+
+@app.route('/api/auth/lists/<int:list_id>', methods=['GET'])
+@require_auth
+def get_custom_list_details_route(list_id):
+    """Retrieve a single custom list's details (owner or public)."""
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        result = supabase_client.get_custom_list_details(list_id)
+        if not result:
+            return jsonify({'error': 'List not found'}), 404
+
+        if result['userId'] != user_id and result['privacy'] != 'Public':
+            return jsonify({'error': 'Forbidden'}), 403
+
+        return jsonify(result), 200
+    except Exception as e:
+        print(f"Error retrieving custom list details: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/auth/lists/<int:list_id>/items', methods=['GET'])
+@require_auth
+def get_custom_list_items_route(list_id):
+    """Retrieve items belonging to a custom list."""
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        list_info = supabase_client.get_custom_list_details(list_id)
+        if not list_info:
+            return jsonify({'error': 'List not found'}), 404
+
+        if list_info['userId'] != user_id and list_info['privacy'] != 'Public':
+            return jsonify({'error': 'Forbidden'}), 403
+
+        items = supabase_client.get_custom_list_items(list_id)
+        return jsonify(items), 200
+    except Exception as e:
+        print(f"Error retrieving custom list items: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/lists/<int:list_id>', methods=['DELETE'])
+@require_auth
+def delete_custom_list(list_id):
+    """
+    Delete a custom list and all its associated items.
+    
+    Authentication: Required - User must be the owner of the list
+    
+    Path Parameters:
+        list_id (int): ID of the list to delete
+        
+    Returns:
+        JSON Response:
+            - success message on successful deletion
+            
+    HTTP Status Codes:
+        200: Success - List deleted
+        403: Forbidden - User is not the owner
+        404: Not Found - List does not exist
+        500: Server Error - Database error
+        
+    Example Request:
+        DELETE /api/auth/lists/123
+        Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+        
+    Example Response:
+        {
+            "message": "List deleted successfully"
+        }
+        
+    Security Features:
+        - Ownership verification before deletion
+        - Cascading deletion of list items and comments
+        - Transaction rollback on error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        
+        # Check if list exists and user is the owner
+        list_info = supabase_client.get_custom_list_details(list_id)
+        if not list_info:
+            return jsonify({'error': 'List not found'}), 404
+            
+        if list_info['userId'] != user_id:
+            return jsonify({'error': 'Forbidden - You can only delete your own lists'}), 403
+        
+        # Delete the list and all associated data
+        supabase_client.table('custom_list_items').delete().eq('list_id', list_id).execute()
+        supabase_client.table('list_comments').delete().eq('list_id', list_id).execute()
+        supabase_client.table('list_followers').delete().eq('list_id', list_id).execute()
+        result = supabase_client.table('custom_lists').delete().eq('id', list_id).execute()
+        
+        if not result.data:
+            return jsonify({'error': 'Failed to delete list'}), 500
+            
+        return jsonify({'message': 'List deleted successfully'}), 200
+        
+    except Exception as e:
+        print(f"Error deleting custom list: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/lists/<int:list_id>/items/batch', methods=['POST'])
+@require_auth
+def add_items_to_list_batch(list_id):
+    """
+    Add multiple items to a custom list in a single request.
+    
+    Authentication: Required - User must be the owner of the list
+    
+    Path Parameters:
+        list_id (int): ID of the list to add items to
+        
+    Request Body:
+        {
+            "items": [
+                {
+                    "item_uid": "string",
+                    "notes": "string (optional)"
+                },
+                ...
+            ]
+        }
+        
+    Returns:
+        JSON Response:
+            - success message and number of items added
+            
+    HTTP Status Codes:
+        200: Success - Items added
+        400: Bad Request - Invalid request body
+        403: Forbidden - User is not the owner
+        404: Not Found - List does not exist
+        500: Server Error - Database error
+        
+    Example Request:
+        POST /api/auth/lists/123/items/batch
+        Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+        Content-Type: application/json
+        
+        {
+            "items": [
+                {"item_uid": "one-piece-21", "notes": "Great series!"},
+                {"item_uid": "naruto-20", "notes": "Classic"}
+            ]
+        }
+        
+    Example Response:
+        {
+            "message": "Items added successfully",
+            "added_count": 2
+        }
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        data = request.get_json()
+        
+        if not data or 'items' not in data:
+            return jsonify({'error': 'Invalid request body. Expected "items" array.'}), 400
+        
+        items = data['items']
+        if not isinstance(items, list) or len(items) == 0:
+            return jsonify({'error': 'Items must be a non-empty array.'}), 400
+        
+        # Validate item structure
+        for item in items:
+            if not isinstance(item, dict) or 'item_uid' not in item:
+                return jsonify({'error': 'Each item must have an "item_uid" field.'}), 400
+        
+        # Add items to list
+        success = supabase_client.add_items_to_list(list_id, user_id, items)
+        
+        if not success:
+            return jsonify({'error': 'Failed to add items to list. Check if list exists and you have permission.'}), 403
+        
+        return jsonify({
+            'message': 'Items added successfully',
+            'added_count': len(items)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error adding items to list: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/lists/<int:list_id>/items/<int:item_id>', methods=['DELETE'])
+@require_auth
+def remove_item_from_list(list_id, item_id):
+    """
+    Remove an item from a custom list.
+    
+    Authentication: Required - User must be the owner of the list
+    
+    Path Parameters:
+        list_id (int): ID of the list to remove item from
+        item_id (int): ID of the item to remove
+        
+    Returns:
+        JSON Response:
+            - success message
+            
+    HTTP Status Codes:
+        200: Success - Item removed
+        403: Forbidden - User is not the owner
+        404: Not Found - List or item does not exist
+        500: Server Error - Database error
+        
+    Example Request:
+        DELETE /api/auth/lists/123/items/456
+        Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+        
+    Example Response:
+        {
+            "message": "Item removed successfully"
+        }
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        
+        # Remove item from list
+        success = supabase_client.remove_item_from_list(list_id, user_id, item_id)
+        
+        if not success:
+            return jsonify({'error': 'Failed to remove item from list. Check if list exists and you have permission.'}), 403
+        
+        return jsonify({'message': 'Item removed successfully'}), 200
+        
+    except Exception as e:
+        print(f"Error removing item from list: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)

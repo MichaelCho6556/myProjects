@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthModal } from "./Auth/AuthModal";
-import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
+import { useRealTimeNotifications } from "../hooks/useRealTimeNotifications";
 import { csrfUtils, sanitizeInput, sanitizeSearchInput } from "../utils/security"; // ✅ NEW: Import security utilities
 import EnhancedSearch from "./EnhancedSearch";
 import "./Navbar.css";
@@ -60,29 +60,25 @@ import "./Navbar.css";
  * @since 1.0.0
  * @author AniManga Recommender Team
  */
-interface Notification {
-  id: number;
-  type: string;
-  title: string;
-  message: string;
-  read: boolean;
-  created_at: string;
-  data?: any;
-}
 
 const Navbar: React.FC = () => {
   const { user, signOut, loading } = useAuth();
-  const api = useAuthenticatedApi();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
 
-  // Notification state
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  // Real-time notifications
+  const {
+    notifications,
+    unreadCount,
+    isConnected,
+    error: notificationError,
+    markAsRead,
+    markAllAsRead,
+    refreshNotifications
+  } = useRealTimeNotifications();
 
   // Note: Search functionality is handled by EnhancedSearch component
 
@@ -106,55 +102,6 @@ const Navbar: React.FC = () => {
     };
   }, [showUserDropdown, showNotifications]);
 
-  // Fetch notifications when user is authenticated
-  useEffect(() => {
-    if (user) {
-      fetchNotifications();
-      // Set up polling for new notifications every 30 seconds
-      const interval = setInterval(fetchNotifications, 30000);
-      return () => clearInterval(interval);
-    }
-    return;
-  }, [user]);
-
-  const fetchNotifications = async () => {
-    if (!user) return;
-
-    try {
-      setNotificationsLoading(true);
-      const response = await api.get("/api/auth/notifications?limit=10");
-      setNotifications(response.notifications || []);
-      setUnreadCount(response.unread_count || 0);
-    } catch (error) {
-      console.error("Failed to fetch notifications:", error);
-    } finally {
-      setNotificationsLoading(false);
-    }
-  };
-
-  const markNotificationAsRead = async (notificationId: number) => {
-    try {
-      await api.patch(`/api/auth/notifications/${notificationId}/read`);
-      // Update local state
-      setNotifications((prev) =>
-        prev.map((notif) => (notif.id === notificationId ? { ...notif, read: true } : notif))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error("Failed to mark notification as read:", error);
-    }
-  };
-
-  const markAllNotificationsAsRead = async () => {
-    try {
-      await api.patch("/api/auth/notifications/read-all");
-      // Update local state
-      setNotifications((prev) => prev.map((notif) => ({ ...notif, read: true })));
-      setUnreadCount(0);
-    } catch (error) {
-      console.error("Failed to mark all notifications as read:", error);
-    }
-  };
 
   const handleSignOut = async () => {
     try {
@@ -232,25 +179,35 @@ const Navbar: React.FC = () => {
                     <div className="notification-dropdown">
                       <div className="notification-header">
                         <h3>Notifications</h3>
-                        {unreadCount > 0 && (
-                          <button onClick={markAllNotificationsAsRead} className="mark-all-read-btn">
-                            Mark all read
-                          </button>
-                        )}
+                        <div className="notification-controls">
+                          <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+                            <div className="status-indicator"></div>
+                            <span>{isConnected ? 'Live' : 'Offline'}</span>
+                          </div>
+                          {unreadCount > 0 && (
+                            <button onClick={markAllAsRead} className="mark-all-read-btn">
+                              Mark all read
+                            </button>
+                          )}
+                        </div>
                       </div>
 
+                      {notificationError && (
+                        <div className="notification-error">
+                          <span>⚠️ {notificationError}</span>
+                          <button onClick={refreshNotifications} className="retry-btn">
+                            Retry
+                          </button>
+                        </div>
+                      )}
+
                       <div className="notification-list">
-                        {notificationsLoading ? (
-                          <div className="notification-loading">
-                            <div className="spinner"></div>
-                            <span>Loading notifications...</span>
-                          </div>
-                        ) : notifications.length > 0 ? (
+                        {notifications.length > 0 ? (
                           notifications.map((notification) => (
                             <div
                               key={notification.id}
                               className={`notification-item ${!notification.read ? "unread" : ""}`}
-                              onClick={() => !notification.read && markNotificationAsRead(notification.id)}
+                              onClick={() => !notification.read && markAsRead(notification.id)}
                             >
                               <div className="notification-content">
                                 <h4 className="notification-title">{notification.title}</h4>
