@@ -38,19 +38,38 @@ export const TagInputComponent: React.FC<TagInputComponentProps> = ({
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-2 mb-2">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
         {tags.map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-xs"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              padding: '0.25rem 0.75rem',
+              background: 'var(--accent-primary)',
+              color: 'white',
+              borderRadius: '20px',
+              fontSize: '0.75rem',
+              fontWeight: '500'
+            }}
           >
             #{tag}
             <button
               onClick={() => handleRemoveTag(tag)}
-              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'white',
+                cursor: 'pointer',
+                padding: '0',
+                marginLeft: '0.25rem',
+                fontSize: '1rem',
+                lineHeight: '1'
+              }}
             >
-              �
+              ×
             </button>
           </span>
         ))}
@@ -63,10 +82,36 @@ export const TagInputComponent: React.FC<TagInputComponentProps> = ({
         onKeyPress={handleKeyPress}
         placeholder={tags.length >= maxTags ? "Maximum tags reached" : placeholder}
         disabled={tags.length >= maxTags}
-        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{
+          width: '100%',
+          padding: '0.75rem',
+          border: '1px solid var(--border-color)',
+          borderRadius: '6px',
+          background: 'var(--bg-overlay)',
+          color: 'var(--text-primary)',
+          fontSize: '0.9rem',
+          outline: 'none',
+          opacity: tags.length >= maxTags ? 0.5 : 1,
+          cursor: tags.length >= maxTags ? 'not-allowed' : 'text'
+        }}
+        onFocus={(e) => {
+          if (tags.length < maxTags) {
+            e.currentTarget.style.borderColor = 'var(--accent-primary)';
+            e.currentTarget.style.boxShadow = '0 0 0 3px rgba(20, 184, 166, 0.1)';
+          }
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = 'var(--border-color)';
+          e.currentTarget.style.boxShadow = 'none';
+        }}
       />
 
-      <p className="text-xs text-gray-500 dark:text-gray-400">
+      <p style={{
+        fontSize: '0.75rem',
+        color: 'var(--text-muted)',
+        margin: 0,
+        lineHeight: '1.4'
+      }}>
         Press Enter or comma to add tags. {tags.length}/{maxTags} tags used.
       </p>
     </div>

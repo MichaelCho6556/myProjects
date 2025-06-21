@@ -1670,78 +1670,332 @@ class SupabaseClient:
                 }
             }
 
-    def get_user_stats(self, user_id: str, viewer_id: str = None) -> dict:
+    def get_user_custom_lists(self, user_id: str, page: int = 1, limit: int = 20) -> dict:
         """
-        Get comprehensive user statistics.
+        Get all custom lists created by a specific user.
         
         Args:
-            user_id (str): User ID to get stats for
-            viewer_id (str, optional): ID of the user viewing the stats
+            user_id (str): The UUID of the user whose lists to retrieve
+            page (int): Page number for pagination (default: 1)
+            limit (int): Items per page (default: 20, max: 50)
             
         Returns:
-            dict: User statistics data
+            dict: User's lists with pagination info containing:
+                - lists: Array of custom list objects
+                - total: Total number of lists for this user
+                - page: Current page number
+                - limit: Items per page
+                - has_more: Whether there are more pages
         """
         try:
-            # Get basic user statistics
-            stats_response = requests.get(
-                f"{self.base_url}/rest/v1/user_statistics",
+            # Validate and limit page size
+            limit = min(limit, 50)
+            offset = (page - 1) * limit
+            
+            # Get user's custom lists with enriched data
+            response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
                 headers=self.headers,
                 params={
                     'user_id': f'eq.{user_id}',
-                    'select': '*'
+                    'select': '''
+                        id, title, description, slug, privacy, is_collaborative,
+                        created_at, updated_at, item_count, followers_count,
+                        list_tag_associations(list_tags(name))
+                    ''',
+                    'order': 'updated_at.desc',
+                    'offset': offset,
+                    'limit': limit
                 }
             )
             
-            if stats_response.status_code != 200:
-                print(f"Error response from user_statistics: {stats_response.status_code} - {stats_response.text}")
-                return {}
+            if response.status_code != 200:
+                print(f"Error fetching user custom lists: {response.status_code} - {response.text}")
+                return {'lists': [], 'total': 0, 'page': page, 'limit': limit, 'has_more': False}
             
-            stats_data = stats_response.json()
-            stats = stats_data[0] if stats_data else {}
+            lists = response.json()
             
-            # Get user items count by status
-            items_response = requests.get(
-                f"{self.base_url}/rest/v1/user_items",
-                headers=self.headers,
+            # Transform the data to match frontend expectations
+            transformed_lists = []
+            for list_item in lists:
+                # Extract tags from the nested structure
+                tags = []
+                if list_item.get('list_tag_associations'):
+                    tags = [assoc['list_tags']['name'] for assoc in list_item['list_tag_associations'] 
+                           if assoc.get('list_tags')]
+                
+                transformed_list = {
+                    'id': list_item['id'],
+                    'title': list_item['title'],
+                    'description': list_item.get('description'),
+                    'privacy': list_item.get('privacy', 'Public'),
+                    'itemCount': list_item.get('item_count', 0),
+                    'followersCount': list_item.get('followers_count', 0),
+                    'tags': tags,
+                    'createdAt': list_item['created_at'],
+                    'updatedAt': list_item['updated_at'],
+                    'isCollaborative': list_item.get('is_collaborative', False)
+                }
+                transformed_lists.append(transformed_list)
+            
+            # Get total count for pagination
+            count_response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers={**self.headers, 'Prefer': 'count=exact'},
                 params={
                     'user_id': f'eq.{user_id}',
-                    'select': 'status'
+                    'select': 'id'
                 }
             )
             
-            items_data = items_response.json() if items_response.status_code == 200 else []
+            total = 0
+            if count_response.status_code == 200:
+                total = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
             
-            # Count by status
-            status_counts = {}
-            for item in items_data:
-                status = item.get('status', 'unknown')
-                status_counts[status] = status_counts.get(status, 0) + 1
-            
-            # Build comprehensive stats
             return {
-                'user_id': user_id,
-                'total_anime_watched': stats.get('total_anime_watched', 0),
-                'total_manga_read': stats.get('total_manga_read', 0),
-                'total_hours_watched': stats.get('total_hours_watched', 0),
-                'total_chapters_read': stats.get('total_chapters_read', 0),
-                'average_score': stats.get('average_score', 0),
-                'completion_rate': stats.get('completion_rate', 0),
-                'current_streak_days': stats.get('current_streak_days', 0),
-                'longest_streak_days': stats.get('longest_streak_days', 0),
-                'favorite_genres': stats.get('favorite_genres', []),
-                'status_counts': {
-                    'watching': status_counts.get('watching', 0),
-                    'completed': status_counts.get('completed', 0),
-                    'plan_to_watch': status_counts.get('plan_to_watch', 0),
-                    'dropped': status_counts.get('dropped', 0),
-                    'on_hold': status_counts.get('on_hold', 0),
-                },
-                'updated_at': stats.get('updated_at', '')
+                'lists': transformed_lists,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'has_more': (page * limit) < total
             }
             
         except Exception as e:
-            print(f"Error getting user stats: {e}")
-            return {}
+            print(f"Error getting user custom lists: {e}")
+            return {'lists': [], 'total': 0, 'page': page, 'limit': limit, 'has_more': False}
+    
+    def create_custom_list(self, user_id: str, list_data: dict) -> dict:
+        """
+        Create a new custom list.
+        
+        Args:
+            user_id (str): User ID creating the list
+            list_data (dict): List data including title, description, tags, etc.
+            
+        Returns:
+            dict: Created list data or None if failed
+        """
+        try:
+            # Generate slug from title
+            import re
+            title = list_data.get('title', '')
+            slug = re.sub(r'[^\w\s-]', '', title.lower())
+            slug = re.sub(r'[-\s]+', '-', slug).strip('-')
+            
+            # Ensure unique slug for user
+            counter = 1
+            original_slug = slug
+            while True:
+                existing_response = requests.get(
+                    f"{self.base_url}/rest/v1/custom_lists",
+                    headers=self.headers,
+                    params={
+                        'user_id': f'eq.{user_id}',
+                        'slug': f'eq.{slug}',
+                        'select': 'slug'
+                    }
+                )
+                
+                if not existing_response.json():
+                    break
+                    
+                slug = f"{original_slug}-{counter}"
+                counter += 1
+            
+            # Create list
+            list_record = {
+                'user_id': user_id,
+                'title': list_data.get('title'),
+                'description': list_data.get('description'),
+                'slug': slug,
+                'is_public': list_data.get('is_public', True),
+                'is_collaborative': list_data.get('is_collaborative', False)
+            }
+            
+            # Create headers with Prefer header to return the created record
+            create_headers = self.headers.copy()
+            create_headers['Prefer'] = 'return=representation'
+            
+            response = requests.post(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=create_headers,
+                json=list_record
+            )
+            
+            if response.status_code != 201:
+                print(f"Failed to create list. Status: {response.status_code}, Response: {response.text}")
+                return None
+                
+            if not response.text.strip():
+                print("Empty response from create list API")
+                return None
+                
+            response_data = response.json()
+            created_list = response_data[0] if isinstance(response_data, list) else response_data
+            list_id = created_list['id']
+            
+            # Handle tags if provided
+            tags = list_data.get('tags', [])
+            if tags:
+                self._handle_list_tags(list_id, tags)
+            
+            return created_list
+            
+        except Exception as e:
+            print(f"Error creating custom list: {e}")
+            return None
+    
+    def _handle_list_tags(self, list_id: int, tags: List[str]):
+        """Helper method to handle list tags."""
+        try:
+            for tag_name in tags:
+                # Get or create tag
+                tag_response = requests.get(
+                    f"{self.base_url}/rest/v1/list_tags",
+                    headers=self.headers,
+                    params={
+                        'name': f'eq.{tag_name}',
+                        'select': 'id'
+                    }
+                )
+                
+                if tag_response.status_code == 200 and tag_response.text.strip():
+                    tag_data = tag_response.json()
+                    if tag_data:
+                        tag_id = tag_data[0]['id']
+                    else:
+                        # Create new tag
+                        create_headers = self.headers.copy()
+                        create_headers['Prefer'] = 'return=representation'
+                        
+                        create_response = requests.post(
+                            f"{self.base_url}/rest/v1/list_tags",
+                            headers=create_headers,
+                            json={'name': tag_name}
+                        )
+                        if create_response.status_code == 201 and create_response.text.strip():
+                            create_data = create_response.json()
+                            if create_data:
+                                tag_id = create_data[0]['id'] if isinstance(create_data, list) else create_data['id']
+                            else:
+                                continue
+                        else:
+                            continue
+                else:
+                    # Create new tag
+                    create_headers = self.headers.copy()
+                    create_headers['Prefer'] = 'return=representation'
+                    
+                    create_response = requests.post(
+                        f"{self.base_url}/rest/v1/list_tags",
+                        headers=create_headers,
+                        json={'name': tag_name}
+                    )
+                    if create_response.status_code == 201 and create_response.text.strip():
+                        create_data = create_response.json()
+                        if create_data:
+                            tag_id = create_data[0]['id'] if isinstance(create_data, list) else create_data['id']
+                        else:
+                            continue
+                    else:
+                        continue
+                
+                # Associate tag with list
+                association_response = requests.post(
+                    f"{self.base_url}/rest/v1/list_tag_associations",
+                    headers=self.headers,
+                    json={
+                        'list_id': list_id,
+                        'tag_id': tag_id
+                    }
+                )
+                # Note: We don't need to check response for associations since it's just a junction table
+                
+        except Exception as e:
+            print(f"Error handling list tags: {e}")
+
+    def get_custom_list_details(self, list_id: int) -> Optional[Dict]:
+        """Retrieve a single custom list with tag information."""
+        try:
+            response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={
+                    'id': f'eq.{list_id}',
+                    'select': '''
+                        id, title, description, is_public, is_collaborative, user_id,
+                        created_at, updated_at, item_count, followers_count,
+                        list_tag_associations(list_tags(name))
+                    ''',
+                    'limit': 1
+                }
+            )
+            if response.status_code != 200 or not response.text.strip():
+                return None
+            data = response.json()
+            raw = data[0] if isinstance(data, list) else data
+            tags = [assoc['list_tags']['name'] for assoc in raw.get('list_tag_associations', []) if assoc.get('list_tags')]
+            return {
+                'id': raw['id'],
+                'title': raw['title'],
+                'description': raw.get('description'),
+                'privacy': 'Public' if raw.get('is_public', True) else 'Private',
+                'itemCount': raw.get('item_count', 0),
+                'followersCount': raw.get('followers_count', 0),
+                'tags': tags,
+                'createdAt': raw.get('created_at'),
+                'updatedAt': raw.get('updated_at'),
+                'userId': raw.get('user_id'),
+                'isCollaborative': raw.get('is_collaborative', False)
+            }
+        except Exception as e:
+            print(f"Error fetching custom list details: {e}")
+            return None
+
+    def get_custom_list_items(self, list_id: int) -> List[Dict]:
+        """Retrieve items for a custom list ordered by position."""
+        try:
+            response = requests.get(
+                f"{self.base_url}/rest/v1/custom_list_items",
+                headers=self.headers,
+                params={
+                    'list_id': f'eq.{list_id}',
+                    'order': 'position.asc'
+                }
+            )
+            if response.status_code != 200 or not response.text.strip():
+                return []
+            items_records = response.json()
+            items = []
+            for rec in items_records:
+                # Fetch item details
+                item_resp = requests.get(
+                    f"{self.base_url}/rest/v1/items",
+                    headers=self.headers,
+                    params={
+                        'id': f'eq.{rec["item_id"]}',
+                        'select': 'uid,title,media_type,image_url'
+                    }
+                )
+                if item_resp.status_code == 200 and item_resp.text.strip():
+                    item_data = item_resp.json()
+                    if item_data:
+                        item_info = item_data[0] if isinstance(item_data, list) else item_data
+                        items.append({
+                            'id': str(rec['item_id']),
+                            'itemUid': item_info['uid'],
+                            'title': item_info['title'],
+                            'mediaType': item_info.get('media_type', ''),
+                            'imageUrl': item_info.get('image_url'),
+                            'order': rec['position'],
+                            'addedAt': rec.get('created_at')
+                        })
+            # Sort items by order just in case
+            items.sort(key=lambda x: x['order'])
+            return items
+        except Exception as e:
+            print(f"Error fetching custom list items: {e}")
+            return []
 
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
@@ -2435,13 +2689,74 @@ class SupabaseAuthClient:
             )
             
             if stats_response.status_code == 200 and stats_response.json():
-                return stats_response.json()[0]
+                stats = stats_response.json()[0]
+            else:
+                # Return default stats for users without statistics yet
+                stats = {}
             
-            return None
+            # Get user items count by status for additional stats
+            items_response = requests.get(
+                f"{self.base_url}/rest/v1/user_items",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': 'status'
+                }
+            )
+            
+            items_data = items_response.json() if items_response.status_code == 200 else []
+            
+            # Count by status
+            status_counts = {}
+            for item in items_data:
+                status = item.get('status', 'unknown')
+                status_counts[status] = status_counts.get(status, 0) + 1
+            
+            # Build comprehensive stats with defaults for new users
+            return {
+                'user_id': user_id,
+                'total_anime_watched': stats.get('total_anime_watched', 0),
+                'total_manga_read': stats.get('total_manga_read', 0),
+                'total_hours_watched': stats.get('total_hours_watched', 0),
+                'total_chapters_read': stats.get('total_chapters_read', 0),
+                'average_score': stats.get('average_score', 0),
+                'completion_rate': stats.get('completion_rate', 0),
+                'current_streak_days': stats.get('current_streak_days', 0),
+                'longest_streak_days': stats.get('longest_streak_days', 0),
+                'favorite_genres': stats.get('favorite_genres', []),
+                'status_counts': {
+                    'watching': status_counts.get('watching', 0),
+                    'completed': status_counts.get('completed', 0),
+                    'plan_to_watch': status_counts.get('plan_to_watch', 0),
+                    'dropped': status_counts.get('dropped', 0),
+                    'on_hold': status_counts.get('on_hold', 0),
+                },
+                'updated_at': stats.get('updated_at', '')
+            }
             
         except Exception as e:
             print(f"Error getting user stats: {e}")
-            return None
+            # Return default stats even on error to prevent 404s
+            return {
+                'user_id': user_id,
+                'total_anime_watched': 0,
+                'total_manga_read': 0,
+                'total_hours_watched': 0,
+                'total_chapters_read': 0,
+                'average_score': 0,
+                'completion_rate': 0,
+                'current_streak_days': 0,
+                'longest_streak_days': 0,
+                'favorite_genres': [],
+                'status_counts': {
+                    'watching': 0,
+                    'completed': 0,
+                    'plan_to_watch': 0,
+                    'dropped': 0,
+                    'on_hold': 0,
+                },
+                'updated_at': ''
+            }
     
     def toggle_user_follow(self, follower_id: str, username: str) -> dict:
         """
@@ -2568,120 +2883,8 @@ class SupabaseAuthClient:
             print(f"Error updating privacy settings: {e}")
             return None
     
-    def create_custom_list(self, user_id: str, list_data: dict) -> dict:
-        """
-        Create a new custom list.
-        
-        Args:
-            user_id (str): User ID creating the list
-            list_data (dict): List data including title, description, tags, etc.
-            
-        Returns:
-            dict: Created list data or None if failed
-        """
-        try:
-            # Generate slug from title
-            import re
-            title = list_data.get('title', '')
-            slug = re.sub(r'[^\w\s-]', '', title.lower())
-            slug = re.sub(r'[-\s]+', '-', slug).strip('-')
-            
-            # Ensure unique slug for user
-            counter = 1
-            original_slug = slug
-            while True:
-                existing_response = requests.get(
-                    f"{self.base_url}/rest/v1/custom_lists",
-                    headers=self.headers,
-                    params={
-                        'user_id': f'eq.{user_id}',
-                        'slug': f'eq.{slug}',
-                        'select': 'slug'
-                    }
-                )
-                
-                if not existing_response.json():
-                    break
-                    
-                slug = f"{original_slug}-{counter}"
-                counter += 1
-            
-            # Create list
-            list_record = {
-                'user_id': user_id,
-                'title': list_data.get('title'),
-                'description': list_data.get('description'),
-                'slug': slug,
-                'is_public': list_data.get('is_public', True),
-                'is_collaborative': list_data.get('is_collaborative', False)
-            }
-            
-            response = requests.post(
-                f"{self.base_url}/rest/v1/custom_lists",
-                headers=self.headers,
-                json=list_record
-            )
-            
-            if response.status_code != 201:
-                return None
-                
-            created_list = response.json()[0]
-            list_id = created_list['id']
-            
-            # Handle tags if provided
-            tags = list_data.get('tags', [])
-            if tags:
-                self._handle_list_tags(list_id, tags)
-            
-            return created_list
-            
-        except Exception as e:
-            print(f"Error creating custom list: {e}")
-            return None
-    
-    def _handle_list_tags(self, list_id: int, tags: List[str]):
-        """Helper method to handle list tags."""
-        try:
-            for tag_name in tags:
-                # Get or create tag
-                tag_response = requests.get(
-                    f"{self.base_url}/rest/v1/list_tags",
-                    headers=self.headers,
-                    params={
-                        'name': f'eq.{tag_name}',
-                        'select': 'id'
-                    }
-                )
-                
-                if tag_response.json():
-                    tag_id = tag_response.json()[0]['id']
-                else:
-                    # Create new tag
-                    create_response = requests.post(
-                        f"{self.base_url}/rest/v1/list_tags",
-                        headers=self.headers,
-                        json={'name': tag_name}
-                    )
-                    if create_response.status_code == 201:
-                        tag_id = create_response.json()[0]['id']
-                    else:
-                        continue
-                
-                # Associate tag with list
-                requests.post(
-                    f"{self.base_url}/rest/v1/list_tag_associations",
-                    headers=self.headers,
-                    json={
-                        'list_id': list_id,
-                        'tag_id': tag_id
-                    }
-                )
-                
-        except Exception as e:
-            print(f"Error handling list tags: {e}")
-    
     def discover_lists(self, search: str = None, tags: List[str] = None, 
-                      sort_by: str = 'updated_at', page: int = 1, limit: int = 20) -> dict:
+                    sort_by: str = 'updated_at', page: int = 1, limit: int = 20) -> dict:
         """
         Discover public custom lists with search and filtering.
         
@@ -2817,6 +3020,155 @@ class SupabaseAuthClient:
             
         except Exception as e:
             print(f"Error reordering list items: {e}")
+            return False
+
+    def add_items_to_list(self, list_id: int, user_id: str, items: List[dict]) -> bool:
+        """
+        Add multiple items to a custom list.
+        
+        Args:
+            list_id (int): List ID
+            user_id (str): User ID (for permission check)
+            items (List[dict]): List of items to add, each containing:
+                - item_uid (str): Item unique identifier
+                - notes (str, optional): Notes for the item
+                
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # First verify user has permission to modify this list
+            list_details = self.get_custom_list_details(list_id)
+            if not list_details or list_details['userId'] != user_id:
+                print(f"User {user_id} does not have permission to modify list {list_id}")
+                return False
+            
+            # Get current items count to determine starting position
+            current_items = self.get_custom_list_items(list_id)
+            next_position = len(current_items)
+            
+            # Prepare items for insertion
+            items_to_insert = []
+            
+            for item in items:
+                item_uid = item.get('item_uid')
+                notes = item.get('notes', '')
+                
+                # Check if item exists in items table
+                item_response = requests.get(
+                    f"{self.base_url}/rest/v1/items",
+                    headers=self.headers,
+                    params={'uid': f'eq.{item_uid}', 'select': 'id,uid'}
+                )
+                
+                if item_response.status_code != 200:
+                    print(f"Failed to verify item {item_uid}")
+                    continue
+                    
+                item_data = item_response.json()
+                if not item_data:
+                    print(f"Item {item_uid} not found")
+                    continue
+                
+                item_id = item_data[0]['id']
+                
+                # Check if item is already in the list
+                existing_check = requests.get(
+                    f"{self.base_url}/rest/v1/custom_list_items",
+                    headers=self.headers,
+                    params={
+                        'list_id': f'eq.{list_id}',
+                        'item_id': f'eq.{item_id}'
+                    }
+                )
+                
+                if existing_check.status_code == 200 and existing_check.json():
+                    print(f"Item {item_uid} already in list {list_id}")
+                    continue
+                
+                items_to_insert.append({
+                    'list_id': list_id,
+                    'item_id': item_id,
+                    'position': next_position,
+                    'notes': notes,
+                    'added_by': user_id
+                })
+                next_position += 1
+            
+            if not items_to_insert:
+                print("No new items to add")
+                return True
+            
+            # Insert all items
+            insert_response = requests.post(
+                f"{self.base_url}/rest/v1/custom_list_items",
+                headers=self.headers,
+                json=items_to_insert
+            )
+            
+            if insert_response.status_code not in [200, 201]:
+                print(f"Failed to insert items: {insert_response.text}")
+                return False
+            
+            # Update list's updated_at timestamp
+            update_response = requests.patch(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={'id': f'eq.{list_id}'},
+                json={'updated_at': 'now()'}
+            )
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error adding items to list: {e}")
+            return False
+    
+    def remove_item_from_list(self, list_id: int, user_id: str, item_id: int) -> bool:
+        """
+        Remove an item from a custom list.
+        
+        Args:
+            list_id (int): List ID
+            user_id (str): User ID (for permission check)
+            item_id (int): Item ID to remove
+                
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # First verify user has permission to modify this list
+            list_details = self.get_custom_list_details(list_id)
+            if not list_details or list_details['userId'] != user_id:
+                print(f"User {user_id} does not have permission to modify list {list_id}")
+                return False
+            
+            # Remove the item
+            delete_response = requests.delete(
+                f"{self.base_url}/rest/v1/custom_list_items",
+                headers=self.headers,
+                params={
+                    'list_id': f'eq.{list_id}',
+                    'item_id': f'eq.{item_id}'
+                }
+            )
+            
+            if delete_response.status_code not in [200, 204]:
+                print(f"Failed to remove item: {delete_response.text}")
+                return False
+            
+            # Update list's updated_at timestamp
+            update_response = requests.patch(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={'id': f'eq.{list_id}'},
+                json={'updated_at': 'now()'}
+            )
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error removing item from list: {e}")
             return False
 
     def get_list_comments(self, list_id: int, page: int = 1, limit: int = 20) -> dict:
