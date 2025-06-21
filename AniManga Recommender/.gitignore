@@ -53,5 +53,6 @@ apm_artifacts/
 .cursor/rules/
 
 CLAUDE.md
+clauderules.md
 
 .env
