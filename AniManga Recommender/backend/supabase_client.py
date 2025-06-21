@@ -1543,6 +1543,206 @@ class SupabaseClient:
             print(f"⚠️  Error upserting {table}: {e}")
             return None
 
+    def search_users(self, query: str, page: int = 1, limit: int = 20) -> dict:
+        """
+        Search for users by username or display name.
+        
+        Args:
+            query (str): Search query
+            page (int): Page number
+            limit (int): Items per page
+            
+        Returns:
+            dict: Search results with pagination info
+        """
+        try:
+            # Calculate offset
+            offset = (page - 1) * limit
+            
+            # Search users by username or display name
+            users_response = requests.get(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers=self.headers,
+                params={
+                    'or': f'(username.ilike.*{query}*,display_name.ilike.*{query}*)',
+                    'select': 'id,username,display_name,bio,avatar_url,created_at',
+                    'order': 'username.asc',
+                    'offset': offset,
+                    'limit': limit
+                }
+            )
+            
+            if users_response.status_code != 200:
+                print(f"Error response from user_profiles: {users_response.status_code} - {users_response.text}")
+                return {
+                    'users': [],
+                    'pagination': {
+                        'page': page,
+                        'limit': limit,
+                        'total': 0,
+                        'hasNext': False,
+                        'hasPrev': False
+                    }
+                }
+            
+            users_data = users_response.json()
+            if not isinstance(users_data, list):
+                print(f"Unexpected response format: {users_data}")
+                return {
+                    'users': [],
+                    'pagination': {
+                        'page': page,
+                        'limit': limit,
+                        'total': 0,
+                        'hasNext': False,
+                        'hasPrev': False
+                    }
+                }
+            
+            users = users_data
+            
+            # Get additional data for each user
+            for user in users:
+                # Get follower count
+                followers_response = requests.get(
+                    f"{self.base_url}/rest/v1/user_follows",
+                    headers={**self.headers, 'Prefer': 'count=exact'},
+                    params={
+                        'following_id': f'eq.{user["id"]}',
+                        'select': 'id'
+                    }
+                )
+                
+                # Get user statistics
+                stats_response = requests.get(
+                    f"{self.base_url}/rest/v1/user_statistics",
+                    headers=self.headers,
+                    params={
+                        'user_id': f'eq.{user["id"]}',
+                        'select': 'total_anime_watched,total_manga_read'
+                    }
+                )
+                
+                stats_data = stats_response.json()
+                stats = stats_data[0] if stats_data else {}
+                
+                user['followersCount'] = int(followers_response.headers.get('Content-Range', '0').split('/')[-1])
+                user['completedAnime'] = stats.get('total_anime_watched', 0)
+                user['completedManga'] = stats.get('total_manga_read', 0)
+                user['avatarUrl'] = user.get('avatar_url')
+                user['displayName'] = user.get('display_name') or user.get('username')
+                user['isPrivate'] = False  # Default to false for now
+                user['joinDate'] = user.get('created_at', '')
+            
+            # Get total count
+            count_response = requests.get(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers={**self.headers, 'Prefer': 'count=exact'},
+                params={
+                    'or': f'(username.ilike.*{query}*,display_name.ilike.*{query}*)',
+                    'select': 'id'
+                }
+            )
+            
+            total = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
+            
+            return {
+                'users': users,
+                'pagination': {
+                    'page': page,
+                    'limit': limit,
+                    'total': total,
+                    'hasNext': offset + limit < total,
+                    'hasPrev': page > 1
+                }
+            }
+            
+        except Exception as e:
+            print(f"Error searching users: {e}")
+            return {
+                'users': [],
+                'pagination': {
+                    'page': page,
+                    'limit': limit,
+                    'total': 0,
+                    'hasNext': False,
+                    'hasPrev': False
+                }
+            }
+
+    def get_user_stats(self, user_id: str, viewer_id: str = None) -> dict:
+        """
+        Get comprehensive user statistics.
+        
+        Args:
+            user_id (str): User ID to get stats for
+            viewer_id (str, optional): ID of the user viewing the stats
+            
+        Returns:
+            dict: User statistics data
+        """
+        try:
+            # Get basic user statistics
+            stats_response = requests.get(
+                f"{self.base_url}/rest/v1/user_statistics",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': '*'
+                }
+            )
+            
+            if stats_response.status_code != 200:
+                print(f"Error response from user_statistics: {stats_response.status_code} - {stats_response.text}")
+                return {}
+            
+            stats_data = stats_response.json()
+            stats = stats_data[0] if stats_data else {}
+            
+            # Get user items count by status
+            items_response = requests.get(
+                f"{self.base_url}/rest/v1/user_items",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': 'status'
+                }
+            )
+            
+            items_data = items_response.json() if items_response.status_code == 200 else []
+            
+            # Count by status
+            status_counts = {}
+            for item in items_data:
+                status = item.get('status', 'unknown')
+                status_counts[status] = status_counts.get(status, 0) + 1
+            
+            # Build comprehensive stats
+            return {
+                'user_id': user_id,
+                'total_anime_watched': stats.get('total_anime_watched', 0),
+                'total_manga_read': stats.get('total_manga_read', 0),
+                'total_hours_watched': stats.get('total_hours_watched', 0),
+                'total_chapters_read': stats.get('total_chapters_read', 0),
+                'average_score': stats.get('average_score', 0),
+                'completion_rate': stats.get('completion_rate', 0),
+                'current_streak_days': stats.get('current_streak_days', 0),
+                'longest_streak_days': stats.get('longest_streak_days', 0),
+                'favorite_genres': stats.get('favorite_genres', []),
+                'status_counts': {
+                    'watching': status_counts.get('watching', 0),
+                    'completed': status_counts.get('completed', 0),
+                    'plan_to_watch': status_counts.get('plan_to_watch', 0),
+                    'dropped': status_counts.get('dropped', 0),
+                    'on_hold': status_counts.get('on_hold', 0),
+                },
+                'updated_at': stats.get('updated_at', '')
+            }
+            
+        except Exception as e:
+            print(f"Error getting user stats: {e}")
+            return {}
+
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
 class SupabaseAuthClient:
@@ -2765,87 +2965,6 @@ class SupabaseAuthClient:
         except Exception as e:
             print(f"Error creating list comment: {e}")
             return None
-
-    def search_users(self, query: str, page: int = 1, limit: int = 20) -> dict:
-        """
-        Search for users by username or display name.
-        
-        Args:
-            query (str): Search query
-            page (int): Page number
-            limit (int): Items per page
-            
-        Returns:
-            dict: Search results with pagination info
-        """
-        try:
-            # Calculate offset
-            offset = (page - 1) * limit
-            
-            # Search users by username or display name
-            users_response = requests.get(
-                f"{self.base_url}/rest/v1/user_profiles",
-                headers=self.headers,
-                params={
-                    'or': f'username.ilike.%{query}%,display_name.ilike.%{query}%',
-                    'select': '''
-                        id, username, display_name, bio, avatar_url,
-                        user_statistics(total_anime_watched, total_manga_read)
-                    ''',
-                    'order': 'username.asc',
-                    'offset': offset,
-                    'limit': limit
-                }
-            )
-            
-            users = users_response.json()
-            
-            # Get follower counts for each user
-            for user in users:
-                followers_response = requests.get(
-                    f"{self.base_url}/rest/v1/user_follows",
-                    headers={**self.headers, 'Prefer': 'count=exact'},
-                    params={
-                        'following_id': f'eq.{user["id"]}',
-                        'select': 'id'
-                    }
-                )
-                
-                user['followersCount'] = int(followers_response.headers.get('Content-Range', '0').split('/')[-1])
-                user['completedAnime'] = user.get('user_statistics', {}).get('total_anime_watched', 0) if user.get('user_statistics') else 0
-                user['completedManga'] = user.get('user_statistics', {}).get('total_manga_read', 0) if user.get('user_statistics') else 0
-                user['avatarUrl'] = user.get('avatar_url')
-                user['displayName'] = user.get('display_name') or user.get('username')
-            
-            # Get total count
-            count_response = requests.get(
-                f"{self.base_url}/rest/v1/user_profiles",
-                headers={**self.headers, 'Prefer': 'count=exact'},
-                params={
-                    'or': f'username.ilike.%{query}%,display_name.ilike.%{query}%',
-                    'select': 'id'
-                }
-            )
-            
-            total = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
-            
-            return {
-                'users': users,
-                'total': total,
-                'page': page,
-                'limit': limit,
-                'has_more': offset + limit < total
-            }
-            
-        except Exception as e:
-            print(f"Error searching users: {e}")
-            return {
-                'users': [],
-                'total': 0,
-                'page': page,
-                'limit': limit,
-                'has_more': False
-            }
 
     def get_user_activity_feed(self, user_id: str, page: int = 1, limit: int = 20) -> dict:
         """

@@ -232,7 +232,7 @@ export const ActivityFeedComponent: React.FC<ActivityFeedComponentProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <Link
-                      to={`/user/${activity.username}`}
+                      to={`/users/${activity.username}`}
                       className="font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400"
                     >
                       {activity.displayName || activity.username}
@@ -324,7 +324,7 @@ const UserFollowedUserActivityComponent: React.FC<{ activity: UserFollowedUserAc
   <p className="text-sm text-gray-700 dark:text-gray-300">
     started following{' '}
     <Link
-      to={`/user/${activity.data.followedUsername}`}
+      to={`/users/${activity.data.followedUsername}`}
       className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
     >
       {activity.data.followedDisplayName || activity.data.followedUsername}
