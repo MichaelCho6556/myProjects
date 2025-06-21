@@ -317,7 +317,7 @@ const Navbar: React.FC = () => {
                   {showUserDropdown && (
                     <div className="user-dropdown-menu">
                       <Link
-                        to={`/user/${user.user_metadata?.username || user.email?.split("@")[0]}`}
+                        to={`/users/${user.user_metadata?.username || user.email?.split("@")[0]}`}
                         className="dropdown-item"
                         onClick={() => setShowUserDropdown(false)}
                       >

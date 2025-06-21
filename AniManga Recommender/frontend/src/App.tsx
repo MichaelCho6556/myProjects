@@ -10,7 +10,7 @@ import UserListsPage from "./pages/lists/UserListsPage";
 import { MyCustomListsPage } from "./pages/lists/MyCustomListsPage";
 import { CustomListDetailPage } from "./pages/lists/CustomListDetailPage";
 import { UserProfilePage } from "./pages/UserProfilePage";
-import UserSearchPage from "./pages/UserSearchPage";
+import { UserSearchPage } from "./pages/UserSearchPage";
 import { PrivacySettingsPage } from "./pages/PrivacySettingsPage";
 import { ListDiscoveryPage } from "./pages/ListDiscoveryPage";
 import ErrorBoundary from "./components/ErrorBoundary";
