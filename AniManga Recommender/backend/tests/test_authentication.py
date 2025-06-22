@@ -16,7 +16,7 @@ import json
 import jwt
 import time
 from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import requests
 
 # Import test dependencies
@@ -170,31 +170,68 @@ class TestJWTTokenManagement:
     """Test suite for JWT token operations"""
     
     @pytest.mark.integration
-    def test_jwt_token_generation(self, client):
-        """Test JWT token creation and structure"""
-        # Mock a valid token structure
-        mock_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEyMyIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiaWF0IjoxNjAwMDAwMDAwLCJleHAiOjE2MDAwMDM2MDB9.signature"
-        
-        # Test token structure components
-        token_parts = mock_token.split('.')
-        assert len(token_parts) == 3  # header.payload.signature
-        
-        # Verify each part is base64-like string
-        for part in token_parts:
-            assert len(part) > 0
-            assert all(c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=-_' for c in part)
+    def test_jwt_token_generation_and_structure(self, client):
+        """
+        Test that a JWT is generated correctly, can be decoded,
+        and contains the expected claims.
+        """
+        # Arrange: Setup the data for the token
+        secret_key = 'your-super-secret-test-key'  # Use a consistent test secret
+        algorithm = 'HS256'
+        payload = {
+            'sub': 'user_123',
+            'email': 'test@example.com',
+            'role': 'authenticated',
+            'iat': datetime.now(tz=timezone.utc),
+            'exp': datetime.now(tz=timezone.utc) + timedelta(hours=1)
+        }
+
+        # Act: Generate the token
+        # In a real scenario, you would call your actual token generation function.
+        # For this test, we'll generate it directly to test the principle.
+        generated_token = jwt.encode(payload, secret_key, algorithm=algorithm)
+
+        # Assert: Verify the token's structure and content
+        assert isinstance(generated_token, str)
+        assert len(generated_token.split('.')) == 3  # header.payload.signature
+
+        # Decode the token to verify its signature and content
+        try:
+            decoded_payload = jwt.decode(
+                generated_token,
+                secret_key,
+                algorithms=[algorithm]
+            )
+        except jwt.PyJWTError as e:
+            pytest.fail(f"Token decoding failed with error: {e}")
+
+        # Assert that the claims in the decoded token match the original payload
+        assert decoded_payload['sub'] == payload['sub']
+        assert decoded_payload['email'] == payload['email']
+        assert decoded_payload['role'] == payload['role']
+        assert 'iat' in decoded_payload
+        assert 'exp' in decoded_payload
     
     @pytest.mark.integration
-    def test_jwt_token_validation(self, client):
-        """Test JWT token verification for protected routes"""
+    def test_jwt_token_validation_with_valid_token(self, client):
+        """Test JWT token verification with dynamically generated valid token"""
+        # Generate a valid token for testing
+        secret_key = 'your-super-secret-test-key'
+        algorithm = 'HS256'
+        payload = {
+            'sub': 'user_123',
+            'email': 'test@example.com',
+            'role': 'authenticated',
+            'iat': datetime.now(tz=timezone.utc),
+            'exp': datetime.now(tz=timezone.utc) + timedelta(hours=1)
+        }
+        valid_token = jwt.encode(payload, secret_key, algorithm=algorithm)
+        
         auth_client = SupabaseAuthClient(
             'https://test.supabase.co',
             'test_api_key',
             'test_service_key'
         )
-        
-        # Test valid token validation
-        valid_token = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
         
         with patch('requests.get') as mock_get:
             # Mock successful token verification
@@ -209,27 +246,94 @@ class TestJWTTokenManagement:
             mock_get.return_value = mock_response
             
             try:
-                user_info = auth_client.verify_jwt_token(valid_token)
+                user_info = auth_client.verify_jwt_token(f"Bearer {valid_token}")
                 assert user_info['user_id'] == 'user_123'
                 assert user_info['email'] == 'test@example.com'
                 assert user_info['role'] == 'authenticated'
             except Exception:
-                # Expected since we're mocking
+                # Expected since we're mocking the external API call
                 pass
     
     @pytest.mark.integration
     def test_jwt_token_expiration(self, client):
-        """Test expired token handling"""
+        """Test that an expired token raises an ExpiredSignatureError."""
+        # Arrange: Create an already-expired token
+        secret_key = 'your-super-secret-test-key'
+        algorithm = 'HS256'
+        expired_payload = {
+            'sub': 'user_123',
+            'email': 'test@example.com',
+            'role': 'authenticated',
+            # Set expiration to the past
+            'exp': datetime.now(tz=timezone.utc) - timedelta(minutes=5)
+        }
+        expired_token = jwt.encode(expired_payload, secret_key, algorithm=algorithm)
+
+        # Act & Assert: Attempting to decode should raise an error
+        with pytest.raises(jwt.ExpiredSignatureError):
+            jwt.decode(expired_token, secret_key, algorithms=[algorithm])
+    
+    @pytest.mark.integration
+    def test_jwt_token_invalid_signature(self, client):
+        """Test that a token with invalid signature is rejected."""
+        # Arrange: Create a token with one secret, try to verify with another
+        secret_key = 'correct-secret-key'
+        wrong_secret_key = 'wrong-secret-key'
+        algorithm = 'HS256'
+        payload = {
+            'sub': 'user_123',
+            'email': 'test@example.com',
+            'role': 'authenticated',
+            'exp': datetime.now(tz=timezone.utc) + timedelta(hours=1)
+        }
+        token_with_wrong_signature = jwt.encode(payload, secret_key, algorithm=algorithm)
+
+        # Act & Assert: Attempting to decode with wrong key should raise an error
+        with pytest.raises(jwt.InvalidSignatureError):
+            jwt.decode(token_with_wrong_signature, wrong_secret_key, algorithms=[algorithm])
+    
+    @pytest.mark.integration
+    def test_jwt_token_malformed(self, client):
+        """Test that malformed tokens are properly rejected."""
+        secret_key = 'your-super-secret-test-key'
+        algorithm = 'HS256'
+        
+        malformed_tokens = [
+            "not.a.jwt",  # Not enough parts
+            "too.many.parts.here",  # Too many parts
+            "invalid-base64.invalid-base64.invalid-base64",  # Invalid base64
+            "",  # Empty string
+            "Bearer ",  # Just Bearer prefix
+        ]
+        
+        for malformed_token in malformed_tokens:
+            with pytest.raises((jwt.DecodeError, jwt.InvalidTokenError)):
+                jwt.decode(malformed_token, secret_key, algorithms=[algorithm])
+    
+    @pytest.mark.integration
+    def test_auth_client_with_expired_token_handling(self, client):
+        """
+        Test that SupabaseAuthClient correctly handles expired tokens
+        by testing the external API response simulation.
+        """
+        # Create an actually expired token
+        secret_key = 'your-super-secret-test-key'
+        algorithm = 'HS256'
+        expired_payload = {
+            'sub': 'user_123',
+            'email': 'test@example.com',
+            'exp': datetime.now(tz=timezone.utc) - timedelta(minutes=5)
+        }
+        expired_token_str = jwt.encode(expired_payload, secret_key, algorithm=algorithm)
+        
         auth_client = SupabaseAuthClient(
             'https://test.supabase.co',
             'test_api_key',
             'test_service_key'
         )
         
-        expired_token = "Bearer expired_token_here"
-        
         with patch('requests.get') as mock_get:
-            # Mock expired token response
+            # Mock expired token response from Supabase
             mock_response = Mock()
             mock_response.status_code = 401
             mock_response.json.return_value = {
@@ -239,7 +343,7 @@ class TestJWTTokenManagement:
             
             # Test that expired tokens are properly handled
             try:
-                user_info = auth_client.verify_jwt_token(expired_token)
+                user_info = auth_client.verify_jwt_token(f"Bearer {expired_token_str}")
                 # If no exception raised, verify the response is None or empty
                 assert user_info is None or not user_info
             except ValueError as e:
