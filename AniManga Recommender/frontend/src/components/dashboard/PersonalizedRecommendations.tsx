@@ -34,11 +34,11 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   const [error, setError] = useState<string | null>(null);
   const [removedItems, setRemovedItems] = useState<Set<string>>(new Set());
   const [refreshingSection, setRefreshingSection] = useState<string | null>(null);
-  
+
   // New state for infinite scroll
-  const [loadingMore, setLoadingMore] = useState<{[key: string]: boolean}>({});
-  const [hasMore, setHasMore] = useState<{[key: string]: boolean}>({});
-  const [page, setPage] = useState<{[key: string]: number}>({});
+  const [loadingMore, setLoadingMore] = useState<{ [key: string]: boolean }>({});
+  const [hasMore, setHasMore] = useState<{ [key: string]: boolean }>({});
+  const [page, setPage] = useState<{ [key: string]: number }>({});
   const [showRatingModal, setShowRatingModal] = useState<{
     show: boolean;
     itemUid: string;
@@ -69,9 +69,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
       setLoading(true);
       setError(null);
 
-      console.log("🎯 Fetching personalized recommendations...");
-      console.log("🔍 Current contentTypeFilter:", contentTypeFilter);
-
       // Add timestamp for cache busting to ensure fresh recommendations
       const timestamp = Date.now();
 
@@ -84,44 +81,21 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
       }
 
       const finalUrl = `/api/auth/personalized-recommendations?${params.toString()}`;
-      console.log("🌐 API URL:", finalUrl);
-      console.log("📤 Request params:", Object.fromEntries(params.entries()));
 
       const response = await makeAuthenticatedRequest(finalUrl);
 
-      console.log("📊 Recommendations response:", response);
-
-      // Debug the actual recommendations data structure
-      if (response?.recommendations) {
-        console.log("🔍 DETAILED RESPONSE DEBUG:");
-        Object.entries(response.recommendations).forEach(([section, items]) => {
-          console.log(`  📂 Section: ${section}`);
-          if (Array.isArray(items)) {
-            console.log(`     📊 Item count: ${items.length}`);
-            items.slice(0, 3).forEach((item, idx) => {
-              const mediaType = item?.item?.mediaType;
-              const title = item?.item?.title;
-              console.log(`     ${idx + 1}. ${title} (${mediaType})`);
-            });
-            if (items.length > 3) {
-              console.log(`     ... and ${items.length - 3} more items`);
-            }
-          }
-        });
-      }
       setRecommendations(response);
-      
+
       // Initialize infinite scroll state
-      const newHasMore: {[key: string]: boolean} = {};
-      const newPage: {[key: string]: number} = {};
-      Object.keys(response.recommendations || {}).forEach(section => {
+      const newHasMore: { [key: string]: boolean } = {};
+      const newPage: { [key: string]: number } = {};
+      Object.keys(response.recommendations || {}).forEach((section) => {
         const items = response.recommendations?.[section] || [];
         newHasMore[section] = items.length >= 10; // Assume more if we got 10+ items
         newPage[section] = 1;
       });
       setHasMore(newHasMore);
       setPage(newPage);
-      
     } catch (err: any) {
       console.error("❌ Error fetching recommendations:", err);
       setError(err.message || "Failed to load recommendations");
@@ -135,11 +109,11 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
     if (loadingMore[sectionType] || !hasMore[sectionType]) return;
 
     try {
-      setLoadingMore(prev => ({ ...prev, [sectionType]: true }));
-      
+      setLoadingMore((prev) => ({ ...prev, [sectionType]: true }));
+
       const currentPage = page[sectionType] || 1;
       const nextPage = currentPage + 1;
-      
+
       const params = new URLSearchParams();
       params.set("page", nextPage.toString());
       params.set("section", sectionType);
@@ -155,22 +129,22 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           ...prev,
           recommendations: {
             ...prev.recommendations,
-            [sectionType]: [...(prev.recommendations?.[sectionType] || []), ...response.items]
-          }
+            [sectionType]: [...(prev.recommendations?.[sectionType] || []), ...response.items],
+          },
         }));
-        
-        setPage(prev => ({ ...prev, [sectionType]: nextPage }));
-        setHasMore(prev => ({ 
-          ...prev, 
-          [sectionType]: response.items.length >= 10 // Has more if we got a full page
+
+        setPage((prev) => ({ ...prev, [sectionType]: nextPage }));
+        setHasMore((prev) => ({
+          ...prev,
+          [sectionType]: response.items.length >= 10, // Has more if we got a full page
         }));
       } else {
-        setHasMore(prev => ({ ...prev, [sectionType]: false }));
+        setHasMore((prev) => ({ ...prev, [sectionType]: false }));
       }
     } catch (err) {
       console.error(`❌ Error loading more items for ${sectionType}:`, err);
     } finally {
-      setLoadingMore(prev => ({ ...prev, [sectionType]: false }));
+      setLoadingMore((prev) => ({ ...prev, [sectionType]: false }));
     }
   };
 
@@ -189,7 +163,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   const handleSectionRefresh = async (sectionType: string) => {
     try {
       setRefreshingSection(sectionType);
-      console.log(`🔄 Refreshing section: ${sectionType}`);
 
       // Don't clear removed items - we want to keep them dismissed
       // The backend should provide new recommendations that exclude dismissed items
@@ -206,22 +179,14 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
       }
 
       const refreshUrl = `/api/auth/personalized-recommendations?${params.toString()}`;
-      console.log("🔄 Section refresh URL:", refreshUrl);
-      console.log("🔄 Section refresh with content filter:", contentTypeFilter);
 
       const response = await makeAuthenticatedRequest(refreshUrl);
-
-      console.log("📊 Section refresh response:", response);
 
       // Update the full recommendations object
       if (response?.recommendations) {
         setRecommendations(response);
-        console.log(`✅ Successfully refreshed section: ${sectionType} with new recommendations`);
-      } else {
-        console.warn("⚠️ No recommendations data in response");
       }
     } catch (err: any) {
-      console.error(`❌ Error refreshing section ${sectionType}:`, err);
       // Show user-friendly error message if needed
       setError(`Failed to refresh ${sectionType} section. Please try again.`);
     } finally {
@@ -478,8 +443,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
     [makeAuthenticatedRequest, fetchRecommendations, showRatingModal.itemTitle]
   );
 
-
-
   if (loading) {
     return (
       <div className={`personalized-recommendations ${className}`}>
@@ -498,7 +461,7 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           actionButton={{
             text: "Try Again",
             onClick: fetchRecommendations,
-            variant: "primary"
+            variant: "primary",
           }}
         />
       </div>
@@ -515,19 +478,16 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           actionButton={{
             text: "Browse Anime & Manga",
             href: "/",
-            variant: "primary"
+            variant: "primary",
           }}
           secondaryAction={{
             text: "Learn How Recommendations Work",
-            href: "/help/recommendations"
+            href: "/help/recommendations",
           }}
         />
       </div>
     );
   }
-
-  console.log("🔍 RENDER DEBUG - Current contentTypeFilter:", contentTypeFilter);
-  console.log("🔍 RENDER DEBUG - Full recommendations object:", recommendations);
 
   const { recommendations: recs } = recommendations;
 
@@ -553,20 +513,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
     },
   ];
 
-  console.log(
-    "🔍 SECTIONS DEBUG - sections created:",
-    sections.map((s) => ({
-      title: s.title,
-      originalCount:
-        s.sectionType === "completed_based"
-          ? (recs.completed_based || []).length
-          : s.sectionType === "hidden_gems"
-          ? (recs.hidden_gems || []).length
-          : (recs.trending_genres || []).length,
-      filteredCount: s.items.length,
-    }))
-  );
-
   return (
     <div className={`personalized-recommendations ${className}`}>
       <div className="personalized-recommendations-header">
@@ -591,28 +537,19 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           <div className="filter-buttons">
             <button
               className={`filter-btn ${contentTypeFilter === "all" ? "active" : ""}`}
-              onClick={() => {
-                console.log("🔍 FILTER CLICK - Setting filter to: all");
-                setContentTypeFilter("all");
-              }}
+              onClick={() => setContentTypeFilter("all")}
             >
               📚 All Content
             </button>
             <button
               className={`filter-btn ${contentTypeFilter === "anime" ? "active" : ""}`}
-              onClick={() => {
-                console.log("🔍 FILTER CLICK - Setting filter to: anime");
-                setContentTypeFilter("anime");
-              }}
+              onClick={() => setContentTypeFilter("anime")}
             >
               📺 Anime Only
             </button>
             <button
               className={`filter-btn ${contentTypeFilter === "manga" ? "active" : ""}`}
-              onClick={() => {
-                console.log("🔍 FILTER CLICK - Setting filter to: manga");
-                setContentTypeFilter("manga");
-              }}
+              onClick={() => setContentTypeFilter("manga")}
             >
               📖 Manga Only
             </button>
@@ -662,7 +599,9 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
                   items={section.items}
                   renderItem={(item: any, itemIndex: number) => (
                     <RecommendationCard
-                      key={`s${sectionIndex}-${section.sectionType}-${item.item?.uid || item.uid}-${itemIndex}`}
+                      key={`s${sectionIndex}-${section.sectionType}-${
+                        item.item?.uid || item.uid
+                      }-${itemIndex}`}
                       item={item}
                       sectionType={section.sectionType}
                       removedItems={removedItems}
@@ -670,12 +609,14 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
                       recentlyAdded={recentlyAdded}
                       onNotInterested={handleNotInterestedWithSuggestion}
                       onQuickAdd={handleQuickAdd}
-                      onCompleted={(itemUid, sectionType, title) => setShowRatingModal({
-                        show: true,
-                        itemUid,
-                        itemTitle: title,
-                        sectionType,
-                      })}
+                      onCompleted={(itemUid, sectionType, title) =>
+                        setShowRatingModal({
+                          show: true,
+                          itemUid,
+                          itemTitle: title,
+                          sectionType,
+                        })
+                      }
                     />
                   )}
                   itemHeight={380}
@@ -689,7 +630,9 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
                 <div className="recommendation-grid">
                   {section.items.map((item: any, itemIndex: number) => (
                     <RecommendationCard
-                      key={`s${sectionIndex}-${section.sectionType}-${item.item?.uid || item.uid}-${itemIndex}`}
+                      key={`s${sectionIndex}-${section.sectionType}-${
+                        item.item?.uid || item.uid
+                      }-${itemIndex}`}
                       item={item}
                       sectionType={section.sectionType}
                       removedItems={removedItems}
@@ -697,17 +640,19 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
                       recentlyAdded={recentlyAdded}
                       onNotInterested={handleNotInterestedWithSuggestion}
                       onQuickAdd={handleQuickAdd}
-                      onCompleted={(itemUid, sectionType, title) => setShowRatingModal({
-                        show: true,
-                        itemUid,
-                        itemTitle: title,
-                        sectionType,
-                      })}
+                      onCompleted={(itemUid, sectionType, title) =>
+                        setShowRatingModal({
+                          show: true,
+                          itemUid,
+                          itemTitle: title,
+                          sectionType,
+                        })
+                      }
                     />
                   ))}
-                  
+
                   {/* Load More Component */}
-                  <LoadMoreSection 
+                  <LoadMoreSection
                     sectionType={section.sectionType}
                     hasMore={hasMore[section.sectionType] || false}
                     isLoading={loadingMore[section.sectionType] || false}
@@ -877,18 +822,13 @@ interface LoadMoreSectionProps {
   onLoadMore: () => void;
 }
 
-const LoadMoreSection: React.FC<LoadMoreSectionProps> = ({ 
-  sectionType, 
-  hasMore, 
-  isLoading, 
-  onLoadMore 
-}) => {
+const LoadMoreSection: React.FC<LoadMoreSectionProps> = ({ sectionType, hasMore, isLoading, onLoadMore }) => {
   const sentinelRef = useInfiniteScroll({
     hasMore,
     isLoading,
     onLoadMore,
     threshold: 0.1,
-    rootMargin: "100px"
+    rootMargin: "100px",
   });
 
   if (!hasMore && !isLoading) {
@@ -903,7 +843,7 @@ const LoadMoreSection: React.FC<LoadMoreSectionProps> = ({
           <span>Loading more recommendations...</span>
         </div>
       ) : hasMore ? (
-        <button 
+        <button
           className="load-more-button"
           onClick={onLoadMore}
           aria-label={`Load more ${sectionType} recommendations`}

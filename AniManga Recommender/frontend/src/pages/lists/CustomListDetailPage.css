@@ -233,8 +233,11 @@
   background: var(--bg-dark);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  padding: 2rem;
+  padding: 1.5rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Reordering Status */
@@ -263,8 +266,12 @@
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .reordering-text {
@@ -277,11 +284,11 @@
   .custom-list-container {
     padding: 0 1rem;
   }
-  
+
   .list-header {
     padding: 1.5rem;
   }
-  
+
   .list-title {
     font-size: 2rem;
   }
@@ -291,51 +298,52 @@
   .custom-list-detail-page {
     padding: 1rem 0;
   }
-  
+
   .custom-list-container {
     padding: 0 0.75rem;
   }
-  
+
   .list-header {
     padding: 1.25rem;
   }
-  
+
   .list-title {
     font-size: 1.75rem;
   }
-  
+
   .list-meta {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.75rem;
   }
-  
+
   .list-meta-item {
     font-size: 0.85rem;
     padding: 0.4rem 0.6rem;
   }
-  
+
   .list-actions {
     align-items: stretch;
     width: 100%;
   }
-  
+
   .action-button {
     min-width: auto;
     width: 100%;
   }
-  
+
   .instructions-banner {
     padding: 1rem;
   }
-  
+
   .instructions-content {
     flex-direction: column;
     gap: 0.75rem;
   }
-  
+
   .list-content {
-    padding: 1.5rem;
+    padding: 1.25rem;
+    min-height: 180px;
   }
 }
 
@@ -343,29 +351,30 @@
   .custom-list-detail-page {
     padding: 0.5rem 0;
   }
-  
+
   .custom-list-container {
     padding: 0 0.5rem;
   }
-  
+
   .list-header {
     padding: 1rem;
   }
-  
+
   .list-title {
     font-size: 1.5rem;
   }
-  
+
   .list-description {
     font-size: 1rem;
   }
-  
+
   .back-navigation {
     font-size: 0.85rem;
     padding: 0.4rem 0.6rem;
   }
-  
+
   .list-content {
     padding: 1rem;
+    min-height: 160px;
   }
 }

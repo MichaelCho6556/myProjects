@@ -290,7 +290,7 @@ export const ActivityFeedComponent: React.FC<ActivityFeedComponentProps> = ({ cl
           Activity Feed
         </h2>
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-          <svg className="mx-auto w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="mx-auto w-6 h-6 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
           <p className="font-medium">Sign in to see activity feed</p>
