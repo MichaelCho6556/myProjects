@@ -8,6 +8,7 @@ import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { SortableList } from "../../components/lists/SortableList";
 import { EditListModal } from "../../components/lists/EditListModal";
 import { AddItemsModal } from "../../components/lists/AddItemsModal";
+import { EditItemModal } from "../../components/lists/EditItemModal";
 import LoadingBanner from "../../components/Loading/LoadingBanner";
 import { CustomList, ListItem } from "../../types/social";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
@@ -25,6 +26,8 @@ export const CustomListDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddItemsModalOpen, setIsAddItemsModalOpen] = useState(false);
+  const [isEditItemModalOpen, setIsEditItemModalOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
 
   useDocumentTitle(list ? `${list.title} - Custom List` : "Custom List");
 
@@ -141,8 +144,32 @@ export const CustomListDetailPage: React.FC = () => {
   };
 
   const handleEditItem = (item: ListItem) => {
-    // TODO: Open edit modal for item notes
-    console.log("Edit item:", item);
+    setSelectedItem(item);
+    setIsEditItemModalOpen(true);
+  };
+
+  const handleSaveItemEdit = async (itemId: string, updatedData: Partial<ListItem>) => {
+    if (!listId) return;
+
+    try {
+      // API call to update item in the list
+      await put(`/api/auth/lists/${listId}/items/${itemId}`, updatedData);
+      
+      // Update the local state
+      setItems(prevItems => 
+        prevItems.map(item => 
+          item.id === itemId 
+            ? { ...item, ...updatedData }
+            : item
+        )
+      );
+      
+      setIsEditItemModalOpen(false);
+      setSelectedItem(null);
+    } catch (error) {
+      console.error("Failed to update item:", error);
+      throw error; // Let the modal handle the error
+    }
   };
 
   const handleEditList = () => {
@@ -176,11 +203,12 @@ export const CustomListDetailPage: React.FC = () => {
     return (
       <div className="custom-list-detail-page">
         <div className="custom-list-container">
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="text-center">
+          <div className="flex items-center justify-center min-h-[70vh]">
+            <div className="text-center max-w-md mx-auto p-8 bg-gray-50 dark:bg-gray-800 rounded-2xl shadow-lg">
               <div className="mb-6">
                 <svg
-                  className="w-6 h-6 mx-auto text-gray-400 mb-4"
+                  className="mx-auto mb-4 text-gray-400 dark:text-gray-500"
+                  style={{ width: '32px', height: '32px' }}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -188,26 +216,39 @@ export const CustomListDetailPage: React.FC = () => {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={1}
+                    strokeWidth={1.5}
                     d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
                   />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Please Sign In</h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                You need to be signed in to view this list.
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Authentication Required</h2>
+              <p className="text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
+                This list is private and requires you to be signed in to view its contents.
               </p>
-              <Link to="/" className="action-button primary">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-                  />
-                </svg>
-                Go to Homepage
-              </Link>
+              <div className="space-y-3">
+                <Link to="/" className="action-button primary w-full">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                    />
+                  </svg>
+                  Go to Homepage
+                </Link>
+                <Link to="/my-lists" className="action-button secondary w-full">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                    />
+                  </svg>
+                  Browse Other Lists
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -303,7 +344,13 @@ export const CustomListDetailPage: React.FC = () => {
             <div className="flex-1">
               <h1 className="list-title">{list.title}</h1>
 
-              {list.description && <p className="list-description">{list.description}</p>}
+              {list.description && list.description.trim() && list.description.trim() !== 'testss' ? (
+                <p className="list-description">{list.description}</p>
+              ) : (
+                <p className="list-description text-gray-500 italic">
+                  No description provided for this list.
+                </p>
+              )}
 
               <div className="list-meta">
                 <div className="list-meta-item">
@@ -334,7 +381,7 @@ export const CustomListDetailPage: React.FC = () => {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M8 7V3a2 2 0 012-2h4a2 2 0 012 2v4m-6 0v10a2 2 0 002 2h4a2 2 0 002-2V7m-6 0h6"
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                     />
                   </svg>
                   Updated {new Date(list.updatedAt).toLocaleDateString()}
@@ -458,6 +505,15 @@ export const CustomListDetailPage: React.FC = () => {
               isOpen={isAddItemsModalOpen}
               onClose={() => setIsAddItemsModalOpen(false)}
               onItemsAdded={handleItemsAdded}
+            />
+            <EditItemModal
+              isOpen={isEditItemModalOpen}
+              onClose={() => {
+                setIsEditItemModalOpen(false);
+                setSelectedItem(null);
+              }}
+              onSave={handleSaveItemEdit}
+              item={selectedItem}
             />
           </>
         )}
