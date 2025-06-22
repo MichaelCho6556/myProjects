@@ -2058,8 +2058,7 @@ class SupabaseClient:
                     'id': f'eq.{list_id}',
                     'select': '''
                         id, title, description, is_public, is_collaborative, user_id,
-                        created_at, updated_at,
-                        list_tag_associations(list_tags(name))
+                        created_at, updated_at
                     ''',
                     'limit': 1
                 }
@@ -2068,7 +2067,28 @@ class SupabaseClient:
                 return None
             data = response.json()
             raw = data[0] if isinstance(data, list) else data
-            tags = [assoc['list_tags']['name'] for assoc in raw.get('list_tag_associations', []) if assoc.get('list_tags')]
+            
+            # Fetch tags separately for this list
+            tags = []
+            try:
+                tags_response = requests.get(
+                    f"{self.base_url}/rest/v1/list_tag_associations",
+                    headers=self.headers,
+                    params={
+                        'list_id': f'eq.{list_id}',
+                        'select': 'list_tags(name)'
+                    }
+                )
+                
+                if tags_response.status_code == 200:
+                    tag_associations = tags_response.json()
+                    tags = [assoc['list_tags']['name'] for assoc in tag_associations 
+                           if assoc.get('list_tags')]
+                    print(f"Found {len(tags)} tags for list details {list_id}: {tags}")
+            except Exception as e:
+                print(f"Error fetching tags for list details {list_id}: {e}")
+                tags = []
+            
             return {
                 'id': raw['id'],
                 'title': raw['title'],
@@ -3303,6 +3323,87 @@ class SupabaseAuthClient:
             
         except Exception as e:
             print(f"Error reordering list items: {e}")
+            return False
+
+    def get_user_list_details(self, list_id: int, user_id: str) -> Optional[Dict]:
+        """
+        Get detailed information about a specific list owned by a user.
+        
+        Args:
+            list_id (int): List ID
+            user_id (str): User ID (must be list owner)
+            
+        Returns:
+            Optional[Dict]: List details if found and owned by user, None otherwise
+        """
+        try:
+            response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={
+                    'id': f'eq.{list_id}',
+                    'user_id': f'eq.{user_id}',
+                    'select': 'id, title, description, is_public, is_collaborative, user_id, created_at, updated_at',
+                    'limit': 1
+                }
+            )
+            
+            if response.status_code != 200 or not response.text.strip():
+                return None
+                
+            data = response.json()
+            if not data:
+                return None
+                
+            return data[0] if isinstance(data, list) else data
+            
+        except Exception as e:
+            print(f"Error getting user list details: {e}")
+            return None
+
+    def update_list_item(self, list_id: int, item_id: int, user_id: str, update_data: dict) -> bool:
+        """
+        Update an item in a custom list.
+        
+        Args:
+            list_id (int): List ID
+            item_id (int): Item ID to update
+            user_id (str): User ID (must be list owner)
+            update_data (dict): Data to update (notes, etc.)
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            # Verify list ownership
+            list_response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={
+                    'id': f'eq.{list_id}',
+                    'user_id': f'eq.{user_id}',
+                    'select': 'id'
+                }
+            )
+            
+            if not list_response.json():
+                return False
+            
+            # Update the list item
+            update_response = requests.patch(
+                f"{self.base_url}/rest/v1/custom_list_items",
+                headers=self.headers,
+                params={
+                    'list_id': f'eq.{list_id}',
+                    'id': f'eq.{item_id}'
+                },
+                json=update_data
+            )
+            
+            return update_response.status_code == 204
+            
+        except Exception as e:
+            print(f"Error updating list item: {e}")
             return False
 
     def get_list_comments(self, list_id: int, page: int = 1, limit: int = 20) -> dict:
