@@ -146,9 +146,6 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
             item.item && // ✅ Ensure item details exist
             typeof item.item === "object";
 
-          if (!isValid) {
-            console.warn("⚠️ Invalid item structure:", item);
-          }
           return isValid;
         });
       } else if (response && Array.isArray(response.items)) {
@@ -160,15 +157,9 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
             item.item_uid.length > 0 &&
             item.item &&
             typeof item.item === "object";
-          if (!isValid) {
-            console.warn("⚠️ Invalid item structure:", item);
-          }
           return isValid;
         });
       }
-
-      console.log(`✅ Processed ${items.length} valid items for ${currentStatus}`);
-      console.log("📄 Sample item:", items[0]);
 
       setListData({
         items: items,
@@ -179,7 +170,6 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
     } catch (error: any) {
       // Only set error if request wasn't aborted
       if (error.name !== "AbortError") {
-        console.error("❌ Error fetching user list:", error);
         setListData((prev) => ({
           ...prev,
           loading: false,
@@ -191,11 +181,8 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
     }
   }, [user?.id, currentStatus, makeAuthenticatedRequest]);
 
-  // ✅ FIXED: Better filtering logic with debugging
+  // ✅ FIXED: Better filtering logic
   const filteredItems = useMemo(() => {
-    console.log(`🔍 Filtering ${listData.items.length} items...`);
-    console.log(`📊 Search: "${searchQuery}", Media Type: "${selectedMediaType}"`);
-
     let filtered = [...listData.items];
 
     // Filter by search query
@@ -216,11 +203,8 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
 
     // ✅ FIXED: More robust media type filtering
     if (selectedMediaType !== "all") {
-      console.log(`🔍 Filtering by media type: ${selectedMediaType}`);
-
       filtered = filtered.filter((userItem) => {
         const itemMediaType = userItem.item?.media_type;
-        console.log(`📊 Item media type: "${itemMediaType}" vs selected: "${selectedMediaType}"`);
 
         // Handle variations in media type format
         if (!itemMediaType) return false;
@@ -230,8 +214,6 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
 
         return normalizedItemType === normalizedSelectedType;
       });
-
-      console.log(`📊 After media type filter: ${filtered.length} items`);
     }
 
     // Filter by minimum user rating
@@ -288,7 +270,6 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
       }
     });
 
-    console.log(`✅ Final filtered result: ${filtered.length} items`);
     return filtered;
   }, [listData.items, searchQuery, selectedMediaType, sortBy, minUserRating]);
 

@@ -101,7 +101,7 @@ export const SortableList: React.FC<SortableListProps> = ({
             className="animate-pulse flex items-center gap-3 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg"
           >
             <div className="w-5 h-5 bg-gray-300 dark:bg-gray-600 rounded"></div>
-            <div className="w-12 h-16 bg-gray-300 dark:bg-gray-600 rounded"></div>
+            <div className="w-8 h-12 bg-gray-300 dark:bg-gray-600 rounded"></div>
             <div className="flex-1 space-y-2">
               <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-3/4"></div>
               <div className="h-3 bg-gray-300 dark:bg-gray-600 rounded w-1/2"></div>
@@ -114,9 +114,35 @@ export const SortableList: React.FC<SortableListProps> = ({
 
   if (items.length === 0) {
     return (
-      <div className="text-center py-8">
-        <div className="mx-auto w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div
+        style={{
+          textAlign: "center",
+          padding: "3rem 2rem",
+          backgroundColor: "var(--bg-overlay)",
+          borderRadius: "12px",
+          border: "2px dashed var(--border-color)",
+          color: "var(--text-secondary)",
+        }}
+      >
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "64px",
+            height: "64px",
+            backgroundColor: "var(--bg-dark)",
+            borderRadius: "50%",
+            marginBottom: "1.5rem",
+            border: "1px solid var(--border-color)",
+          }}
+        >
+          <svg
+            style={{ width: "28px", height: "28px", color: "var(--text-tertiary)" }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -125,8 +151,28 @@ export const SortableList: React.FC<SortableListProps> = ({
             />
           </svg>
         </div>
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">Empty List</h3>
-        <p className="text-gray-600 dark:text-gray-400 max-w-lg mx-auto text-center leading-relaxed">{emptyMessage}</p>
+        <h3
+          style={{
+            fontSize: "1.25rem",
+            fontWeight: "600",
+            color: "var(--text-primary)",
+            marginBottom: "0.75rem",
+            margin: "0 0 0.75rem 0",
+          }}
+        >
+          Empty List
+        </h3>
+        <p
+          style={{
+            color: "var(--text-secondary)",
+            fontSize: "0.95rem",
+            lineHeight: "1.5",
+            maxWidth: "400px",
+            margin: "0 auto",
+          }}
+        >
+          {emptyMessage}
+        </p>
       </div>
     );
   }

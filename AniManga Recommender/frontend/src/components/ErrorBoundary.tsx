@@ -251,13 +251,15 @@ class ErrorBoundary extends Component<Props, State> {
    * // componentStack: "in ComponentName (at App.js:123)"
    *
    * @error_logging
-   * - Logs error details to browser console for debugging
+   * - Logs error details only in development mode for debugging
    * - Can be extended to report to external error tracking services
    * - Provides component stack trace for debugging component hierarchy
    */
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log error details
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
+    // Log error details only in development mode
+    if (process.env.NODE_ENV === "development") {
+      console.error("ErrorBoundary caught an error:", error, errorInfo);
+    }
 
     this.setState({
       error,

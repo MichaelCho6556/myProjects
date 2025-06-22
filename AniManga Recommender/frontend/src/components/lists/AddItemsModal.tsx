@@ -50,8 +50,16 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
 
     try {
       const response = await get(`/api/items?q=${encodeURIComponent(query)}&limit=20`);
+      console.log('Search API response:', response);
 
-      const results = (response.data || response || []).map((item: any) => ({
+      // Handle different response structures
+      let responseData = response.data || response;
+      if (!Array.isArray(responseData)) {
+        // If response has items array (paginated response)
+        responseData = responseData.items || responseData.results || [];
+      }
+
+      const results = (responseData || []).map((item: any) => ({
         uid: item.uid,
         title: item.title,
         mediaType: item.media_type || item.mediaType || 'Unknown',

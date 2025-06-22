@@ -24,7 +24,6 @@ export const CreateCustomListModal: React.FC<CreateCustomListModalProps> = ({
   onClose,
   onCreateList,
 }) => {
-  console.log("CreateCustomListModal render - isOpen:", isOpen);
   const [tags, setTags] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -106,11 +105,8 @@ export const CreateCustomListModal: React.FC<CreateCustomListModalProps> = ({
   };
 
   if (!isOpen) {
-    console.log("Modal not rendering - isOpen is false");
     return null;
   }
-
-  console.log("Modal should be rendering now");
 
   return (
     <div
