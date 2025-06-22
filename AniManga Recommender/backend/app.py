@@ -8882,6 +8882,62 @@ def add_items_to_list_batch(list_id):
         print(f"Error adding items to list: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/auth/lists/<int:list_id>/items/<int:item_id>', methods=['PUT'])
+@require_auth
+def update_list_item(list_id, item_id):
+    """
+    Update an item in a custom list (e.g., notes, personal rating).
+    
+    Authentication: Required - User must be the owner of the list
+    
+    Path Parameters:
+        list_id (int): ID of the list containing the item
+        item_id (int): ID of the item to update
+        
+    Request Body (JSON):
+        - notes (str, optional): Personal notes about the item
+        - personal_rating (int, optional): Personal rating (1-10)
+        - status (str, optional): Personal status for the item
+        
+    Returns:
+        JSON Response:
+            - success message
+            - updated item data
+            
+    HTTP Status Codes:
+        200: Success - Item updated
+        400: Bad Request - Invalid data
+        403: Forbidden - User is not the owner
+        404: Not Found - List or item does not exist
+        500: Server Error - Database error
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        # Validate input
+        notes = data.get('notes')
+        if notes is not None and len(notes) > 1000:
+            return jsonify({'error': 'Notes cannot exceed 1000 characters'}), 400
+        
+        # Update the item in the list
+        success = supabase_client.update_list_item(list_id, item_id, user_id, data)
+        
+        if success:
+            return jsonify({
+                'message': 'Item updated successfully',
+                'updated_data': data
+            })
+        else:
+            return jsonify({'error': 'Failed to update item or not authorized'}), 403
+            
+    except Exception as e:
+        print(f"Error updating list item: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/auth/lists/<int:list_id>/items/<int:item_id>', methods=['DELETE'])
 @require_auth
 def remove_item_from_list(list_id, item_id):
