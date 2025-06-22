@@ -22,7 +22,7 @@ interface ErrorBoundaryProps {
 
 /**
  * Enhanced Error Boundary Component with comprehensive error handling
- * 
+ *
  * Features:
  * - Automatic error reporting and logging
  * - Retry mechanism with configurable limits
@@ -31,7 +31,7 @@ interface ErrorBoundaryProps {
  * - Error context tracking with unique IDs
  * - Graceful fallback rendering
  * - Performance monitoring integration
- * 
+ *
  * @param children - Child components to monitor for errors
  * @param fallback - Custom error fallback component
  * @param onError - Error callback for logging/reporting
@@ -46,7 +46,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    
+
     this.state = {
       hasError: false,
       error: null,
@@ -73,7 +73,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     const errorContext = {
       errorId,
       timestamp: new Date().toISOString(),
-      boundaryName: name || 'Anonymous',
+      boundaryName: name || "Anonymous",
       userAgent: navigator.userAgent,
       url: window.location.href,
       userId: this.getUserId(),
@@ -90,11 +90,11 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     };
 
     // Log to console in development
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === "development") {
       console.group(`🚨 Error Boundary Triggered: ${errorId}`);
-      console.error('Error:', error);
-      console.error('Error Info:', errorInfo);
-      console.error('Full Context:', errorContext);
+      console.error("Error:", error);
+      console.error("Error Info:", errorInfo);
+      console.error("Full Context:", errorContext);
       console.groupEnd();
     }
 
@@ -147,7 +147,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   private getUserId(): string | null {
     // Get user ID from auth context or localStorage
     try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
       return user.id || null;
     } catch {
       return null;
@@ -157,7 +157,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   private getSessionId(): string | null {
     // Get session ID from sessionStorage
     try {
-      return sessionStorage.getItem('sessionId') || null;
+      return sessionStorage.getItem("sessionId") || null;
     } catch {
       return null;
     }
@@ -169,16 +169,20 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         width: window.innerWidth,
         height: window.innerHeight,
       },
-      memory: (performance as any).memory ? {
-        usedJSHeapSize: (performance as any).memory.usedJSHeapSize,
-        totalJSHeapSize: (performance as any).memory.totalJSHeapSize,
-        jsHeapSizeLimit: (performance as any).memory.jsHeapSizeLimit,
-      } : null,
-      connection: (navigator as any).connection ? {
-        effectiveType: (navigator as any).connection.effectiveType,
-        downlink: (navigator as any).connection.downlink,
-        rtt: (navigator as any).connection.rtt,
-      } : null,
+      memory: (performance as any).memory
+        ? {
+            usedJSHeapSize: (performance as any).memory.usedJSHeapSize,
+            totalJSHeapSize: (performance as any).memory.totalJSHeapSize,
+            jsHeapSizeLimit: (performance as any).memory.jsHeapSizeLimit,
+          }
+        : null,
+      connection: (navigator as any).connection
+        ? {
+            effectiveType: (navigator as any).connection.effectiveType,
+            downlink: (navigator as any).connection.downlink,
+            rtt: (navigator as any).connection.rtt,
+          }
+        : null,
     };
   }
 
@@ -187,7 +191,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     try {
       // Example implementation - replace with your error tracking service
       if (window.gtag) {
-        window.gtag('event', 'exception', {
+        window.gtag("event", "exception", {
           description: errorContext.error.message,
           fatal: false,
           custom_map: {
@@ -198,10 +202,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       }
 
       // Could also send to your own error tracking endpoint
-      fetch('/api/errors', {
-        method: 'POST',
+      fetch("/api/errors", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(errorContext),
       }).catch(() => {
@@ -244,24 +248,18 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     if (hasError && error) {
       // Custom fallback component
       if (FallbackComponent) {
-        return (
-          <FallbackComponent
-            error={error}
-            retry={this.handleRetry}
-            errorId={errorId}
-          />
-        );
+        return <FallbackComponent error={error} retry={this.handleRetry} errorId={errorId} />;
       }
 
       // Default fallback
       const canRetry = retryCount < maxRetries;
-      
+
       const fallbackProps: any = {
         error,
-        showDetails: process.env.NODE_ENV === 'development',
-        className: isolate ? 'error-boundary-isolated' : '',
+        showDetails: process.env.NODE_ENV === "development",
+        className: isolate ? "error-boundary-isolated" : "",
       };
-      
+
       if (canRetry) {
         fallbackProps.onRetry = this.handleRetry;
       }

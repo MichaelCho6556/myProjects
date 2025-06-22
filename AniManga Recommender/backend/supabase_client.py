@@ -1699,9 +1699,8 @@ class SupabaseClient:
                 params={
                     'user_id': f'eq.{user_id}',
                     'select': '''
-                        id, title, description, slug, privacy, is_collaborative,
-                        created_at, updated_at, item_count, followers_count,
-                        list_tag_associations(list_tags(name))
+                        id, title, description, slug, is_public, is_collaborative,
+                        created_at, updated_at
                     ''',
                     'order': 'updated_at.desc',
                     'offset': offset,
@@ -1714,23 +1713,43 @@ class SupabaseClient:
                 return {'lists': [], 'total': 0, 'page': page, 'limit': limit, 'has_more': False}
             
             lists = response.json()
+            print(f"Successfully fetched {len(lists)} custom lists for user {user_id}")
             
             # Transform the data to match frontend expectations
             transformed_lists = []
             for list_item in lists:
-                # Extract tags from the nested structure
+                # Extract tags by fetching them separately for each list
                 tags = []
-                if list_item.get('list_tag_associations'):
-                    tags = [assoc['list_tags']['name'] for assoc in list_item['list_tag_associations'] 
-                           if assoc.get('list_tags')]
+                try:
+                    tags_response = requests.get(
+                        f"{self.base_url}/rest/v1/list_tag_associations",
+                        headers=self.headers,
+                        params={
+                            'list_id': f'eq.{list_item["id"]}',
+                            'select': 'list_tags(name)'
+                        }
+                    )
+                    
+                    if tags_response.status_code == 200:
+                        tag_associations = tags_response.json()
+                        tags = [assoc['list_tags']['name'] for assoc in tag_associations 
+                               if assoc.get('list_tags')]
+                        print(f"Found {len(tags)} tags for list {list_item['id']}: {tags}")
+                except Exception as e:
+                    print(f"Error fetching tags for list {list_item['id']}: {e}")
+                    tags = []
+                
+                # Map is_public to privacy for frontend compatibility
+                privacy = 'Public' if list_item.get('is_public', True) else 'Private'
                 
                 transformed_list = {
                     'id': list_item['id'],
+                    'userId': user_id,  # Use the passed user_id parameter
                     'title': list_item['title'],
                     'description': list_item.get('description'),
-                    'privacy': list_item.get('privacy', 'Public'),
-                    'itemCount': list_item.get('item_count', 0),
-                    'followersCount': list_item.get('followers_count', 0),
+                    'privacy': privacy,
+                    'itemCount': 0,  # TODO: Calculate item count from custom_list_items table
+                    'followersCount': 0,  # TODO: Calculate followers count from list_followers table
                     'tags': tags,
                     'createdAt': list_item['created_at'],
                     'updatedAt': list_item['updated_at'],
@@ -1750,15 +1769,26 @@ class SupabaseClient:
             
             total = 0
             if count_response.status_code == 200:
-                total = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
+                # Parse Content-Range header properly (format: "0-N/total" or "*/total")
+                content_range = count_response.headers.get('Content-Range', '0')
+                print(f"Content-Range header: {content_range}")
+                if '/' in content_range:
+                    total_str = content_range.split('/')[-1]
+                    if total_str and total_str != '*':
+                        total = int(total_str)
+                else:
+                    # Fallback: count from response body if header parsing fails
+                    total = len(lists)
             
-            return {
+            result = {
                 'lists': transformed_lists,
                 'total': total,
                 'page': page,
                 'limit': limit,
                 'has_more': (page * limit) < total
             }
+            print(f"Returning custom lists result: {len(transformed_lists)} lists, total: {total}")
+            return result
             
         except Exception as e:
             print(f"Error getting user custom lists: {e}")
@@ -1816,11 +1846,14 @@ class SupabaseClient:
             create_headers = self.headers.copy()
             create_headers['Prefer'] = 'return=representation'
             
+            print(f"Creating custom list with data: {list_record}")
             response = requests.post(
                 f"{self.base_url}/rest/v1/custom_lists",
                 headers=create_headers,
                 json=list_record
             )
+            
+            print(f"Create list response: Status {response.status_code}, Headers: {dict(response.headers)}")
             
             if response.status_code != 201:
                 print(f"Failed to create list. Status: {response.status_code}, Response: {response.text}")
@@ -1831,8 +1864,10 @@ class SupabaseClient:
                 return None
                 
             response_data = response.json()
+            print(f"Create list response data: {response_data}")
             created_list = response_data[0] if isinstance(response_data, list) else response_data
             list_id = created_list['id']
+            print(f"Successfully created list with ID: {list_id}")
             
             # Handle tags if provided
             tags = list_data.get('tags', [])
@@ -1843,6 +1878,105 @@ class SupabaseClient:
             
         except Exception as e:
             print(f"Error creating custom list: {e}")
+            return None
+    
+    def update_custom_list(self, list_id: int, user_id: str, update_data: dict) -> dict:
+        """Update an existing custom list."""
+        try:
+            # Verify ownership
+            existing_list = self.get_custom_list_details(list_id)
+            if not existing_list or existing_list.get('userId') != user_id:
+                print(f"User {user_id} does not own list {list_id}")
+                return None
+                
+            # Prepare update data
+            update_record = {}
+            if 'title' in update_data:
+                update_record['title'] = update_data['title']
+            if 'description' in update_data:
+                update_record['description'] = update_data['description']
+            if 'privacy' in update_data:
+                # Convert frontend privacy to database field
+                update_record['is_public'] = update_data['privacy'] == 'Public'
+            if 'is_collaborative' in update_data:
+                update_record['is_collaborative'] = update_data['is_collaborative']
+                
+            # Update slug if title changed
+            if 'title' in update_data:
+                slug = update_data['title'].lower().replace(' ', '-').replace('/', '-')
+                # Remove special characters except hyphens
+                import re
+                slug = re.sub(r'[^a-z0-9\-]', '', slug)
+                slug = re.sub(r'-+', '-', slug).strip('-')  # Remove multiple hyphens
+                
+                # Ensure unique slug for user (excluding current list)
+                counter = 1
+                original_slug = slug
+                while True:
+                    existing_response = requests.get(
+                        f"{self.base_url}/rest/v1/custom_lists",
+                        headers=self.headers,
+                        params={
+                            'user_id': f'eq.{user_id}',
+                            'slug': f'eq.{slug}',
+                            'id': f'neq.{list_id}',  # Exclude current list
+                            'select': 'slug'
+                        }
+                    )
+                    
+                    if not existing_response.json():
+                        break
+                        
+                    slug = f"{original_slug}-{counter}"
+                    counter += 1
+                
+                update_record['slug'] = slug
+                
+            print(f"Updating list {list_id} with data: {update_record}")
+            
+            # Update list
+            update_headers = self.headers.copy()
+            update_headers['Prefer'] = 'return=representation'
+            
+            response = requests.patch(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=update_headers,
+                params={'id': f'eq.{list_id}'},
+                json=update_record
+            )
+            
+            print(f"Update response: Status {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"Failed to update list. Status: {response.status_code}, Response: {response.text}")
+                return None
+                
+            if not response.text.strip():
+                print("Empty response from update list API")
+                return None
+                
+            response_data = response.json()
+            updated_list = response_data[0] if isinstance(response_data, list) else response_data
+            
+            # Handle tags if provided
+            if 'tags' in update_data:
+                # Clear existing tags
+                requests.delete(
+                    f"{self.base_url}/rest/v1/list_tag_associations",
+                    headers=self.headers,
+                    params={'list_id': f'eq.{list_id}'}
+                )
+                
+                # Add new tags
+                tags = update_data.get('tags', [])
+                if tags:
+                    self._handle_list_tags(list_id, tags)
+            
+            print(f"Successfully updated list {list_id}")
+            return updated_list
+            
+        except Exception as e:
+            print(f"Error updating custom list: {e}")
             return None
     
     def _handle_list_tags(self, list_id: int, tags: List[str]):
@@ -1924,7 +2058,7 @@ class SupabaseClient:
                     'id': f'eq.{list_id}',
                     'select': '''
                         id, title, description, is_public, is_collaborative, user_id,
-                        created_at, updated_at, item_count, followers_count,
+                        created_at, updated_at,
                         list_tag_associations(list_tags(name))
                     ''',
                     'limit': 1
@@ -1940,8 +2074,8 @@ class SupabaseClient:
                 'title': raw['title'],
                 'description': raw.get('description'),
                 'privacy': 'Public' if raw.get('is_public', True) else 'Private',
-                'itemCount': raw.get('item_count', 0),
-                'followersCount': raw.get('followers_count', 0),
+                'itemCount': 0,  # TODO: Calculate item count from custom_list_items table
+                'followersCount': 0,  # TODO: Calculate followers count from list_followers table
                 'tags': tags,
                 'createdAt': raw.get('created_at'),
                 'updatedAt': raw.get('updated_at'),
@@ -1996,6 +2130,155 @@ class SupabaseClient:
         except Exception as e:
             print(f"Error fetching custom list items: {e}")
             return []
+
+    def add_items_to_list(self, list_id: int, user_id: str, items: List[dict]) -> bool:
+        """
+        Add multiple items to a custom list.
+        
+        Args:
+            list_id (int): List ID
+            user_id (str): User ID (for permission check)
+            items (List[dict]): List of items to add, each containing:
+                - item_uid (str): Item unique identifier
+                - notes (str, optional): Notes for the item
+                
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # First verify user has permission to modify this list
+            list_details = self.get_custom_list_details(list_id)
+            if not list_details or list_details['userId'] != user_id:
+                print(f"User {user_id} does not have permission to modify list {list_id}")
+                return False
+            
+            # Get current items count to determine starting position
+            current_items = self.get_custom_list_items(list_id)
+            next_position = len(current_items)
+            
+            # Prepare items for insertion
+            items_to_insert = []
+            
+            for item in items:
+                item_uid = item.get('item_uid')
+                notes = item.get('notes', '')
+                
+                # Check if item exists in items table
+                item_response = requests.get(
+                    f"{self.base_url}/rest/v1/items",
+                    headers=self.headers,
+                    params={'uid': f'eq.{item_uid}', 'select': 'id,uid'}
+                )
+                
+                if item_response.status_code != 200:
+                    print(f"Failed to verify item {item_uid}")
+                    continue
+                    
+                item_data = item_response.json()
+                if not item_data:
+                    print(f"Item {item_uid} not found")
+                    continue
+                
+                item_id = item_data[0]['id']
+                
+                # Check if item is already in the list
+                existing_check = requests.get(
+                    f"{self.base_url}/rest/v1/custom_list_items",
+                    headers=self.headers,
+                    params={
+                        'list_id': f'eq.{list_id}',
+                        'item_id': f'eq.{item_id}'
+                    }
+                )
+                
+                if existing_check.status_code == 200 and existing_check.json():
+                    print(f"Item {item_uid} already in list {list_id}")
+                    continue
+                
+                items_to_insert.append({
+                    'list_id': list_id,
+                    'item_id': item_id,
+                    'position': next_position,
+                    'notes': notes,
+                    'added_by': user_id
+                })
+                next_position += 1
+            
+            if not items_to_insert:
+                print("No new items to add")
+                return True
+            
+            # Insert all items
+            insert_response = requests.post(
+                f"{self.base_url}/rest/v1/custom_list_items",
+                headers=self.headers,
+                json=items_to_insert
+            )
+            
+            if insert_response.status_code not in [200, 201]:
+                print(f"Failed to insert items: {insert_response.text}")
+                return False
+            
+            # Update list's updated_at timestamp
+            update_response = requests.patch(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={'id': f'eq.{list_id}'},
+                json={'updated_at': 'now()'}
+            )
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error adding items to list: {e}")
+            return False
+
+    def remove_item_from_list(self, list_id: int, user_id: str, item_id: int) -> bool:
+        """
+        Remove an item from a custom list.
+        
+        Args:
+            list_id (int): List ID
+            user_id (str): User ID (for permission check)
+            item_id (int): Item ID to remove
+                
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # First verify user has permission to modify this list
+            list_details = self.get_custom_list_details(list_id)
+            if not list_details or list_details['userId'] != user_id:
+                print(f"User {user_id} does not have permission to modify list {list_id}")
+                return False
+            
+            # Remove the item
+            delete_response = requests.delete(
+                f"{self.base_url}/rest/v1/custom_list_items",
+                headers=self.headers,
+                params={
+                    'list_id': f'eq.{list_id}',
+                    'item_id': f'eq.{item_id}'
+                }
+            )
+            
+            if delete_response.status_code not in [200, 204]:
+                print(f"Failed to remove item: {delete_response.text}")
+                return False
+            
+            # Update list's updated_at timestamp
+            update_response = requests.patch(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={'id': f'eq.{list_id}'},
+                json={'updated_at': 'now()'}
+            )
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error removing item from list: {e}")
+            return False
 
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
@@ -3020,155 +3303,6 @@ class SupabaseAuthClient:
             
         except Exception as e:
             print(f"Error reordering list items: {e}")
-            return False
-
-    def add_items_to_list(self, list_id: int, user_id: str, items: List[dict]) -> bool:
-        """
-        Add multiple items to a custom list.
-        
-        Args:
-            list_id (int): List ID
-            user_id (str): User ID (for permission check)
-            items (List[dict]): List of items to add, each containing:
-                - item_uid (str): Item unique identifier
-                - notes (str, optional): Notes for the item
-                
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            # First verify user has permission to modify this list
-            list_details = self.get_custom_list_details(list_id)
-            if not list_details or list_details['userId'] != user_id:
-                print(f"User {user_id} does not have permission to modify list {list_id}")
-                return False
-            
-            # Get current items count to determine starting position
-            current_items = self.get_custom_list_items(list_id)
-            next_position = len(current_items)
-            
-            # Prepare items for insertion
-            items_to_insert = []
-            
-            for item in items:
-                item_uid = item.get('item_uid')
-                notes = item.get('notes', '')
-                
-                # Check if item exists in items table
-                item_response = requests.get(
-                    f"{self.base_url}/rest/v1/items",
-                    headers=self.headers,
-                    params={'uid': f'eq.{item_uid}', 'select': 'id,uid'}
-                )
-                
-                if item_response.status_code != 200:
-                    print(f"Failed to verify item {item_uid}")
-                    continue
-                    
-                item_data = item_response.json()
-                if not item_data:
-                    print(f"Item {item_uid} not found")
-                    continue
-                
-                item_id = item_data[0]['id']
-                
-                # Check if item is already in the list
-                existing_check = requests.get(
-                    f"{self.base_url}/rest/v1/custom_list_items",
-                    headers=self.headers,
-                    params={
-                        'list_id': f'eq.{list_id}',
-                        'item_id': f'eq.{item_id}'
-                    }
-                )
-                
-                if existing_check.status_code == 200 and existing_check.json():
-                    print(f"Item {item_uid} already in list {list_id}")
-                    continue
-                
-                items_to_insert.append({
-                    'list_id': list_id,
-                    'item_id': item_id,
-                    'position': next_position,
-                    'notes': notes,
-                    'added_by': user_id
-                })
-                next_position += 1
-            
-            if not items_to_insert:
-                print("No new items to add")
-                return True
-            
-            # Insert all items
-            insert_response = requests.post(
-                f"{self.base_url}/rest/v1/custom_list_items",
-                headers=self.headers,
-                json=items_to_insert
-            )
-            
-            if insert_response.status_code not in [200, 201]:
-                print(f"Failed to insert items: {insert_response.text}")
-                return False
-            
-            # Update list's updated_at timestamp
-            update_response = requests.patch(
-                f"{self.base_url}/rest/v1/custom_lists",
-                headers=self.headers,
-                params={'id': f'eq.{list_id}'},
-                json={'updated_at': 'now()'}
-            )
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error adding items to list: {e}")
-            return False
-    
-    def remove_item_from_list(self, list_id: int, user_id: str, item_id: int) -> bool:
-        """
-        Remove an item from a custom list.
-        
-        Args:
-            list_id (int): List ID
-            user_id (str): User ID (for permission check)
-            item_id (int): Item ID to remove
-                
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            # First verify user has permission to modify this list
-            list_details = self.get_custom_list_details(list_id)
-            if not list_details or list_details['userId'] != user_id:
-                print(f"User {user_id} does not have permission to modify list {list_id}")
-                return False
-            
-            # Remove the item
-            delete_response = requests.delete(
-                f"{self.base_url}/rest/v1/custom_list_items",
-                headers=self.headers,
-                params={
-                    'list_id': f'eq.{list_id}',
-                    'item_id': f'eq.{item_id}'
-                }
-            )
-            
-            if delete_response.status_code not in [200, 204]:
-                print(f"Failed to remove item: {delete_response.text}")
-                return False
-            
-            # Update list's updated_at timestamp
-            update_response = requests.patch(
-                f"{self.base_url}/rest/v1/custom_lists",
-                headers=self.headers,
-                params={'id': f'eq.{list_id}'},
-                json={'updated_at': 'now()'}
-            )
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error removing item from list: {e}")
             return False
 
     def get_list_comments(self, list_id: int, page: int = 1, limit: int = 20) -> dict:

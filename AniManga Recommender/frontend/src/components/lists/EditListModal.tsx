@@ -1,9 +1,10 @@
-// ABOUTME: Modal component for editing custom list details like title, description, and privacy settings
+// ABOUTME: Modal component for editing custom list details like title, description, privacy settings, and tags
 // ABOUTME: Provides form validation and API integration for updating list metadata
 
-import React, { useState, useEffect } from 'react';
-import { CustomList } from '../../types/social';
-import './EditListModal.css';
+import React, { useState, useEffect } from "react";
+import { CustomList } from "../../types/social";
+import { TagInputComponent } from "./TagInputComponent";
+import "./EditListModal.css";
 
 interface EditListModalProps {
   list: CustomList;
@@ -12,17 +13,13 @@ interface EditListModalProps {
   onUpdate: (updatedList: Partial<CustomList>) => Promise<void>;
 }
 
-export const EditListModal: React.FC<EditListModalProps> = ({
-  list,
-  isOpen,
-  onClose,
-  onUpdate
-}) => {
+export const EditListModal: React.FC<EditListModalProps> = ({ list, isOpen, onClose, onUpdate }) => {
   const [formData, setFormData] = useState({
     title: list.title,
-    description: list.description || '',
-    privacy: list.privacy || 'Public'
+    description: list.description || "",
+    privacy: list.privacy || "Public",
   });
+  const [tags, setTags] = useState<string[]>(list.tags || []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -30,26 +27,27 @@ export const EditListModal: React.FC<EditListModalProps> = ({
     if (isOpen) {
       setFormData({
         title: list.title,
-        description: list.description || '',
-        privacy: list.privacy || 'Public'
+        description: list.description || "",
+        privacy: list.privacy || "Public",
       });
+      setTags(list.tags || []);
       setErrors({});
     }
   }, [isOpen, list]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.title.trim()) {
-      newErrors.title = 'Title is required';
+      newErrors.title = "Title is required";
     } else if (formData.title.length < 3) {
-      newErrors.title = 'Title must be at least 3 characters';
+      newErrors.title = "Title must be at least 3 characters";
     } else if (formData.title.length > 100) {
-      newErrors.title = 'Title must be less than 100 characters';
+      newErrors.title = "Title must be less than 100 characters";
     }
 
     if (formData.description.length > 500) {
-      newErrors.description = 'Description must be less than 500 characters';
+      newErrors.description = "Description must be less than 500 characters";
     }
 
     setErrors(newErrors);
@@ -58,7 +56,7 @@ export const EditListModal: React.FC<EditListModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -67,28 +65,29 @@ export const EditListModal: React.FC<EditListModalProps> = ({
     try {
       const updateData: Partial<CustomList> = {
         title: formData.title.trim(),
-        privacy: formData.privacy
+        privacy: formData.privacy,
+        tags: tags,
       };
-      
+
       const trimmedDescription = formData.description.trim();
       if (trimmedDescription) {
         updateData.description = trimmedDescription;
       }
-      
+
       await onUpdate(updateData);
       onClose();
     } catch (error) {
-      console.error('Failed to update list:', error);
-      setErrors({ submit: 'Failed to update list. Please try again.' });
+      console.error("Failed to update list:", error);
+      setErrors({ submit: "Failed to update list. Please try again." });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
+      setErrors((prev) => ({ ...prev, [field]: "" }));
     }
   };
 
@@ -96,7 +95,7 @@ export const EditListModal: React.FC<EditListModalProps> = ({
 
   return (
     <div className="edit-list-modal-overlay" onClick={onClose}>
-      <div className="edit-list-modal" onClick={e => e.stopPropagation()}>
+      <div className="edit-list-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Edit List</h2>
           <button className="modal-close" onClick={onClose}>
@@ -115,8 +114,8 @@ export const EditListModal: React.FC<EditListModalProps> = ({
               type="text"
               id="title"
               value={formData.title}
-              onChange={(e) => handleChange('title', e.target.value)}
-              className={`form-input ${errors.title ? 'error' : ''}`}
+              onChange={(e) => handleChange("title", e.target.value)}
+              className={`form-input ${errors.title ? "error" : ""}`}
               placeholder="Enter list title"
               maxLength={100}
             />
@@ -131,8 +130,8 @@ export const EditListModal: React.FC<EditListModalProps> = ({
             <textarea
               id="description"
               value={formData.description}
-              onChange={(e) => handleChange('description', e.target.value)}
-              className={`form-textarea ${errors.description ? 'error' : ''}`}
+              onChange={(e) => handleChange("description", e.target.value)}
+              className={`form-textarea ${errors.description ? "error" : ""}`}
               placeholder="Enter list description (optional)"
               rows={4}
               maxLength={500}
@@ -148,7 +147,7 @@ export const EditListModal: React.FC<EditListModalProps> = ({
             <select
               id="privacy"
               value={formData.privacy}
-              onChange={(e) => handleChange('privacy', e.target.value)}
+              onChange={(e) => handleChange("privacy", e.target.value)}
               className="form-select"
             >
               <option value="Public">Public - Anyone can view</option>
@@ -157,31 +156,25 @@ export const EditListModal: React.FC<EditListModalProps> = ({
             </select>
           </div>
 
-          {errors.submit && (
-            <div className="error-message submit-error">{errors.submit}</div>
-          )}
+          <div className="form-group">
+            <label className="form-label">Tags</label>
+            <TagInputComponent tags={tags} onChange={setTags} />
+          </div>
+
+          {errors.submit && <div className="error-message submit-error">{errors.submit}</div>}
 
           <div className="modal-actions">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn btn-secondary"
-              disabled={isSubmitting}
-            >
+            <button type="button" onClick={onClose} className="btn btn-secondary" disabled={isSubmitting}>
               Cancel
             </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={isSubmitting}
-            >
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
                   <div className="spinner"></div>
                   Saving...
                 </>
               ) : (
-                'Save Changes'
+                "Save Changes"
               )}
             </button>
           </div>

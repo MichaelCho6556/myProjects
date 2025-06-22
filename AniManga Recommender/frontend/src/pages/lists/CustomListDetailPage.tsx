@@ -16,7 +16,7 @@ import "./CustomListDetailPage.css";
 export const CustomListDetailPage: React.FC = () => {
   const { listId } = useParams<{ listId: string }>();
   const { user } = useAuth();
-  const { get, post, delete: deleteMethod } = useAuthenticatedApi();
+  const { get, post, put, delete: deleteMethod } = useAuthenticatedApi();
 
   const [list, setList] = useState<CustomList | null>(null);
   const [items, setItems] = useState<ListItem[]>([]);
@@ -35,15 +35,15 @@ export const CustomListDetailPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
 
-      console.log('Fetching list details for listId:', listId);
+      console.log("Fetching list details for listId:", listId);
 
       const [listResponse, itemsResponse] = await Promise.all([
         get(`/api/auth/lists/${listId}`),
         get(`/api/auth/lists/${listId}/items`),
       ]);
 
-      console.log('List response:', listResponse);
-      console.log('Items response:', itemsResponse);
+      console.log("List response:", listResponse);
+      console.log("Items response:", itemsResponse);
 
       setList(listResponse.data || listResponse);
       setItems(itemsResponse.data || itemsResponse || []);
@@ -53,7 +53,9 @@ export const CustomListDetailPage: React.FC = () => {
       if (err.response?.status === 404) {
         setError("List not found or you do not have permission to view it.");
       } else {
-        setError(err.response?.data?.message || err.message || "Failed to load list details. Please try again.");
+        setError(
+          err.response?.data?.message || err.message || "Failed to load list details. Please try again."
+        );
       }
     } finally {
       setIsLoading(false);
@@ -155,10 +157,10 @@ export const CustomListDetailPage: React.FC = () => {
     if (!listId) return;
 
     try {
-      await post(`/api/auth/lists/${listId}`, updatedData);
-      setList(prev => prev ? { ...prev, ...updatedData } : null);
+      await put(`/api/auth/lists/${listId}`, updatedData);
+      setList((prev) => (prev ? { ...prev, ...updatedData } : null));
     } catch (error) {
-      console.error('Failed to update list:', error);
+      console.error("Failed to update list:", error);
       throw error;
     }
   };
@@ -177,18 +179,32 @@ export const CustomListDetailPage: React.FC = () => {
           <div className="flex items-center justify-center min-h-[60vh]">
             <div className="text-center">
               <div className="mb-6">
-                <svg className="w-16 h-16 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                <svg
+                  className="w-6 h-6 mx-auto text-gray-400 mb-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1}
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
                 </svg>
               </div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Please Sign In</h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">You need to be signed in to view this list.</p>
-              <Link
-                to="/"
-                className="action-button primary"
-              >
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                You need to be signed in to view this list.
+              </p>
+              <Link to="/" className="action-button primary">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                  />
                 </svg>
                 Go to Homepage
               </Link>
@@ -231,25 +247,34 @@ export const CustomListDetailPage: React.FC = () => {
           <div className="list-header">
             <div className="text-center">
               <div className="mb-6">
-                <svg className="w-16 h-16 mx-auto text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                <svg
+                  className="w-6 h-6 mx-auto text-red-400 mb-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+                  />
                 </svg>
               </div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Error Loading List</h2>
               <p className="text-gray-600 dark:text-gray-400 mb-6">{error || "List not found"}</p>
-              <button
-                onClick={fetchListDetails}
-                className="action-button secondary mr-3"
-              >
+              <button onClick={fetchListDetails} className="action-button secondary mr-3">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
                 </svg>
                 Try Again
               </button>
-              <Link
-                to="/my-lists"
-                className="action-button primary"
-              >
+              <Link to="/my-lists" className="action-button primary">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
@@ -278,9 +303,7 @@ export const CustomListDetailPage: React.FC = () => {
             <div className="flex-1">
               <h1 className="list-title">{list.title}</h1>
 
-              {list.description && (
-                <p className="list-description">{list.description}</p>
-              )}
+              {list.description && <p className="list-description">{list.description}</p>}
 
               <div className="list-meta">
                 <div className="list-meta-item">
@@ -347,13 +370,23 @@ export const CustomListDetailPage: React.FC = () => {
               <div className="list-actions">
                 <button className="action-button secondary" onClick={handleEditList}>
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
                   </svg>
                   Edit List
                 </button>
                 <button className="action-button primary" onClick={handleAddItems}>
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                    />
                   </svg>
                   Add Items
                 </button>
@@ -376,12 +409,7 @@ export const CustomListDetailPage: React.FC = () => {
         {isOwner && items.length > 1 && (
           <div className="instructions-banner">
             <div className="instructions-content">
-              <svg
-                className="instructions-icon"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="instructions-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -390,9 +418,7 @@ export const CustomListDetailPage: React.FC = () => {
                 />
               </svg>
               <div className="instructions-text">
-                <h3 className="instructions-title">
-                  Drag to reorder items
-                </h3>
+                <h3 className="instructions-title">Drag to reorder items</h3>
                 <p className="instructions-description">
                   Click and drag the grip icon (≡) to reorder items in your list. Changes are saved
                   automatically.
@@ -411,7 +437,9 @@ export const CustomListDetailPage: React.FC = () => {
             onEditItem={isOwner ? handleEditItem : () => {}}
             isLoading={false}
             emptyMessage={
-              isOwner ? "No items in this list yet. Add some items to get started!" : "This list is empty."
+              isOwner
+                ? "Your list is ready for some awesome anime and manga! Click 'Add Items' above to start building your collection."
+                : "This list is empty, but great things are coming soon!"
             }
           />
         </div>

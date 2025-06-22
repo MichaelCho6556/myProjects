@@ -15,7 +15,7 @@
 }
 
 .empty-state-icon {
-  font-size: 4rem;
+  font-size: 2rem;
   margin-bottom: 1.5rem;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
   animation: gentle-bounce 3s ease-in-out infinite;
@@ -154,7 +154,7 @@
   }
   
   .empty-state-icon {
-    font-size: 3rem;
+    font-size: 1.75rem;
     margin-bottom: 1rem;
   }
   

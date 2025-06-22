@@ -24,7 +24,7 @@
 }
 
 .error-icon {
-  font-size: 4rem;
+  font-size: 2rem;
   margin-bottom: 1rem;
   display: block;
 }
@@ -346,7 +346,7 @@
   }
 
   .error-icon {
-    font-size: 3rem;
+    font-size: 1.5rem;
   }
 
   .error-title {
@@ -378,7 +378,7 @@
   }
 
   .error-icon {
-    font-size: 2.5rem;
+    font-size: 1.25rem;
   }
 
   .error-title {

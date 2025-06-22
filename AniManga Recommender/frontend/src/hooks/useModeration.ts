@@ -65,7 +65,6 @@ export function useModerationReports(initialFilters: ModerationFilters = {}): Us
         setCurrentPage(page);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch reports");
-        console.error("Error fetching moderation reports:", err);
       } finally {
         setLoading(false);
       }
@@ -178,7 +177,6 @@ export function useModerationAudit(): UseModerationAuditResult {
         setCurrentFilters(filters);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch audit log");
-        console.error("Error fetching audit log:", err);
       } finally {
         setLoading(false);
       }

@@ -636,18 +636,10 @@ export const parseError = (error: ApiError, context?: string): ParsedError => {
 /**
  * Enhanced logging with retry information
  */
-export const logError = (parsedError: ParsedError, componentName: string = "Unknown"): void => {
-  const { statusCode, originalError, isRetryable } = parsedError;
-  const logPrefix = `[${componentName}] Error:`;
-  const retryInfo = isRetryable ? "(Retryable)" : "(Not Retryable)";
-
-  // Log user errors (4xx) as warnings
-  if (statusCode && statusCode >= 400 && statusCode < 500) {
-    console.warn(`${logPrefix} ${retryInfo}`, originalError);
-  } else {
-    // Log server errors and unknown errors as errors
-    console.error(`${logPrefix} ${retryInfo}`, originalError);
-  }
+export const logError = (_parsedError: ParsedError, _componentName: string = "Unknown"): void => {
+  // Error information is tracked internally without console logging
+  // For production applications, integrate with error tracking services like Sentry
+  // This prevents sensitive error details from being exposed in browser console
 };
 
 /**
