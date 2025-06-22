@@ -41,6 +41,7 @@ import requests
 from datetime import datetime, timedelta
 import json
 import ast
+import time
 from typing import Dict, List, Optional, Any
 from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
 
@@ -5458,6 +5459,105 @@ def get_my_custom_lists():
         print(f"Error getting user custom lists: {e}")
         return jsonify({'error': str(e)}), 500
 
+# Add route to match frontend expectation
+@app.route('/api/auth/lists', methods=['GET'])
+@require_auth
+def get_user_lists():
+    """
+    Get the current user's custom lists - alternative endpoint for frontend compatibility.
+    
+    This route provides the same functionality as /api/auth/lists/my-lists but matches
+    the frontend's expected endpoint structure.
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        print(f"DEBUG /api/auth/lists: user_id = {user_id}")
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        # Parse query parameters
+        try:
+            page = int(request.args.get('page', 1))
+            limit = min(int(request.args.get('limit', 20)), 50)  # Max 50 per page
+        except ValueError:
+            return jsonify({'error': 'Page and limit must be integers'}), 400
+        
+        if page < 1:
+            return jsonify({'error': 'Page must be greater than 0'}), 400
+        
+        # Get user's custom lists
+        print(f"DEBUG: Calling get_user_custom_lists for user_id: {user_id}")
+        result = supabase_client.get_user_custom_lists(user_id, page, limit)
+        print(f"DEBUG: get_user_custom_lists result: {result}")
+        
+        if result is not None:
+            lists_count = len(result.get('lists', []))
+            print(f"DEBUG: Returning {lists_count} lists to frontend")
+            return jsonify(result), 200
+        else:
+            print("DEBUG: get_user_custom_lists returned None")
+            return jsonify({'error': 'Failed to retrieve custom lists'}), 500
+            
+    except Exception as e:
+        print(f"Error getting user custom lists from /api/auth/lists: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/debug/test-method', methods=['GET'])
+def debug_test_method():
+    """Debug endpoint to test if add_items_to_list method exists"""
+    try:
+        # Check if the method exists
+        has_method = hasattr(supabase_client, 'add_items_to_list')
+        method_callable = callable(getattr(supabase_client, 'add_items_to_list', None))
+        
+        # Get all methods of the supabase_client
+        all_methods = [method for method in dir(supabase_client) if not method.startswith('_')]
+        
+        return jsonify({
+            'has_add_items_to_list_method': has_method,
+            'method_is_callable': method_callable,
+            'supabase_client_type': str(type(supabase_client)),
+            'all_methods_count': len(all_methods),
+            'sample_methods': all_methods[:10],  # First 10 methods
+            'add_items_methods': [m for m in all_methods if 'add_items' in m.lower()]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/debug/test-lists', methods=['GET'])
+@require_auth
+def debug_test_lists():
+    """Debug endpoint to test custom lists functionality"""
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        print(f"DEBUG TEST: user_id = {user_id}")
+        
+        # Test creating a simple list
+        test_list_data = {
+            'title': 'Debug Test List',
+            'description': 'This is a test list created for debugging',
+            'is_public': True,
+            'is_collaborative': False
+        }
+        
+        created = supabase_client.create_custom_list(user_id, test_list_data)
+        print(f"DEBUG TEST: Created list: {created}")
+        
+        # Test fetching lists
+        result = supabase_client.get_user_custom_lists(user_id, 1, 20)
+        print(f"DEBUG TEST: Fetched lists: {result}")
+        
+        return jsonify({
+            'user_id': user_id,
+            'created_list': created,
+            'fetched_lists': result,
+            'test_status': 'completed'
+        }), 200
+        
+    except Exception as e:
+        print(f"DEBUG TEST ERROR: {e}")
+        return jsonify({'error': str(e), 'test_status': 'failed'}), 500
+
 @app.route('/api/lists/discover', methods=['GET'])
 def discover_lists():
     """
@@ -8437,6 +8537,41 @@ def get_custom_list_details_route(list_id):
         print(f"Error retrieving custom list details: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/auth/lists/<int:list_id>', methods=['PUT'])
+@require_auth
+def update_custom_list_route(list_id):
+    """Update a custom list's details (title, description, privacy, etc.)."""
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+            
+        # Validate JSON request
+        if not request.is_json:
+            return jsonify({'error': 'Request must be JSON'}), 400
+            
+        update_data = request.get_json()
+        if not update_data:
+            return jsonify({'error': 'No update data provided'}), 400
+        
+        # Validate required fields if provided
+        if 'title' in update_data and not update_data['title'].strip():
+            return jsonify({'error': 'Title cannot be empty'}), 400
+            
+        if 'privacy' in update_data and update_data['privacy'] not in ['Public', 'Private', 'Friends Only']:
+            return jsonify({'error': 'Invalid privacy setting'}), 400
+        
+        # Update the list
+        result = supabase_client.update_custom_list(list_id, user_id, update_data)
+        
+        if result:
+            return jsonify(result), 200
+        else:
+            return jsonify({'error': 'Failed to update list or list not found'}), 404
+            
+    except Exception as e:
+        print(f"Error updating custom list: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/items', methods=['GET'])
 @require_auth
@@ -8503,19 +8638,166 @@ def delete_custom_list(list_id):
         if list_info['userId'] != user_id:
             return jsonify({'error': 'Forbidden - You can only delete your own lists'}), 403
         
-        # Delete the list and all associated data
-        supabase_client.table('custom_list_items').delete().eq('list_id', list_id).execute()
-        supabase_client.table('list_comments').delete().eq('list_id', list_id).execute()
-        supabase_client.table('list_followers').delete().eq('list_id', list_id).execute()
-        result = supabase_client.table('custom_lists').delete().eq('id', list_id).execute()
+        # Delete the list and all associated data using requests
+        # First delete associated items
+        response = requests.delete(
+            f"{supabase_client.base_url}/rest/v1/custom_list_items",
+            headers=supabase_client.headers,
+            params={'list_id': f'eq.{list_id}'}
+        )
+        if response.status_code not in [200, 204]:
+            print(f"Warning: Failed to delete list items: {response.status_code}")
         
-        if not result.data:
+        # Delete list comments
+        response = requests.delete(
+            f"{supabase_client.base_url}/rest/v1/list_comments",
+            headers=supabase_client.headers,
+            params={'list_id': f'eq.{list_id}'}
+        )
+        if response.status_code not in [200, 204]:
+            print(f"Warning: Failed to delete list comments: {response.status_code}")
+        
+        # Delete list followers
+        response = requests.delete(
+            f"{supabase_client.base_url}/rest/v1/list_followers",
+            headers=supabase_client.headers,
+            params={'list_id': f'eq.{list_id}'}
+        )
+        if response.status_code not in [200, 204]:
+            print(f"Warning: Failed to delete list followers: {response.status_code}")
+        
+        # Finally delete the list itself
+        response = requests.delete(
+            f"{supabase_client.base_url}/rest/v1/custom_lists",
+            headers=supabase_client.headers,
+            params={'id': f'eq.{list_id}'}
+        )
+        
+        if response.status_code not in [200, 204]:
+            print(f"Failed to delete list: {response.status_code} - {response.text}")
             return jsonify({'error': 'Failed to delete list'}), 500
             
         return jsonify({'message': 'List deleted successfully'}), 200
         
     except Exception as e:
         print(f"Error deleting custom list: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/lists/<int:list_id>/duplicate', methods=['POST'])
+@require_auth
+def duplicate_custom_list(list_id):
+    """
+    Duplicate a custom list with all its items and settings.
+    
+    Authentication: Required - User must have access to the original list
+    
+    Path Parameters:
+        list_id (int): ID of the list to duplicate
+        
+    Returns:
+        JSON Response:
+            - new list data on successful duplication
+            
+    HTTP Status Codes:
+        201: List duplicated successfully
+        404: Original list not found
+        403: Access denied to original list
+        500: Server error during duplication
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        
+        # Get original list details
+        original_list = supabase_client.get_custom_list_details(list_id)
+        if not original_list:
+            return jsonify({'error': 'Original list not found'}), 404
+            
+        # Check if user can access the original list (owner or public list)
+        if original_list['userId'] != user_id and original_list['privacy'] != 'Public':
+            return jsonify({'error': 'Access denied to original list'}), 403
+        
+        # Create new list with duplicated data
+        duplicate_data = {
+            'user_id': user_id,
+            'title': f"{original_list['title']} (Copy)",
+            'description': original_list.get('description', ''),
+            'slug': f"{original_list['title'].lower().replace(' ', '-')}-copy-{int(time.time())}",
+            'is_public': True,  # Default to public, user can change later
+            'is_collaborative': False
+        }
+        
+        # Create the new list
+        response = requests.post(
+            f"{supabase_client.base_url}/rest/v1/custom_lists",
+            headers={**supabase_client.headers, 'Prefer': 'return=representation'},
+            json=duplicate_data
+        )
+        
+        if response.status_code != 201:
+            return jsonify({'error': 'Failed to create duplicate list'}), 500
+            
+        new_list_data = response.json()[0]
+        new_list_id = new_list_data['id']
+        
+        # Get original list items
+        original_items = supabase_client.get_custom_list_items(list_id)
+        
+        # Copy items to new list
+        if original_items:
+            items_to_copy = []
+            for item in original_items:
+                items_to_copy.append({
+                    'list_id': new_list_id,
+                    'item_id': item.get('item_id'),
+                    'position': item.get('position', 0),
+                    'notes': item.get('notes'),
+                    'added_by': user_id
+                })
+            
+            if items_to_copy:
+                requests.post(
+                    f"{supabase_client.base_url}/rest/v1/custom_list_items",
+                    headers=supabase_client.headers,
+                    json=items_to_copy
+                )
+        
+        # Copy tags if any
+        if original_list.get('tags'):
+            for tag_name in original_list['tags']:
+                # Find or create tag
+                tag_response = requests.get(
+                    f"{supabase_client.base_url}/rest/v1/list_tags",
+                    headers=supabase_client.headers,
+                    params={'name': f'eq.{tag_name}'}
+                )
+                
+                if tag_response.status_code == 200 and tag_response.json():
+                    tag_id = tag_response.json()[0]['id']
+                    
+                    # Associate tag with new list
+                    requests.post(
+                        f"{supabase_client.base_url}/rest/v1/list_tag_associations",
+                        headers=supabase_client.headers,
+                        json={'list_id': new_list_id, 'tag_id': tag_id}
+                    )
+        
+        # Return the new list data in the expected format
+        return jsonify({
+            'id': str(new_list_id),
+            'title': new_list_data['title'],
+            'description': new_list_data.get('description', ''),
+            'privacy': 'Public',
+            'tags': original_list.get('tags', []),
+            'createdAt': new_list_data['created_at'],
+            'updatedAt': new_list_data['updated_at'],
+            'userId': user_id,
+            'username': '',
+            'itemCount': len(original_items) if original_items else 0,
+            'followersCount': 0
+        }), 201
+        
+    except Exception as e:
+        print(f"Error duplicating custom list: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/items/batch', methods=['POST'])
