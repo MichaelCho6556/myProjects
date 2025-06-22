@@ -1,0 +1,6 @@
+# ... other ignores
+/node_modules
+/build
+
+# Secrets
+.env
