@@ -28,8 +28,7 @@ const App = () => {
         url: `https://tasty.p.rapidapi.com/recipes/get-more-info`,
         params: { id: id },
         headers: {
-          "X-RapidAPI-Key":
-            "defb95ebc0mshf805ae80b76285cp1cdcd5jsnb6033326020a",
+          "X-RapidAPI-Key": process.env.REACT_APP_RAPIDAPI_KEY,
           "X-RapidAPI-Host": "tasty.p.rapidapi.com",
         },
       });
@@ -66,10 +65,7 @@ const App = () => {
       {!showDetails ? (
         <>
           <SearchBar setQuery={setQuery} />
-          <RecipeList
-            searchParams={searchParams}
-            onRecipeSelect={handleRecipeSelect}
-          />
+          <RecipeList searchParams={searchParams} onRecipeSelect={handleRecipeSelect} />
         </>
       ) : (
         <RecipeDetail recipe={recipeDetails} onBack={handleBack} />
@@ -105,6 +101,5 @@ const AppTitle = styled.h1`
   font-size: calc(12px + 2vmin);
   margin: 0;
 `;
-
 
 export default App;
