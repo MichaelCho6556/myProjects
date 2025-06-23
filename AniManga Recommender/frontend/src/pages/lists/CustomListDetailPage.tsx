@@ -26,6 +26,7 @@ export const CustomListDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddItemsModalOpen, setIsAddItemsModalOpen] = useState(false);
+  const [userLists, setUserLists] = useState<Array<{ id: string; name: string; itemCount: number }>>([]);
 
   useDocumentTitle(list ? `${list.title} - Custom List` : "Custom List");
 
@@ -75,6 +76,50 @@ export const CustomListDetailPage: React.FC = () => {
   useEffect(() => {
     fetchListDetails();
   }, [listId, user]);
+
+  // Load user's other lists for context menu "Copy to List" functionality
+  useEffect(() => {
+    const fetchUserLists = async () => {
+      if (!user) return;
+
+      try {
+        const response = await get("/api/auth/lists");
+
+        // Handle different response formats - the API returns a paginated response
+        let allLists;
+        if (response.data && response.data.lists && Array.isArray(response.data.lists)) {
+          allLists = response.data.lists;
+        } else if (response.lists && Array.isArray(response.lists)) {
+          allLists = response.lists;
+        } else if (response.data && Array.isArray(response.data)) {
+          allLists = response.data;
+        } else if (Array.isArray(response)) {
+          allLists = response;
+        } else {
+          console.warn("Unexpected API response format for user lists:", response);
+          allLists = [];
+        }
+
+        // Filter out current list and map to simplified format
+        const otherLists = allLists
+          .filter((l: any) => l.id !== listId)
+          .slice(0, 5) // Limit to 5 lists for context menu
+          .map((l: any) => ({
+            id: l.id,
+            name: l.title,
+            itemCount: l.itemCount || 0,
+          }));
+
+        setUserLists(otherLists);
+      } catch (error) {
+        console.error("Failed to load user lists:", error);
+        // Set empty array if API fails
+        setUserLists([]);
+      }
+    };
+
+    fetchUserLists();
+  }, [user, listId, get]);
 
   const handleReorderItems = async (newItems: ListItem[]) => {
     if (!listId || isReordering) return;
@@ -132,10 +177,6 @@ export const CustomListDetailPage: React.FC = () => {
   };
 
   const handleRemoveItem = async (itemId: string) => {
-    if (!window.confirm("Are you sure you want to remove this item from the list?")) {
-      return;
-    }
-
     try {
       await deleteMethod(`/api/auth/lists/${listId}/items/${itemId}`);
       setItems((prev) => prev.filter((item) => item.id !== itemId));
@@ -158,10 +199,54 @@ export const CustomListDetailPage: React.FC = () => {
     if (!listId) return;
 
     try {
-      // API call to update item in the list
-      await put(`/api/auth/lists/${listId}/items/${itemId}`, updatedData);
+      // Separate list-specific data from personal tracking data
+      const listSpecificData: any = {};
+      const personalTrackingData: any = {};
 
-      // Update the local state
+      // Only notes and position can be saved to the list API
+      if ("notes" in updatedData) {
+        listSpecificData.notes = updatedData.notes;
+      }
+      if ("position" in updatedData) {
+        listSpecificData.position = updatedData.position;
+      }
+
+      // Personal tracking data goes to localStorage
+      const personalFields = [
+        "personalRating",
+        "watchStatus",
+        "customTags",
+        "dateStarted",
+        "dateCompleted",
+        "rewatchCount",
+      ];
+      personalFields.forEach((field) => {
+        if (field in updatedData) {
+          personalTrackingData[field] = updatedData[field as keyof ListItem];
+        }
+      });
+
+      // Save list-specific data to backend if there's any
+      if (Object.keys(listSpecificData).length > 0) {
+        await put(`/api/auth/lists/${listId}/items/${itemId}`, listSpecificData);
+      }
+
+      // Save personal tracking data to localStorage if there's any
+      if (Object.keys(personalTrackingData).length > 0) {
+        const currentItem = items.find((item) => item.id === itemId);
+        if (currentItem) {
+          const storageKey = `enhanced_${currentItem.itemUid}`;
+          const existingData = JSON.parse(localStorage.getItem(storageKey) || "{}");
+          const mergedData = {
+            ...existingData,
+            ...personalTrackingData,
+            lastUpdated: new Date().toISOString(),
+          };
+          localStorage.setItem(storageKey, JSON.stringify(mergedData));
+        }
+      }
+
+      // Update the local state with all changes
       setItems((prevItems) =>
         prevItems.map((item) => (item.id === itemId ? { ...item, ...updatedData } : item))
       );
@@ -510,6 +595,78 @@ export const CustomListDetailPage: React.FC = () => {
                 ? "Your list is ready for some awesome anime and manga! Click 'Add Items' above to start building your collection."
                 : "This list is empty, but great things are coming soon!"
             }
+            // Context menu props
+            userLists={userLists}
+            onQuickRate={async (itemId: string, rating: number) => {
+              // Handle quick rating - save to localStorage for personal tracking
+              const currentItem = items.find((item) => item.id === itemId);
+              if (!currentItem) return;
+
+              const storageKey = `enhanced_${currentItem.itemUid}`;
+              const existingData = JSON.parse(localStorage.getItem(storageKey) || "{}");
+              const personalData = {
+                ...existingData,
+                personalRating: rating,
+                lastUpdated: new Date().toISOString(),
+              };
+              localStorage.setItem(storageKey, JSON.stringify(personalData));
+
+              // Update local state for immediate UI feedback
+              setItems((prev) =>
+                prev.map((item) => (item.id === itemId ? { ...item, personalRating: rating } : item))
+              );
+            }}
+            onUpdateStatus={async (itemId: string, status: string) => {
+              // Handle status update - save to localStorage for personal tracking
+              const currentItem = items.find((item) => item.id === itemId);
+              if (!currentItem) return;
+
+              const storageKey = `enhanced_${currentItem.itemUid}`;
+              const existingData = JSON.parse(localStorage.getItem(storageKey) || "{}");
+              const personalData = {
+                ...existingData,
+                watchStatus: status,
+                lastUpdated: new Date().toISOString(),
+              };
+              localStorage.setItem(storageKey, JSON.stringify(personalData));
+
+              // Update local state for immediate UI feedback
+              setItems((prev) =>
+                prev.map((item) => (item.id === itemId ? { ...item, watchStatus: status as any } : item))
+              );
+            }}
+            onAddTag={async (itemId: string, tag: string) => {
+              // Handle tag addition - save to localStorage for personal tracking
+              const currentItem = items.find((item) => item.id === itemId);
+              if (!currentItem) return;
+
+              const currentTags = currentItem.customTags || [];
+              const trimmedTag = tag.trim().toLowerCase();
+
+              if (currentTags.includes(trimmedTag) || currentTags.length >= 10) {
+                return; // Tag exists or too many tags
+              }
+
+              const newTags = [...currentTags, trimmedTag];
+              const storageKey = `enhanced_${currentItem.itemUid}`;
+              const existingData = JSON.parse(localStorage.getItem(storageKey) || "{}");
+              const personalData = {
+                ...existingData,
+                customTags: newTags,
+                lastUpdated: new Date().toISOString(),
+              };
+              localStorage.setItem(storageKey, JSON.stringify(personalData));
+
+              // Update local state for immediate UI feedback
+              setItems((prev) =>
+                prev.map((item) => (item.id === itemId ? { ...item, customTags: newTags } : item))
+              );
+            }}
+            onCopyToList={async (itemId: string, targetListId: string) => {
+              // Handle copying to another list
+              console.log(`Copying item ${itemId} to list ${targetListId}`);
+              // TODO: Implement actual copy functionality when backend supports it
+            }}
           />
         </div>
 
