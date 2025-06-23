@@ -12,12 +12,7 @@ interface EditItemModalProps {
   item: ListItem | null;
 }
 
-export const EditItemModal: React.FC<EditItemModalProps> = ({
-  isOpen,
-  onClose,
-  onSave,
-  item,
-}) => {
+export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, onSave, item }) => {
   const [notes, setNotes] = useState("");
   const [personalRating, setPersonalRating] = useState<number | null>(null);
   const [watchStatus, setWatchStatus] = useState<string | null>(null);
@@ -47,22 +42,22 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
     setIsSaving(true);
     try {
       const updatedData: any = {};
-      
+
       // Include notes (allow clearing by sending empty string)
       const trimmedNotes = notes.trim();
       updatedData.notes = trimmedNotes;
-      
+
       // Include personal rating if set
       if (personalRating !== null) {
         updatedData.personal_rating = personalRating;
       }
-      
-      // Include watch status if set  
+
+      // Include watch status if set
       if (watchStatus !== null) {
         updatedData.status = watchStatus;
       }
-      
-      console.log('Sending update data:', updatedData);
+
+      console.log("Sending update data:", updatedData);
 
       await onSave(item.id, updatedData);
       onClose();
@@ -94,42 +89,53 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
 
   const getDisplayMediaType = (mediaType: string): string => {
     // Debug: Log the actual value we receive
-    console.log('MediaType received:', JSON.stringify(mediaType), 'Type:', typeof mediaType);
-    
+    console.log("MediaType received:", JSON.stringify(mediaType), "Type:", typeof mediaType);
+
     // Handle null, undefined, and empty values
-    if (mediaType === null || mediaType === undefined || !mediaType || 
-        (typeof mediaType === 'string' && mediaType.trim() === '') || 
-        mediaType === 'null' || mediaType === 'undefined') {
-      return 'Anime'; // Default to Anime instead of Unknown
+    if (
+      mediaType === null ||
+      mediaType === undefined ||
+      !mediaType ||
+      (typeof mediaType === "string" && mediaType.trim() === "") ||
+      mediaType === "null" ||
+      mediaType === "undefined"
+    ) {
+      return "Anime"; // Default to Anime instead of Unknown
     }
-    
+
     const type = mediaType.toLowerCase().trim();
-    
+
     // Handle specific anime types
-    if (type === 'tv' || type === 'ova' || type === 'movie' || type === 'special' || type === 'ona') {
-      return 'Anime';
+    if (type === "tv" || type === "ova" || type === "movie" || type === "special" || type === "ona") {
+      return "Anime";
     }
-    
+
     // Handle manga types
-    if (type === 'manga' || type === 'manhwa' || type === 'manhua' || type === 'one_shot' || type === 'doujinshi') {
-      return 'Manga';
+    if (
+      type === "manga" ||
+      type === "manhwa" ||
+      type === "manhua" ||
+      type === "one_shot" ||
+      type === "doujinshi"
+    ) {
+      return "Manga";
     }
-    
+
     // Handle video/promotional content - these should still be Anime if they're anime related
-    if (type === 'pv' || type === 'cm' || type === 'music') {
-      return 'Anime'; // Changed from 'Video' to 'Anime' since PV usually means anime preview
+    if (type === "pv" || type === "cm" || type === "music") {
+      return "Anime"; // Changed from 'Video' to 'Anime' since PV usually means anime preview
     }
-    
+
     // Handle novels
-    if (type === 'novel' || type === 'light_novel') {
-      return 'Novel';
+    if (type === "novel" || type === "light_novel") {
+      return "Novel";
     }
-    
+
     // For completely empty or null values, check if we can infer from title or other context
-    if (!type || type === '') {
-      return 'Anime'; // Default to Anime for items without type
+    if (!type || type === "") {
+      return "Anime"; // Default to Anime for items without type
     }
-    
+
     // Default to capitalizing first letter for other types
     return mediaType.charAt(0).toUpperCase() + mediaType.slice(1).toLowerCase();
   };
@@ -149,12 +155,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
       <div className="edit-item-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Edit Item</h2>
-          <button
-            className="close-button"
-            onClick={handleClose}
-            disabled={isSaving}
-            aria-label="Close modal"
-          >
+          <button className="close-button" onClick={handleClose} disabled={isSaving} aria-label="Close modal">
             ×
           </button>
         </div>
@@ -162,13 +163,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
         <div className="modal-body">
           {/* Item Info */}
           <div className="item-info">
-            {item.imageUrl && (
-              <img
-                src={item.imageUrl}
-                alt={item.title}
-                className="item-image"
-              />
-            )}
+            {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="item-image" />}
             <div className="item-details">
               <h3>{item.title}</h3>
               <span className="media-type">{getDisplayMediaType(item.mediaType)}</span>
@@ -180,12 +175,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
             <div className="rating-header">
               <label className="form-label">Personal Rating</label>
               {personalRating && (
-                <button
-                  type="button"
-                  onClick={clearRating}
-                  className="clear-rating-btn"
-                  disabled={isSaving}
-                >
+                <button type="button" onClick={clearRating} className="clear-rating-btn" disabled={isSaving}>
                   Clear
                 </button>
               )}
@@ -199,7 +189,9 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
                     className={`star ${
                       personalRating && star <= Math.floor(personalRating) ? "filled" : ""
                     } ${
-                      personalRating && star === Math.ceil(personalRating) && personalRating % 1 !== 0 ? "half-filled" : ""
+                      personalRating && star === Math.ceil(personalRating) && personalRating % 1 !== 0
+                        ? "half-filled"
+                        : ""
                     }`}
                     onClick={() => handleStarClick(star)}
                     disabled={isSaving}
@@ -210,14 +202,16 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
                 ))}
               </div>
               <div className="rating-input-container">
-                <label htmlFor="rating-input" className="rating-input-label">Precise Rating:</label>
+                <label htmlFor="rating-input" className="rating-input-label">
+                  Precise Rating:
+                </label>
                 <input
                   id="rating-input"
                   type="number"
                   min="0"
                   max="10"
                   step="0.1"
-                  value={personalRating || ''}
+                  value={personalRating || ""}
                   onChange={(e) => handleRatingInputChange(e.target.value)}
                   placeholder="0.0 - 10.0"
                   className="rating-input"
@@ -235,7 +229,9 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
 
           {/* Notes */}
           <div className="form-group">
-            <label htmlFor="notes" className="form-label">Personal Notes</label>
+            <label htmlFor="notes" className="form-label">
+              Personal Notes
+            </label>
             <div className="textarea-container">
               <textarea
                 id="notes"
@@ -260,45 +256,45 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
             <div className="form-group">
               <label className="form-label">Watch Status</label>
               <div className="status-buttons">
-                <button 
-                  type="button" 
-                  className={`status-btn watching ${watchStatus === 'watching' ? 'active' : ''}`}
-                  onClick={() => handleStatusClick('watching')}
+                <button
+                  type="button"
+                  className={`status-btn watching ${watchStatus === "watching" ? "active" : ""}`}
+                  onClick={() => handleStatusClick("watching")}
                   disabled={isSaving}
                 >
-                  Currently {item?.mediaType === 'Manga' ? 'Reading' : 'Watching'}
+                  Currently {item?.mediaType === "Manga" ? "Reading" : "Watching"}
                 </button>
-                <button 
-                  type="button" 
-                  className={`status-btn completed ${watchStatus === 'completed' ? 'active' : ''}`}
-                  onClick={() => handleStatusClick('completed')}
+                <button
+                  type="button"
+                  className={`status-btn completed ${watchStatus === "completed" ? "active" : ""}`}
+                  onClick={() => handleStatusClick("completed")}
                   disabled={isSaving}
                 >
                   Completed
                 </button>
-                <button 
-                  type="button" 
-                  className={`status-btn on-hold ${watchStatus === 'on-hold' ? 'active' : ''}`}
-                  onClick={() => handleStatusClick('on-hold')}
+                <button
+                  type="button"
+                  className={`status-btn on-hold ${watchStatus === "on-hold" ? "active" : ""}`}
+                  onClick={() => handleStatusClick("on-hold")}
                   disabled={isSaving}
                 >
                   On Hold
                 </button>
-                <button 
-                  type="button" 
-                  className={`status-btn dropped ${watchStatus === 'dropped' ? 'active' : ''}`}
-                  onClick={() => handleStatusClick('dropped')}
+                <button
+                  type="button"
+                  className={`status-btn dropped ${watchStatus === "dropped" ? "active" : ""}`}
+                  onClick={() => handleStatusClick("dropped")}
                   disabled={isSaving}
                 >
                   Dropped
                 </button>
-                <button 
-                  type="button" 
-                  className={`status-btn plan-to ${watchStatus === 'plan-to' ? 'active' : ''}`}
-                  onClick={() => handleStatusClick('plan-to')}
+                <button
+                  type="button"
+                  className={`status-btn plan-to ${watchStatus === "plan-to" ? "active" : ""}`}
+                  onClick={() => handleStatusClick("plan-to")}
                   disabled={isSaving}
                 >
-                  Plan to {item?.mediaType === 'Manga' ? 'Read' : 'Watch'}
+                  Plan to {item?.mediaType === "Manga" ? "Read" : "Watch"}
                 </button>
               </div>
             </div>
@@ -307,12 +303,7 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({
 
         <div className="modal-footer">
           <div className="footer-buttons">
-            <button
-              type="button"
-              className="cancel-button"
-              onClick={handleClose}
-              disabled={isSaving}
-            >
+            <button type="button" className="cancel-button" onClick={handleClose} disabled={isSaving}>
               Cancel
             </button>
             <button

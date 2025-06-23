@@ -42,7 +42,9 @@ from datetime import datetime, timedelta
 import json
 import ast
 import time
+import time
 from typing import Dict, List, Optional, Any
+from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
 from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
 
 load_dotenv()
@@ -103,7 +105,12 @@ def create_app(config: Optional[Any] = None) -> Flask:
         test_app.config['JWT_SECRET_KEY'] = 'test-jwt-secret'
     
     # Copy all routes from main app to test app (skip static endpoint to avoid conflicts)
+    # Copy all routes from main app to test app (skip static endpoint to avoid conflicts)
     for rule in app.url_map.iter_rules():
+        if rule.endpoint != 'static':  # Skip static endpoint to prevent conflicts
+            test_app.add_url_rule(rule.rule, rule.endpoint, 
+                                 view_func=app.view_functions.get(rule.endpoint),
+                                 methods=rule.methods)
         if rule.endpoint != 'static':  # Skip static endpoint to prevent conflicts
             test_app.add_url_rule(rule.rule, rule.endpoint, 
                                  view_func=app.view_functions.get(rule.endpoint),
@@ -194,6 +201,26 @@ tfidf_matrix_global: Optional[Any] = None
 uid_to_idx: Optional[pd.Series] = None
 supabase_client: Optional[SupabaseClient] = None
 auth_client: Optional[SupabaseAuthClient] = None
+
+# Initialize clients
+try:
+    supabase_client = SupabaseClient()
+    
+    # Initialize auth client with required parameters
+    base_url = (os.getenv('SUPABASE_URL') or '').strip().rstrip('/')
+    api_key = (os.getenv('SUPABASE_KEY') or '').strip()
+    service_key = (os.getenv('SUPABASE_SERVICE_KEY') or '').strip()
+    
+    if base_url and api_key and service_key:
+        auth_client = SupabaseAuthClient(base_url, api_key, service_key)
+        print("✅ Supabase clients initialized successfully")
+    else:
+        print("⚠️  Auth client not initialized: missing environment variables")
+        auth_client = None
+except Exception as e:
+    print(f"❌ Failed to initialize Supabase clients: {e}")
+    supabase_client = None
+    auth_client = None
 
 # Initialize clients
 try:
