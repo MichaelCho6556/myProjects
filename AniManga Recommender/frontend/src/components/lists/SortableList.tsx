@@ -31,6 +31,12 @@ interface SortableListProps {
   onSaveItemEdit?: (itemId: string, updatedData: Partial<ListItem>) => Promise<void>;
   isLoading?: boolean;
   emptyMessage?: string;
+  // Context menu props
+  userLists?: Array<{ id: string; name: string; itemCount: number }>;
+  onCopyToList?: (itemId: string, targetListId: string) => Promise<void>;
+  onQuickRate?: (itemId: string, rating: number) => Promise<void>;
+  onUpdateStatus?: (itemId: string, status: string) => Promise<void>;
+  onAddTag?: (itemId: string, tag: string) => Promise<void>;
 }
 
 export const SortableList: React.FC<SortableListProps> = ({
@@ -41,6 +47,11 @@ export const SortableList: React.FC<SortableListProps> = ({
   onSaveItemEdit,
   isLoading = false,
   emptyMessage = "No items in this list yet.",
+  userLists = [],
+  onCopyToList,
+  onQuickRate,
+  onUpdateStatus,
+  onAddTag,
 }) => {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -112,6 +123,35 @@ export const SortableList: React.FC<SortableListProps> = ({
     }
     setEditingItemId(null);
   };
+
+  // Default handlers to prevent errors if not provided
+  const handleQuickRate =
+    onQuickRate ||
+    (async (itemId: string, rating: number) => {
+      console.log(`Setting rating ${rating} for item ${itemId}`);
+      // This would normally call your API
+    });
+
+  const handleUpdateStatus =
+    onUpdateStatus ||
+    (async (itemId: string, status: string) => {
+      console.log(`Setting status ${status} for item ${itemId}`);
+      // This would normally call your API
+    });
+
+  const handleAddTag =
+    onAddTag ||
+    (async (itemId: string, tag: string) => {
+      console.log(`Adding tag ${tag} to item ${itemId}`);
+      // This would normally call your API
+    });
+
+  const handleCopyToList =
+    onCopyToList ||
+    (async (itemId: string, targetListId: string) => {
+      console.log(`Copying item ${itemId} to list ${targetListId}`);
+      // This would normally call your API
+    });
 
   if (isLoading) {
     return (
@@ -218,6 +258,12 @@ export const SortableList: React.FC<SortableListProps> = ({
               onSave={handleSaveEdit}
               onCancelEdit={handleCancelEdit}
               isEditing={editingItemId === item.id}
+              // New context menu props
+              userLists={userLists}
+              onQuickRate={handleQuickRate}
+              onUpdateStatus={handleUpdateStatus}
+              onAddTag={handleAddTag}
+              onCopyToList={handleCopyToList}
             />
           ))}
         </div>

@@ -1,3 +1,35 @@
+:root {
+  /* Color Variables for Context Menu */
+  --bg-overlay: rgba(30, 30, 30, 0.95);
+  --bg-dark: rgba(45, 45, 45, 0.8);
+  --bg-deep-dark: #1a1a1a;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --text-primary: #ffffff;
+  --text-muted: rgba(255, 255, 255, 0.7);
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  
+  /* Light mode overrides */
+  --light-bg-overlay: rgba(255, 255, 255, 0.95);
+  --light-bg-dark: rgba(240, 240, 240, 0.8);
+  --light-bg-deep-dark: #f0f0f0;
+  --light-border-color: rgba(0, 0, 0, 0.1);
+  --light-text-primary: #1a1a1a;
+  --light-text-muted: rgba(0, 0, 0, 0.6);
+}
+
+/* Use light mode variables in light theme */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-overlay: var(--light-bg-overlay);
+    --bg-dark: var(--light-bg-dark);
+    --bg-deep-dark: var(--light-bg-deep-dark);
+    --border-color: var(--light-border-color);
+    --text-primary: var(--light-text-primary);
+    --text-muted: var(--light-text-muted);
+  }
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
