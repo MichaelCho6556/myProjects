@@ -451,35 +451,35 @@
     width: 95%;
     max-height: 90vh;
   }
-  
+
   .modal-header,
   .modal-body,
   .modal-footer {
     padding-left: 20px;
     padding-right: 20px;
   }
-  
+
   .item-info {
     flex-direction: column;
     align-items: center;
     text-align: center;
     padding: 12px;
   }
-  
+
   .item-image {
     width: 50px;
     height: 75px;
   }
-  
+
   .status-buttons {
     grid-template-columns: 1fr;
   }
-  
+
   .star-rating {
     justify-content: center;
     flex-wrap: wrap;
   }
-  
+
   .footer-buttons {
     flex-direction: column;
   }
@@ -491,86 +491,86 @@
     background: #1f2937;
     color: #f9fafb;
   }
-  
+
   .modal-header {
     background: #374151;
     border-bottom-color: #4b5563;
   }
-  
+
   .modal-header h2 {
     color: #f9fafb;
   }
-  
+
   .close-button {
     color: #9ca3af;
   }
-  
+
   .close-button:hover {
     background: #4b5563;
     color: #f3f4f6;
   }
-  
+
   .item-info {
     background: #374151;
   }
-  
+
   .item-details h3 {
     color: #f9fafb;
   }
-  
+
   .form-label {
     color: #f9fafb;
   }
-  
+
   .notes-textarea {
     background: #374151;
     border-color: #4b5563;
     color: #f9fafb;
   }
-  
+
   .notes-textarea:focus {
     border-color: #3b82f6;
     background: #374151;
   }
-  
+
   .status-btn {
     background: #374151;
     border-color: #4b5563;
     color: #e5e7eb;
   }
-  
+
   .modal-footer {
     background: #374151;
     border-top-color: #4b5563;
   }
-  
+
   .cancel-button {
     background: #4b5563;
     border-color: #6b7280;
     color: #e5e7eb;
   }
-  
+
   .cancel-button:hover:not(:disabled) {
     background: #6b7280;
     border-color: #9ca3af;
   }
-  
+
   .rating-input-container {
     background: #374151;
     border-color: #4b5563;
   }
-  
+
   .rating-input {
     background: #4b5563;
     border-color: #6b7280;
     color: #f9fafb;
   }
-  
+
   .rating-input:focus {
     border-color: #3b82f6;
     background: #4b5563;
   }
-  
+
   .rating-input-label,
   .rating-suffix {
     color: #d1d5db;
