@@ -48,8 +48,17 @@ export const CustomListDetailPage: React.FC = () => {
       console.log("List response:", listResponse);
       console.log("Items response:", itemsResponse);
 
-      setList(listResponse.data || listResponse);
-      setItems(itemsResponse.data || itemsResponse || []);
+      const listData = listResponse.data || listResponse;
+      const itemsData = itemsResponse.data || itemsResponse || [];
+
+      // Update itemCount to match actual items
+      const updatedListData = {
+        ...listData,
+        itemCount: itemsData.length,
+      };
+
+      setList(updatedListData);
+      setItems(itemsData);
     } catch (err: any) {
       console.error("Failed to fetch list details:", err);
       console.error("Error response:", err.response);
@@ -91,8 +100,8 @@ export const CustomListDetailPage: React.FC = () => {
       const response = await post(`/api/auth/lists/${listId}/reorder`, reorderData);
 
       // Update the list's updated_at timestamp from the response
-      if (response.data.updated_at && list) {
-        setList((prev) => (prev ? { ...prev, updatedAt: response.data.updated_at } : null));
+      if (response.updated_at && list) {
+        setList((prev) => (prev ? { ...prev, updatedAt: response.updated_at } : null));
       }
     } catch (error: any) {
       console.error("Failed to reorder items:", error);
@@ -146,6 +155,18 @@ export const CustomListDetailPage: React.FC = () => {
   const handleEditItem = (item: ListItem) => {
     setSelectedItem(item);
     setIsEditItemModalOpen(true);
+
+    // Scroll the item into view after a short delay to ensure modal positioning
+    setTimeout(() => {
+      const itemElement = document.querySelector(`[data-item-id="${item.id}"]`);
+      if (itemElement) {
+        itemElement.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+          inline: "nearest",
+        });
+      }
+    }, 300);
   };
 
   const handleSaveItemEdit = async (itemId: string, updatedData: Partial<ListItem>) => {
@@ -154,16 +175,12 @@ export const CustomListDetailPage: React.FC = () => {
     try {
       // API call to update item in the list
       await put(`/api/auth/lists/${listId}/items/${itemId}`, updatedData);
-      
+
       // Update the local state
-      setItems(prevItems => 
-        prevItems.map(item => 
-          item.id === itemId 
-            ? { ...item, ...updatedData }
-            : item
-        )
+      setItems((prevItems) =>
+        prevItems.map((item) => (item.id === itemId ? { ...item, ...updatedData } : item))
       );
-      
+
       setIsEditItemModalOpen(false);
       setSelectedItem(null);
     } catch (error) {
@@ -193,7 +210,7 @@ export const CustomListDetailPage: React.FC = () => {
   };
 
   const handleItemsAdded = () => {
-    // Refresh the list to show new items
+    // Refresh the list to show new items and update count
     fetchListDetails();
   };
 
@@ -208,7 +225,7 @@ export const CustomListDetailPage: React.FC = () => {
               <div className="mb-6">
                 <svg
                   className="mx-auto mb-4 text-gray-400 dark:text-gray-500"
-                  style={{ width: '32px', height: '32px' }}
+                  style={{ width: "32px", height: "32px" }}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -221,7 +238,9 @@ export const CustomListDetailPage: React.FC = () => {
                   />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Authentication Required</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                Authentication Required
+              </h2>
               <p className="text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
                 This list is private and requires you to be signed in to view its contents.
               </p>
@@ -287,40 +306,58 @@ export const CustomListDetailPage: React.FC = () => {
           </Link>
           <div className="list-header">
             <div className="text-center">
-              <div className="mb-6">
+              <div className="mb-8">
                 <svg
-                  className="w-6 h-6 mx-auto text-red-400 mb-4"
+                  className="w-8 h-8 mx-auto text-red-500 mb-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={1}
+                    strokeWidth={2}
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
                   />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Error Loading List</h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">{error || "List not found"}</p>
-              <button onClick={fetchListDetails} className="action-button secondary mr-3">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                Try Again
-              </button>
-              <Link to="/my-lists" className="action-button primary">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Back to My Lists
-              </Link>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                Oops! Something went wrong
+              </h2>
+              <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+                {error
+                  ? `We couldn't load this custom list: ${error}`
+                  : "The custom list you're looking for couldn't be found or may have been removed."}
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={fetchListDetails}
+                  className="action-button secondary px-6 py-3 min-w-32 inline-flex items-center justify-center gap-2"
+                  aria-label="Retry loading the custom list"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Try Again
+                </button>
+                <Link
+                  to="/my-lists"
+                  className="action-button primary px-6 py-3 min-w-32 inline-flex items-center justify-center gap-2"
+                  aria-label="Return to your custom lists"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to My Lists
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -344,7 +381,7 @@ export const CustomListDetailPage: React.FC = () => {
             <div className="flex-1">
               <h1 className="list-title">{list.title}</h1>
 
-              {list.description && list.description.trim() && list.description.trim() !== 'testss' ? (
+              {list.description && list.description.trim() && list.description.trim() !== "testss" ? (
                 <p className="list-description">{list.description}</p>
               ) : (
                 <p className="list-description text-gray-500 italic">
@@ -483,6 +520,7 @@ export const CustomListDetailPage: React.FC = () => {
             onRemoveItem={isOwner ? handleRemoveItem : () => {}}
             onEditItem={isOwner ? handleEditItem : () => {}}
             isLoading={false}
+            selectedItemId={selectedItem?.id}
             emptyMessage={
               isOwner
                 ? "Your list is ready for some awesome anime and manga! Click 'Add Items' above to start building your collection."

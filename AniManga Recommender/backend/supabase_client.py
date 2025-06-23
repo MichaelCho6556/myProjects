@@ -1742,13 +1742,35 @@ class SupabaseClient:
                 # Map is_public to privacy for frontend compatibility
                 privacy = 'Public' if list_item.get('is_public', True) else 'Private'
                 
+                # Calculate actual item count from custom_list_items table
+                item_count = 0
+                try:
+                    count_response = requests.get(
+                        f"{self.base_url}/rest/v1/custom_list_items",
+                        headers={**self.headers, 'Prefer': 'count=exact'},
+                        params={
+                            'list_id': f'eq.{list_item["id"]}',
+                            'select': 'id'
+                        }
+                    )
+                    if count_response.status_code == 200:
+                        content_range = count_response.headers.get('Content-Range', '0')
+                        if '/' in content_range:
+                            total_str = content_range.split('/')[-1]
+                            if total_str and total_str != '*':
+                                item_count = int(total_str)
+                    print(f"List {list_item['id']} has {item_count} items")
+                except Exception as e:
+                    print(f"Error calculating item count for list {list_item['id']}: {e}")
+                    item_count = 0
+                
                 transformed_list = {
                     'id': list_item['id'],
                     'userId': user_id,  # Use the passed user_id parameter
                     'title': list_item['title'],
                     'description': list_item.get('description'),
                     'privacy': privacy,
-                    'itemCount': 0,  # TODO: Calculate item count from custom_list_items table
+                    'itemCount': item_count,  # Now calculates actual item count
                     'followersCount': 0,  # TODO: Calculate followers count from list_followers table
                     'tags': tags,
                     'createdAt': list_item['created_at'],
@@ -2089,12 +2111,36 @@ class SupabaseClient:
                 print(f"Error fetching tags for list details {list_id}: {e}")
                 tags = []
             
+            # Calculate actual item count from custom_list_items table
+            item_count = 0
+            try:
+                count_response = requests.get(
+                    f"{self.base_url}/rest/v1/custom_list_items",
+                    headers={**self.headers, 'Prefer': 'count=exact'},
+                    params={
+                        'list_id': f'eq.{list_id}',
+                        'select': 'id'
+                    }
+                )
+                
+                if count_response.status_code == 200:
+                    # Parse Content-Range header to get count
+                    content_range = count_response.headers.get('Content-Range', '0')
+                    if '/' in content_range:
+                        total_str = content_range.split('/')[-1]
+                        if total_str and total_str != '*':
+                            item_count = int(total_str)
+                            
+            except Exception as e:
+                print(f"Error calculating item count for list {list_id}: {e}")
+                item_count = 0
+            
             return {
                 'id': raw['id'],
                 'title': raw['title'],
                 'description': raw.get('description'),
                 'privacy': 'Public' if raw.get('is_public', True) else 'Private',
-                'itemCount': 0,  # TODO: Calculate item count from custom_list_items table
+                'itemCount': item_count,
                 'followersCount': 0,  # TODO: Calculate followers count from list_followers table
                 'tags': tags,
                 'createdAt': raw.get('created_at'),
@@ -2128,18 +2174,29 @@ class SupabaseClient:
                     headers=self.headers,
                     params={
                         'id': f'eq.{rec["item_id"]}',
-                        'select': 'uid,title,media_type,image_url'
+                        'select': 'uid,title,media_type,media_type_id,media_types(name),image_url'
                     }
                 )
                 if item_resp.status_code == 200 and item_resp.text.strip():
                     item_data = item_resp.json()
                     if item_data:
                         item_info = item_data[0] if isinstance(item_data, list) else item_data
+                        
+                        # Get media type from joined media_types table if available, fallback to direct field
+                        media_type = item_info.get('media_type') or ''
+                        if isinstance(media_type, str):
+                            media_type = media_type.strip()
+                        else:
+                            media_type = ''
+                        
+                        if not media_type and item_info.get('media_types'):
+                            media_type = item_info['media_types']['name']
+                        
                         items.append({
                             'id': str(rec['item_id']),
                             'itemUid': item_info['uid'],
                             'title': item_info['title'],
-                            'mediaType': item_info.get('media_type', ''),
+                            'mediaType': media_type or 'Unknown',
                             'imageUrl': item_info.get('image_url'),
                             'order': rec['position'],
                             'addedAt': rec.get('created_at')
@@ -2299,6 +2356,87 @@ class SupabaseClient:
         except Exception as e:
             print(f"Error removing item from list: {e}")
             return False
+
+    def reorder_list_items(self, list_id: int, user_id: str, item_positions: List[dict]) -> bool:
+        """
+        Reorder items in a custom list.
+        
+        Args:
+            list_id (int): List ID
+            user_id (str): User ID (must be list owner)
+            item_positions (List[dict]): List of {item_id, position} objects
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            # Verify list ownership
+            list_response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={
+                    'id': f'eq.{list_id}',
+                    'user_id': f'eq.{user_id}',
+                    'select': 'id'
+                }
+            )
+            
+            if not list_response.json():
+                return False
+            
+            # Update positions
+            for item in item_positions:
+                requests.patch(
+                    f"{self.base_url}/rest/v1/custom_list_items",
+                    headers=self.headers,
+                    params={
+                        'list_id': f'eq.{list_id}',
+                        'item_id': f'eq.{item["item_id"]}'
+                    },
+                    json={'position': item['position']}
+                )
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error reordering list items: {e}")
+            return False
+
+    def get_user_list_details(self, list_id: int, user_id: str) -> Optional[Dict]:
+        """
+        Get detailed information about a specific list owned by a user.
+        
+        Args:
+            list_id (int): List ID
+            user_id (str): User ID (must be list owner)
+            
+        Returns:
+            Optional[Dict]: List details if found and owned by user, None otherwise
+        """
+        try:
+            response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params={
+                    'id': f'eq.{list_id}',
+                    'user_id': f'eq.{user_id}',
+                    'select': 'id, title, description, is_public, is_collaborative, user_id, created_at, updated_at',
+                    'limit': 1
+                }
+            )
+            
+            if response.status_code != 200 or not response.text.strip():
+                return None
+                
+            data = response.json()
+            if not data:
+                return None
+                
+            return data[0] if isinstance(data, list) else data
+            
+        except Exception as e:
+            print(f"Error getting user list details: {e}")
+            return None
 
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
@@ -3280,87 +3418,6 @@ class SupabaseAuthClient:
             print(f"Error discovering lists: {e}")
             return {'lists': [], 'total': 0, 'page': page, 'limit': limit}
     
-    def reorder_list_items(self, list_id: int, user_id: str, item_positions: List[dict]) -> bool:
-        """
-        Reorder items in a custom list.
-        
-        Args:
-            list_id (int): List ID
-            user_id (str): User ID (must be list owner)
-            item_positions (List[dict]): List of {item_id, position} objects
-            
-        Returns:
-            bool: Success status
-        """
-        try:
-            # Verify list ownership
-            list_response = requests.get(
-                f"{self.base_url}/rest/v1/custom_lists",
-                headers=self.headers,
-                params={
-                    'id': f'eq.{list_id}',
-                    'user_id': f'eq.{user_id}',
-                    'select': 'id'
-                }
-            )
-            
-            if not list_response.json():
-                return False
-            
-            # Update positions
-            for item in item_positions:
-                requests.patch(
-                    f"{self.base_url}/rest/v1/custom_list_items",
-                    headers=self.headers,
-                    params={
-                        'list_id': f'eq.{list_id}',
-                        'item_id': f'eq.{item["item_id"]}'
-                    },
-                    json={'position': item['position']}
-                )
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error reordering list items: {e}")
-            return False
-
-    def get_user_list_details(self, list_id: int, user_id: str) -> Optional[Dict]:
-        """
-        Get detailed information about a specific list owned by a user.
-        
-        Args:
-            list_id (int): List ID
-            user_id (str): User ID (must be list owner)
-            
-        Returns:
-            Optional[Dict]: List details if found and owned by user, None otherwise
-        """
-        try:
-            response = requests.get(
-                f"{self.base_url}/rest/v1/custom_lists",
-                headers=self.headers,
-                params={
-                    'id': f'eq.{list_id}',
-                    'user_id': f'eq.{user_id}',
-                    'select': 'id, title, description, is_public, is_collaborative, user_id, created_at, updated_at',
-                    'limit': 1
-                }
-            )
-            
-            if response.status_code != 200 or not response.text.strip():
-                return None
-                
-            data = response.json()
-            if not data:
-                return None
-                
-            return data[0] if isinstance(data, list) else data
-            
-        except Exception as e:
-            print(f"Error getting user list details: {e}")
-            return None
-
     def update_list_item(self, list_id: int, item_id: int, user_id: str, update_data: dict) -> bool:
         """
         Update an item in a custom list.

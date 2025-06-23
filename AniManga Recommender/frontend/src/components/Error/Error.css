@@ -23,8 +23,9 @@
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
 }
 
-.error-icon {
-  font-size: 2rem;
+.error-fallback .error-icon,
+.error-fallback-content .error-icon {
+  font-size: 1.5rem !important;
   margin-bottom: 1rem;
   display: block;
 }
@@ -345,8 +346,9 @@
     padding: 1.5rem;
   }
 
-  .error-icon {
-    font-size: 1.5rem;
+  .error-fallback .error-icon,
+  .error-fallback-content .error-icon {
+    font-size: 1.25rem !important;
   }
 
   .error-title {
@@ -377,8 +379,9 @@
     padding: 1rem;
   }
 
-  .error-icon {
-    font-size: 1.25rem;
+  .error-fallback .error-icon,
+  .error-fallback-content .error-icon {
+    font-size: 1rem !important;
   }
 
   .error-title {

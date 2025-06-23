@@ -30,6 +30,7 @@ interface SortableListProps {
   onEditItem?: (item: ListItem) => void;
   isLoading?: boolean;
   emptyMessage?: string;
+  selectedItemId?: string | undefined;
 }
 
 export const SortableList: React.FC<SortableListProps> = ({
@@ -39,6 +40,7 @@ export const SortableList: React.FC<SortableListProps> = ({
   onEditItem,
   isLoading = false,
   emptyMessage = "No items in this list yet.",
+  selectedItemId,
 }) => {
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -194,6 +196,7 @@ export const SortableList: React.FC<SortableListProps> = ({
               index={index}
               onRemove={onRemoveItem || (() => {})}
               onEdit={onEditItem || (() => {})}
+              isSelected={selectedItemId === item.id}
             />
           ))}
         </div>
@@ -201,13 +204,69 @@ export const SortableList: React.FC<SortableListProps> = ({
 
       <DragOverlay>
         {activeItem ? (
-          <div className="opacity-80">
-            <SortableListItem
-              item={activeItem}
-              index={items.findIndex((item) => item.id === activeItem.id)}
-              onRemove={onRemoveItem || (() => {})}
-              onEdit={onEditItem || (() => {})}
-            />
+          <div className="sortable-list-item drag-overlay">
+            {/* Simplified drag preview - just the essential elements */}
+
+            {/* Drag Handle */}
+            <div className="drag-handle">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+              </svg>
+            </div>
+
+            {/* Item Image */}
+            <div className="item-image-wrapper">
+              {activeItem.imageUrl ? (
+                <img src={activeItem.imageUrl} alt={activeItem.title} className="item-image" />
+              ) : (
+                <div className="item-placeholder">
+                  <span className="item-position">
+                    {items.findIndex((item) => item.id === activeItem.id) + 1}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Simplified Item Content */}
+            <div className="item-content">
+              <h4 className="item-title">{activeItem.title}</h4>
+              <div className="item-meta">
+                <span className="item-type">{activeItem.mediaType}</span>
+                <span className="item-position-badge">
+                  Position #{items.findIndex((item) => item.id === activeItem.id) + 1}
+                </span>
+              </div>
+            </div>
+
+            {/* Drag indicator instead of action buttons */}
+            <div className="item-actions">
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "8px",
+                  background: "var(--accent-primary)",
+                  color: "white",
+                }}
+              >
+                <svg
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  style={{ width: "18px", height: "18px" }}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
         ) : null}
       </DragOverlay>
