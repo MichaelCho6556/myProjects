@@ -8,7 +8,7 @@ import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { SortableList } from "../../components/lists/SortableList";
 import { EditListModal } from "../../components/lists/EditListModal";
 import { AddItemsModal } from "../../components/lists/AddItemsModal";
-import { EditItemModal } from "../../components/lists/EditItemModal";
+
 import LoadingBanner from "../../components/Loading/LoadingBanner";
 import { CustomList, ListItem } from "../../types/social";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
@@ -26,8 +26,6 @@ export const CustomListDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddItemsModalOpen, setIsAddItemsModalOpen] = useState(false);
-  const [isEditItemModalOpen, setIsEditItemModalOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<ListItem | null>(null);
 
   useDocumentTitle(list ? `${list.title} - Custom List` : "Custom List");
 
@@ -152,21 +150,8 @@ export const CustomListDetailPage: React.FC = () => {
     }
   };
 
-  const handleEditItem = (item: ListItem) => {
-    setSelectedItem(item);
-    setIsEditItemModalOpen(true);
-
-    // Scroll the item into view after a short delay to ensure modal positioning
-    setTimeout(() => {
-      const itemElement = document.querySelector(`[data-item-id="${item.id}"]`);
-      if (itemElement) {
-        itemElement.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-          inline: "nearest",
-        });
-      }
-    }, 300);
+  const handleEditItem = (_item: ListItem) => {
+    // No longer opening modal - inline editing handles this now
   };
 
   const handleSaveItemEdit = async (itemId: string, updatedData: Partial<ListItem>) => {
@@ -181,11 +166,10 @@ export const CustomListDetailPage: React.FC = () => {
         prevItems.map((item) => (item.id === itemId ? { ...item, ...updatedData } : item))
       );
 
-      setIsEditItemModalOpen(false);
-      setSelectedItem(null);
+      // No modal to close - inline editing handles its own state
     } catch (error) {
       console.error("Failed to update item:", error);
-      throw error; // Let the modal handle the error
+      throw error; // Let the inline editor handle the error
     }
   };
 
@@ -519,8 +503,8 @@ export const CustomListDetailPage: React.FC = () => {
             onReorder={handleReorderItems}
             onRemoveItem={isOwner ? handleRemoveItem : () => {}}
             onEditItem={isOwner ? handleEditItem : () => {}}
+            onSaveItemEdit={isOwner ? handleSaveItemEdit : () => Promise.resolve()}
             isLoading={false}
-            selectedItemId={selectedItem?.id}
             emptyMessage={
               isOwner
                 ? "Your list is ready for some awesome anime and manga! Click 'Add Items' above to start building your collection."
@@ -543,15 +527,6 @@ export const CustomListDetailPage: React.FC = () => {
               isOpen={isAddItemsModalOpen}
               onClose={() => setIsAddItemsModalOpen(false)}
               onItemsAdded={handleItemsAdded}
-            />
-            <EditItemModal
-              isOpen={isEditItemModalOpen}
-              onClose={() => {
-                setIsEditItemModalOpen(false);
-                setSelectedItem(null);
-              }}
-              onSave={handleSaveItemEdit}
-              item={selectedItem}
             />
           </>
         )}

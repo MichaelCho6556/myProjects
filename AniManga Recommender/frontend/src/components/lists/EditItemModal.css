@@ -25,6 +25,7 @@
   border-bottom: 1px solid #e5e7eb;
   flex-shrink: 0;
   background: #f9fafb;
+  position: relative;
 }
 
 .modal-header h2 {
@@ -37,16 +38,20 @@
 .close-button {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   cursor: pointer;
   color: #6b7280;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
   transition: all 0.2s;
+  position: absolute;
+  top: 50%;
+  right: 24px;
+  transform: translateY(-50%);
 }
 
 .close-button:hover {
@@ -133,57 +138,62 @@
 }
 
 .clear-rating-btn {
-  background: none;
+  background: #ef4444;
   border: none;
-  color: #6b7280;
-  font-size: 0.75rem;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 500;
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 6px 12px;
+  border-radius: 6px;
   transition: all 0.2s;
 }
 
 .clear-rating-btn:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: #dc2626;
+  transform: translateY(-1px);
 }
 
 /* Enhanced Rating System */
 .rating-controls {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .star-rating {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0;
 }
 
 .star {
   background: none;
   border: none;
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   cursor: pointer;
   color: #d1d5db;
   transition: all 0.2s;
-  padding: 2px;
+  padding: 4px;
   border-radius: 4px;
+  line-height: 1;
 }
 
 .star:hover {
   color: #fbbf24;
-  transform: scale(1.1);
+  transform: scale(1.15);
 }
 
 .star.filled {
   color: #f59e0b;
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
 }
 
 .star.half-filled {
   color: #f59e0b;
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 .star:disabled {
@@ -191,14 +201,20 @@
   opacity: 0.5;
 }
 
+.rating-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .rating-input-container {
   display: flex;
   align-items: center;
   gap: 8px;
   background: #f9fafb;
-  padding: 8px 12px;
+  padding: 12px 16px;
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 2px solid #e5e7eb;
 }
 
 .rating-input-label {
@@ -209,40 +225,121 @@
 }
 
 .rating-input {
-  width: 80px;
-  padding: 4px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  background: white;
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  background: transparent;
   text-align: center;
+  font-weight: 500;
 }
 
 .rating-input:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  background: rgba(59, 130, 246, 0.05);
 }
 
 .rating-suffix {
-  font-size: 0.8rem;
+  font-size: 1rem;
   color: #6b7280;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .rating-display {
-  display: inline-block;
-  margin-top: 4px;
-  padding: 4px 8px;
-  background: #fef3c7;
-  border-radius: 6px;
-  border: 1px solid #fed7aa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #fef3c7, #fed7aa);
+  border-radius: 8px;
+  border: 2px solid #f59e0b;
 }
 
 .rating-value {
-  font-weight: 600;
+  font-weight: 700;
   color: #92400e;
-  font-size: 0.875rem;
+  font-size: 1rem;
+}
+
+/* Form Section Headers */
+.form-section {
+  margin-bottom: 24px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-header h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+/* Rewatch Controls */
+.rewatch-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 2px solid #e5e7eb;
+}
+
+.rewatch-btn {
+  background: #3b82f6;
+  border: none;
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rewatch-btn:hover:not(:disabled) {
+  background: #2563eb;
+  transform: scale(1.05);
+}
+
+.rewatch-btn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.rewatch-count-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 60px;
+}
+
+.rewatch-count {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.rewatch-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* Compact Notes */
