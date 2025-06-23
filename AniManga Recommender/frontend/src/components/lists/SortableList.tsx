@@ -28,9 +28,9 @@ interface SortableListProps {
   onReorder: (items: ListItem[]) => Promise<void>;
   onRemoveItem?: (itemId: string) => void;
   onEditItem?: (item: ListItem) => void;
+  onSaveItemEdit?: (itemId: string, updatedData: Partial<ListItem>) => Promise<void>;
   isLoading?: boolean;
   emptyMessage?: string;
-  selectedItemId?: string | undefined;
 }
 
 export const SortableList: React.FC<SortableListProps> = ({
@@ -38,11 +38,12 @@ export const SortableList: React.FC<SortableListProps> = ({
   onReorder,
   onRemoveItem,
   onEditItem,
+  onSaveItemEdit,
   isLoading = false,
   emptyMessage = "No items in this list yet.",
-  selectedItemId,
 }) => {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -93,6 +94,24 @@ export const SortableList: React.FC<SortableListProps> = ({
   };
 
   const activeItem = activeId ? items.find((item) => item.id === activeId) : null;
+
+  const handleEditItem = (item: ListItem) => {
+    setEditingItemId(item.id);
+    if (onEditItem) {
+      onEditItem(item);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItemId(null);
+  };
+
+  const handleSaveEdit = async (itemId: string, updatedData: Partial<ListItem>) => {
+    if (onSaveItemEdit) {
+      await onSaveItemEdit(itemId, updatedData);
+    }
+    setEditingItemId(null);
+  };
 
   if (isLoading) {
     return (
@@ -195,8 +214,10 @@ export const SortableList: React.FC<SortableListProps> = ({
               item={item}
               index={index}
               onRemove={onRemoveItem || (() => {})}
-              onEdit={onEditItem || (() => {})}
-              isSelected={selectedItemId === item.id}
+              onEdit={handleEditItem}
+              onSave={handleSaveEdit}
+              onCancelEdit={handleCancelEdit}
+              isEditing={editingItemId === item.id}
             />
           ))}
         </div>

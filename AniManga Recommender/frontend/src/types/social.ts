@@ -65,6 +65,13 @@ export interface ListItem {
   order: number;
   addedAt: string;
   notes?: string;
+  // Enhanced editing fields
+  personalRating?: number; // 1-10 with decimal precision
+  watchStatus?: "plan_to_watch" | "watching" | "completed" | "on_hold" | "dropped";
+  customTags?: string[]; // User-defined tags for this item
+  dateStarted?: string; // ISO date when user started watching/reading
+  dateCompleted?: string; // ISO date when user completed it
+  rewatchCount?: number; // Number of times user has rewatched/reread
 }
 
 export interface ListComment {

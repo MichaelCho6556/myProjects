@@ -1,7 +1,7 @@
-// ABOUTME: Modal component for editing individual items within custom lists
-// ABOUTME: Provides interface for updating item notes, ratings, and other metadata
+// ABOUTME: Enhanced modal component for editing individual items within custom lists
+// ABOUTME: Provides comprehensive interface for updating ratings, notes, tags, status, dates, and rewatch count
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ListItem } from "../../types/social";
 import "./EditItemModal.css";
 
@@ -15,15 +15,27 @@ interface EditItemModalProps {
 export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, onSave, item }) => {
   const [notes, setNotes] = useState("");
   const [personalRating, setPersonalRating] = useState<number | null>(null);
-  const [watchStatus, setWatchStatus] = useState<string | null>(null);
+  const [watchStatus, setWatchStatus] = useState<string>("plan_to_watch");
+  const [customTags, setCustomTags] = useState<string[]>([]);
+  const [dateStarted, setDateStarted] = useState("");
+  const [dateCompleted, setDateCompleted] = useState("");
+  const [rewatchCount, setRewatchCount] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Tag input handling
+  const [tagInput, setTagInput] = useState("");
+  const tagInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (item) {
       setNotes(item.notes || "");
-      setPersonalRating(null); // We'll extend the ListItem type to include rating later
-      setWatchStatus(null);
+      setPersonalRating(item.personalRating || null);
+      setWatchStatus(item.watchStatus || "plan_to_watch");
+      setCustomTags(item.customTags || []);
+      setDateStarted(item.dateStarted || "");
+      setDateCompleted(item.dateCompleted || "");
+      setRewatchCount(item.rewatchCount || 0);
       setHasChanges(false);
     }
   }, [item]);
@@ -31,33 +43,69 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
   useEffect(() => {
     if (item) {
       const originalNotes = item.notes || "";
+      const originalRating = item.personalRating || null;
+      const originalStatus = item.watchStatus || "plan_to_watch";
+      const originalTags = JSON.stringify(item.customTags || []);
+      const originalDateStarted = item.dateStarted || "";
+      const originalDateCompleted = item.dateCompleted || "";
+      const originalRewatchCount = item.rewatchCount || 0;
+
       const currentNotes = notes.trim();
-      setHasChanges(currentNotes !== originalNotes || personalRating !== null || watchStatus !== null);
+      const currentTags = JSON.stringify(customTags);
+
+      setHasChanges(
+        currentNotes !== originalNotes ||
+          personalRating !== originalRating ||
+          watchStatus !== originalStatus ||
+          currentTags !== originalTags ||
+          dateStarted !== originalDateStarted ||
+          dateCompleted !== originalDateCompleted ||
+          rewatchCount !== originalRewatchCount
+      );
     }
-  }, [notes, personalRating, watchStatus, item]);
+  }, [notes, personalRating, watchStatus, customTags, dateStarted, dateCompleted, rewatchCount, item]);
 
   const handleSave = async () => {
     if (!item) return;
 
     setIsSaving(true);
     try {
-      const updatedData: any = {};
+      const updatedData: Partial<ListItem> = {};
 
-      // Include notes (allow clearing by sending empty string)
+      // Only include properties that have values
       const trimmedNotes = notes.trim();
-      updatedData.notes = trimmedNotes;
+      if (trimmedNotes) {
+        updatedData.notes = trimmedNotes;
+      }
 
-      // Include personal rating if set
       if (personalRating !== null) {
-        updatedData.personal_rating = personalRating;
+        updatedData.personalRating = personalRating;
       }
 
-      // Include watch status if set
-      if (watchStatus !== null) {
-        updatedData.status = watchStatus;
+      if (watchStatus) {
+        updatedData.watchStatus = watchStatus as
+          | "plan_to_watch"
+          | "watching"
+          | "completed"
+          | "on_hold"
+          | "dropped";
       }
 
-      console.log("Sending update data:", updatedData);
+      if (customTags.length > 0) {
+        updatedData.customTags = customTags;
+      }
+
+      if (dateStarted) {
+        updatedData.dateStarted = dateStarted;
+      }
+
+      if (dateCompleted) {
+        updatedData.dateCompleted = dateCompleted;
+      }
+
+      if (rewatchCount > 0) {
+        updatedData.rewatchCount = rewatchCount;
+      }
 
       await onSave(item.id, updatedData);
       onClose();
@@ -83,34 +131,54 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
     if (isNaN(numValue) || numValue < 0 || numValue > 10) {
       setPersonalRating(null);
     } else {
-      setPersonalRating(Math.round(numValue * 10) / 10); // Round to 1 decimal place
+      setPersonalRating(Math.round(numValue * 10) / 10);
+    }
+  };
+
+  const clearRating = () => {
+    setPersonalRating(null);
+  };
+
+  const handleStatusChange = (status: string) => {
+    setWatchStatus(status);
+
+    // Auto-set completion date when status changes to completed
+    if (status === "completed" && !dateCompleted) {
+      setDateCompleted(new Date().toISOString().split("T")[0]);
+    }
+  };
+
+  // Tag management functions
+  const addTag = (tag: string) => {
+    const trimmedTag = tag.trim().toLowerCase();
+    if (trimmedTag && !customTags.includes(trimmedTag) && customTags.length < 10) {
+      setCustomTags([...customTags, trimmedTag]);
+      setTagInput("");
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setCustomTags(customTags.filter((tag) => tag !== tagToRemove));
+  };
+
+  const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addTag(tagInput);
+    } else if (e.key === "Backspace" && !tagInput && customTags.length > 0) {
+      removeTag(customTags[customTags.length - 1]);
     }
   };
 
   const getDisplayMediaType = (mediaType: string): string => {
-    // Debug: Log the actual value we receive
-    console.log("MediaType received:", JSON.stringify(mediaType), "Type:", typeof mediaType);
-
-    // Handle null, undefined, and empty values
-    if (
-      mediaType === null ||
-      mediaType === undefined ||
-      !mediaType ||
-      (typeof mediaType === "string" && mediaType.trim() === "") ||
-      mediaType === "null" ||
-      mediaType === "undefined"
-    ) {
-      return "Anime"; // Default to Anime instead of Unknown
-    }
+    if (!mediaType) return "Anime";
 
     const type = mediaType.toLowerCase().trim();
 
-    // Handle specific anime types
     if (type === "tv" || type === "ova" || type === "movie" || type === "special" || type === "ona") {
       return "Anime";
     }
 
-    // Handle manga types
     if (
       type === "manga" ||
       type === "manhwa" ||
@@ -121,40 +189,24 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
       return "Manga";
     }
 
-    // Handle video/promotional content - these should still be Anime if they're anime related
-    if (type === "pv" || type === "cm" || type === "music") {
-      return "Anime"; // Changed from 'Video' to 'Anime' since PV usually means anime preview
-    }
-
-    // Handle novels
-    if (type === "novel" || type === "light_novel") {
-      return "Novel";
-    }
-
-    // For completely empty or null values, check if we can infer from title or other context
-    if (!type || type === "") {
-      return "Anime"; // Default to Anime for items without type
-    }
-
-    // Default to capitalizing first letter for other types
     return mediaType.charAt(0).toUpperCase() + mediaType.slice(1).toLowerCase();
   };
 
-  const handleStatusClick = (status: string) => {
-    setWatchStatus(watchStatus === status ? null : status);
-  };
-
-  const clearRating = () => {
-    setPersonalRating(null);
-  };
+  const statusOptions = [
+    { value: "plan_to_watch", label: "Plan to Watch", color: "#3b82f6" },
+    { value: "watching", label: "Watching", color: "#10b981" },
+    { value: "completed", label: "Completed", color: "#8b5cf6" },
+    { value: "on_hold", label: "On Hold", color: "#f59e0b" },
+    { value: "dropped", label: "Dropped", color: "#ef4444" },
+  ];
 
   if (!isOpen || !item) return null;
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
-      <div className="edit-item-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="edit-item-modal enhanced" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Edit Item</h2>
+          <h2>Edit Item Details</h2>
           <button className="close-button" onClick={handleClose} disabled={isSaving} aria-label="Close modal">
             ×
           </button>
@@ -170,132 +222,230 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
             </div>
           </div>
 
-          {/* Personal Rating */}
-          <div className="form-group">
-            <div className="rating-header">
-              <label className="form-label">Personal Rating</label>
-              {personalRating && (
-                <button type="button" onClick={clearRating} className="clear-rating-btn" disabled={isSaving}>
-                  Clear
-                </button>
-              )}
-            </div>
-            <div className="rating-controls">
-              <div className="star-rating">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
+          <div className="form-sections">
+            {/* Personal Rating Section */}
+            <div className="form-section">
+              <div className="section-header">
+                <h4>Personal Rating</h4>
+                {personalRating && (
                   <button
-                    key={star}
                     type="button"
-                    className={`star ${
-                      personalRating && star <= Math.floor(personalRating) ? "filled" : ""
-                    } ${
-                      personalRating && star === Math.ceil(personalRating) && personalRating % 1 !== 0
-                        ? "half-filled"
-                        : ""
-                    }`}
-                    onClick={() => handleStarClick(star)}
+                    onClick={clearRating}
+                    className="clear-rating-btn"
                     disabled={isSaving}
-                    aria-label={`Rate ${star} out of 10`}
                   >
-                    ★
+                    Clear Rating
+                  </button>
+                )}
+              </div>
+              <div className="rating-controls">
+                <div className="star-rating">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      className={`star ${
+                        personalRating && star <= Math.floor(personalRating) ? "filled" : ""
+                      } ${
+                        personalRating && star === Math.floor(personalRating) + 1 && personalRating % 1 !== 0
+                          ? "half-filled"
+                          : ""
+                      }`}
+                      onClick={() => handleStarClick(star)}
+                      disabled={isSaving}
+                      aria-label={`Rate ${star} out of 10`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+                <div className="rating-input-section">
+                  <div className="rating-input-container">
+                    <input
+                      id="rating-input"
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.1"
+                      value={personalRating || ""}
+                      onChange={(e) => handleRatingInputChange(e.target.value)}
+                      placeholder="Enter rating (0.0 - 10.0)"
+                      className="rating-input"
+                      disabled={isSaving}
+                    />
+                    <span className="rating-suffix">/10</span>
+                  </div>
+                  {personalRating && (
+                    <div className="rating-display">
+                      <span className="rating-value">★ {personalRating}/10</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Watch Status Section */}
+            <div className="form-section">
+              <div className="section-header">
+                <h4>Watch Status</h4>
+              </div>
+              <div className="status-buttons">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`status-btn ${option.value.replace("_", "-")} ${
+                      watchStatus === option.value ? "active" : ""
+                    }`}
+                    onClick={() => handleStatusChange(option.value)}
+                    disabled={isSaving}
+                    style={{ borderColor: watchStatus === option.value ? option.color : undefined }}
+                  >
+                    {option.label}
                   </button>
                 ))}
               </div>
-              <div className="rating-input-container">
-                <label htmlFor="rating-input" className="rating-input-label">
-                  Precise Rating:
-                </label>
-                <input
-                  id="rating-input"
-                  type="number"
-                  min="0"
-                  max="10"
-                  step="0.1"
-                  value={personalRating || ""}
-                  onChange={(e) => handleRatingInputChange(e.target.value)}
-                  placeholder="0.0 - 10.0"
-                  className="rating-input"
+            </div>
+
+            {/* Dates Section */}
+            <div className="form-section">
+              <div className="section-header">
+                <h4>Dates</h4>
+              </div>
+              <div className="date-inputs">
+                <div className="form-group">
+                  <label htmlFor="date-started" className="form-label">
+                    Date Started:
+                  </label>
+                  <input
+                    id="date-started"
+                    type="date"
+                    value={dateStarted}
+                    onChange={(e) => setDateStarted(e.target.value)}
+                    className="date-input"
+                    disabled={isSaving}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="date-completed" className="form-label">
+                    Date Completed:
+                  </label>
+                  <input
+                    id="date-completed"
+                    type="date"
+                    value={dateCompleted}
+                    onChange={(e) => setDateCompleted(e.target.value)}
+                    className="date-input"
+                    disabled={isSaving}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Rewatch Count Section */}
+            <div className="form-section">
+              <div className="section-header">
+                <h4>Times {item.mediaType === "manga" ? "Re-read" : "Rewatched"}</h4>
+              </div>
+              <div className="rewatch-controls">
+                <button
+                  type="button"
+                  onClick={() => setRewatchCount(Math.max(0, rewatchCount - 1))}
+                  className="rewatch-btn decrease"
+                  disabled={isSaving || rewatchCount <= 0}
+                  aria-label="Decrease rewatch count"
+                >
+                  −
+                </button>
+                <div className="rewatch-count-display">
+                  <span className="rewatch-count">{rewatchCount}</span>
+                  <span className="rewatch-label">times</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRewatchCount(rewatchCount + 1)}
+                  className="rewatch-btn increase"
                   disabled={isSaving}
+                  aria-label="Increase rewatch count"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Custom Tags Section */}
+            <div className="form-section">
+              <div className="section-header">
+                <h4>Custom Tags</h4>
+                <span className="tag-count">{customTags.length}/10</span>
+              </div>
+              <div className="tags-container">
+                <div className="tags-list">
+                  {customTags.map((tag, index) => (
+                    <span key={index} className="tag">
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="tag-remove"
+                        disabled={isSaving}
+                        aria-label={`Remove ${tag} tag`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                {customTags.length < 10 && (
+                  <div className="tag-input-container">
+                    <input
+                      ref={tagInputRef}
+                      type="text"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={handleTagInputKeyDown}
+                      placeholder="Add a tag and press Enter"
+                      className="tag-input"
+                      disabled={isSaving}
+                      maxLength={20}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addTag(tagInput)}
+                      className="tag-add-btn"
+                      disabled={isSaving || !tagInput.trim()}
+                    >
+                      Add
+                    </button>
+                  </div>
+                )}
+              </div>
+              <small className="tag-help">
+                Press Enter or comma to add tags. Max 10 tags, 20 characters each.
+              </small>
+            </div>
+
+            {/* Personal Notes Section */}
+            <div className="form-section">
+              <div className="section-header">
+                <h4>Personal Notes</h4>
+              </div>
+              <div className="textarea-container">
+                <textarea
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Add your thoughts, review, or notes about this item..."
+                  rows={4}
+                  maxLength={1000}
+                  disabled={isSaving}
+                  className="notes-textarea"
                 />
-                <span className="rating-suffix">/10</span>
-              </div>
-            </div>
-            {personalRating && (
-              <div className="rating-display">
-                <span className="rating-value">{personalRating}/10</span>
-              </div>
-            )}
-          </div>
-
-          {/* Notes */}
-          <div className="form-group">
-            <label htmlFor="notes" className="form-label">
-              Personal Notes
-            </label>
-            <div className="textarea-container">
-              <textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add your thoughts or notes about this item..."
-                rows={3}
-                maxLength={1000}
-                disabled={isSaving}
-                className="notes-textarea"
-              />
-              <div className="character-count">
-                <span className={notes.length > 900 ? "warning" : notes.length > 800 ? "caution" : ""}>
-                  {notes.length}/1000 characters
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Status */}
-          <div className="quick-actions">
-            <div className="form-group">
-              <label className="form-label">Watch Status</label>
-              <div className="status-buttons">
-                <button
-                  type="button"
-                  className={`status-btn watching ${watchStatus === "watching" ? "active" : ""}`}
-                  onClick={() => handleStatusClick("watching")}
-                  disabled={isSaving}
-                >
-                  Currently {item?.mediaType === "Manga" ? "Reading" : "Watching"}
-                </button>
-                <button
-                  type="button"
-                  className={`status-btn completed ${watchStatus === "completed" ? "active" : ""}`}
-                  onClick={() => handleStatusClick("completed")}
-                  disabled={isSaving}
-                >
-                  Completed
-                </button>
-                <button
-                  type="button"
-                  className={`status-btn on-hold ${watchStatus === "on-hold" ? "active" : ""}`}
-                  onClick={() => handleStatusClick("on-hold")}
-                  disabled={isSaving}
-                >
-                  On Hold
-                </button>
-                <button
-                  type="button"
-                  className={`status-btn dropped ${watchStatus === "dropped" ? "active" : ""}`}
-                  onClick={() => handleStatusClick("dropped")}
-                  disabled={isSaving}
-                >
-                  Dropped
-                </button>
-                <button
-                  type="button"
-                  className={`status-btn plan-to ${watchStatus === "plan-to" ? "active" : ""}`}
-                  onClick={() => handleStatusClick("plan-to")}
-                  disabled={isSaving}
-                >
-                  Plan to {item?.mediaType === "Manga" ? "Read" : "Watch"}
-                </button>
+                <div className="character-count">
+                  <span className={notes.length > 900 ? "warning" : notes.length > 800 ? "caution" : ""}>
+                    {notes.length}/1000 characters
+                  </span>
+                </div>
               </div>
             </div>
           </div>
