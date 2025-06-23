@@ -5658,6 +5658,7 @@ def reorder_list_items(list_id):
         with the current list state, allowing the client to handle the conflict.
     """
     try:
+        global supabase_client
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
         if not user_id:
             return jsonify({'error': 'User ID not found in token'}), 400
@@ -5707,6 +5708,19 @@ def reorder_list_items(list_id):
                 print(f"Conflict check error: {ce}")
                 # Continue with reorder if conflict check fails (graceful degradation)
                 pass
+        
+        # Check if method exists and reload if necessary
+        if not hasattr(supabase_client, 'reorder_list_items'):
+            print("⚠️ reorder_list_items method not found, attempting to reinitialize client...")
+            try:
+                import importlib
+                import supabase_client as sc_module
+                importlib.reload(sc_module)
+                supabase_client = sc_module.SupabaseClient()
+                print("✅ SupabaseClient reinitialized successfully")
+            except Exception as e:
+                print(f"❌ Failed to reinitialize SupabaseClient: {e}")
+                return jsonify({'error': 'Method not available, please restart the server'}), 500
         
         success = supabase_client.reorder_list_items(list_id, user_id, items)
         
@@ -8923,8 +8937,51 @@ def update_list_item(list_id, item_id):
         if notes is not None and len(notes) > 1000:
             return jsonify({'error': 'Notes cannot exceed 1000 characters'}), 400
         
-        # Update the item in the list
-        success = supabase_client.update_list_item(list_id, item_id, user_id, data)
+        # Check if supabase_client is available
+        if supabase_client is None:
+            print("Error: supabase_client is None")
+            return jsonify({'error': 'Database client not initialized'}), 500
+        
+        print(f"Updating list item - list_id: {list_id}, item_id: {item_id}, user_id: {user_id}, data: {data}")
+        
+        # Temporary workaround: Direct database update since update_list_item method has loading issues
+        # First verify list ownership
+        list_check = requests.get(
+            f"{supabase_client.base_url}/rest/v1/custom_lists",
+            headers=supabase_client.headers,
+            params={
+                'id': f'eq.{list_id}',
+                'user_id': f'eq.{user_id}',
+                'select': 'id'
+            }
+        )
+        
+        if not list_check.json():
+            return jsonify({'error': 'List not found or access denied'}), 403
+        
+        # Filter data to only include fields that exist in custom_list_items table
+        # Based on schema: id, list_id, item_id, position, notes, added_by, created_at
+        filtered_data = {}
+        if 'notes' in data:
+            filtered_data['notes'] = data['notes']
+        if 'position' in data:
+            filtered_data['position'] = data['position']
+        
+        # Skip personal_rating and status as they don't exist in custom_list_items table
+        print(f"Filtered update data: {filtered_data}")
+        
+        # Update the custom_list_items table with only valid fields
+        update_response = requests.patch(
+            f"{supabase_client.base_url}/rest/v1/custom_list_items",
+            headers={**supabase_client.headers, 'Prefer': 'return=representation'},
+            params={
+                'list_id': f'eq.{list_id}',
+                'item_id': f'eq.{item_id}'
+            },
+            json=filtered_data
+        )
+        
+        success = update_response.status_code == 200 and update_response.json()
         
         if success:
             return jsonify({

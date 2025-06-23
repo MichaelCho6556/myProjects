@@ -774,6 +774,9 @@ export const MyCustomListsPage: React.FC = () => {
                       overflow: "visible",
                       transition: "all 0.3s ease",
                       cursor: "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      height: "100%", // Make all cards same height
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.transform = "translateY(-4px)";
@@ -787,7 +790,9 @@ export const MyCustomListsPage: React.FC = () => {
                     }}
                   >
                     {/* List Header */}
-                    <div style={{ padding: "1.5rem", borderBottom: "1px solid var(--border-color)" }}>
+                    <div
+                      style={{ padding: "1.5rem", borderBottom: "1px solid var(--border-color)", flex: "1" }}
+                    >
                       <div
                         style={{
                           display: "flex",
