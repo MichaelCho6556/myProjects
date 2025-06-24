@@ -24,9 +24,9 @@ export function useUserProfile(username: string) {
 
       // Transform backend response to frontend format
       const transformedProfile: UserProfile = {
-        id: rawProfile.id || '',
-        username: rawProfile.username || '',
-        displayName: rawProfile.display_name || rawProfile.username || 'Unknown User',
+        id: rawProfile.id || "",
+        username: rawProfile.username || "",
+        displayName: rawProfile.display_name || rawProfile.username || "Unknown User",
         joinDate: rawProfile.created_at || new Date().toISOString(),
         avatarUrl: rawProfile.avatar_url || undefined,
         bio: rawProfile.bio || undefined,
@@ -157,7 +157,11 @@ export function useCurrentUserProfile() {
     try {
       // Fetch current user's profile
       const profileResponse = await api.get("/api/auth/profile");
-      const rawProfile = profileResponse.data;
+      const rawProfile = profileResponse.data || profileResponse;
+
+      if (!rawProfile) {
+        throw new Error("No profile data received from API");
+      }
 
       const transformedProfile: UserProfile = {
         id: rawProfile.id,
@@ -177,10 +181,10 @@ export function useCurrentUserProfile() {
 
       setProfile(transformedProfile);
 
-      // Fetch privacy settings - note: backend might not have this endpoint yet
+      // Fetch privacy settings
       try {
         const privacyResponse = await api.get("/api/auth/privacy-settings");
-        const rawPrivacy = privacyResponse.data;
+        const rawPrivacy = privacyResponse.data || privacyResponse;
 
         if (rawPrivacy) {
           const transformedPrivacy: PrivacySettings = {
@@ -191,9 +195,18 @@ export function useCurrentUserProfile() {
           };
 
           setPrivacySettings(transformedPrivacy);
+        } else {
+          // Use defaults if no settings returned
+          setPrivacySettings({
+            profileVisibility: "Public",
+            listVisibility: "Public",
+            activityVisibility: "Public",
+            showCompletionStats: true,
+          });
         }
       } catch (privacyError) {
-        // Privacy settings endpoint might not exist yet, set defaults
+        console.warn("Privacy settings API error:", privacyError);
+        // Set defaults but don't fail the whole component
         setPrivacySettings({
           profileVisibility: "Public",
           listVisibility: "Public",
@@ -235,7 +248,15 @@ export function useCurrentUserProfile() {
   const updatePrivacySettings = useCallback(
     async (settings: PrivacySettings) => {
       try {
-        await api.put("/api/auth/privacy-settings", settings);
+        // Transform frontend format to backend format
+        const backendSettings = {
+          profile_visibility: settings.profileVisibility.toLowerCase().replace(" ", "_"),
+          list_visibility: settings.listVisibility.toLowerCase().replace(" ", "_"),
+          activity_visibility: settings.activityVisibility.toLowerCase().replace(" ", "_"),
+          show_statistics: settings.showCompletionStats,
+        };
+
+        await api.put("/api/auth/privacy-settings", backendSettings);
         setPrivacySettings(settings);
       } catch (err) {
         setError(err instanceof Error ? err : new Error("Failed to update privacy settings"));

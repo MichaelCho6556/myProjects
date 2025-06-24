@@ -5340,7 +5340,7 @@ def update_privacy_settings():
                     'error': f'Invalid {field}. Must be one of: {", ".join(valid_visibility_options)}'
                 }), 400
         
-        result = supabase_client.update_privacy_settings(user_id, data)
+        result = auth_client.update_privacy_settings(user_id, data)
         
         if result:
             return jsonify(result)
@@ -5349,6 +5349,63 @@ def update_privacy_settings():
             
     except Exception as e:
         print(f"Error updating privacy settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/privacy-settings', methods=['GET'])
+@require_auth
+def get_privacy_settings():
+    """
+    Get user privacy settings.
+    
+    Authentication: Required
+    
+    Returns:
+        JSON Response containing current privacy settings
+        
+    HTTP Status Codes:
+        200: Success - Settings retrieved
+        400: Bad Request - Missing user ID
+        401: Unauthorized - Invalid authentication
+        404: Not Found - No privacy settings found (returns defaults)
+        500: Server Error - Database error
+        
+    Example Response:
+        {
+            "profile_visibility": "public",
+            "list_visibility": "public", 
+            "activity_visibility": "friends_only",
+            "show_statistics": true,
+            "show_following": true,
+            "show_followers": true,
+            "allow_friend_requests": true,
+            "show_recently_watched": true
+        }
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        result = auth_client.get_privacy_settings(user_id)
+        
+        if result:
+            return jsonify(result)
+        else:
+            # Return default privacy settings if none exist
+            default_settings = {
+                "profile_visibility": "public",
+                "list_visibility": "public",
+                "activity_visibility": "public",
+                "show_statistics": True,
+                "show_following": True,
+                "show_followers": True,
+                "allow_friend_requests": True,
+                "show_recently_watched": True
+            }
+            return jsonify(default_settings)
+            
+    except Exception as e:
+        print(f"Error getting privacy settings: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/custom', methods=['POST'])
@@ -5498,7 +5555,6 @@ def get_user_lists():
     """
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
-        print(f"DEBUG /api/auth/lists: user_id = {user_id}")
         if not user_id:
             return jsonify({'error': 'User ID not found in token'}), 400
         
@@ -5513,16 +5569,11 @@ def get_user_lists():
             return jsonify({'error': 'Page must be greater than 0'}), 400
         
         # Get user's custom lists
-        print(f"DEBUG: Calling get_user_custom_lists for user_id: {user_id}")
         result = supabase_client.get_user_custom_lists(user_id, page, limit)
-        print(f"DEBUG: get_user_custom_lists result: {result}")
         
         if result is not None:
-            lists_count = len(result.get('lists', []))
-            print(f"DEBUG: Returning {lists_count} lists to frontend")
             return jsonify(result), 200
         else:
-            print("DEBUG: get_user_custom_lists returned None")
             return jsonify({'error': 'Failed to retrieve custom lists'}), 500
             
     except Exception as e:
@@ -5557,7 +5608,6 @@ def debug_test_lists():
     """Debug endpoint to test custom lists functionality"""
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
-        print(f"DEBUG TEST: user_id = {user_id}")
         
         # Test creating a simple list
         test_list_data = {
@@ -5568,11 +5618,9 @@ def debug_test_lists():
         }
         
         created = supabase_client.create_custom_list(user_id, test_list_data)
-        print(f"DEBUG TEST: Created list: {created}")
         
         # Test fetching lists
         result = supabase_client.get_user_custom_lists(user_id, 1, 20)
-        print(f"DEBUG TEST: Fetched lists: {result}")
         
         return jsonify({
             'user_id': user_id,
@@ -5582,7 +5630,6 @@ def debug_test_lists():
         }), 200
         
     except Exception as e:
-        print(f"DEBUG TEST ERROR: {e}")
         return jsonify({'error': str(e), 'test_status': 'failed'}), 500
 
 @app.route('/api/lists/discover', methods=['GET'])

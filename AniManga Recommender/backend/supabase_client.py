@@ -1419,7 +1419,7 @@ class SupabaseClient:
             )
             
             existing_data = existing.json()
-            print(f"🔍 Existing record: {existing_data}")
+    
             
             # Prepare comprehensive data
             data = {
@@ -3274,6 +3274,35 @@ class SupabaseAuthClient:
             print(f"Error toggling user follow: {e}")
             return {'success': False, 'error': str(e)}
     
+    def get_privacy_settings(self, user_id: str) -> dict:
+        """
+        Get user privacy settings.
+        
+        Args:
+            user_id (str): User ID
+            
+        Returns:
+            dict: Privacy settings or None if not found
+        """
+        try:
+            response = requests.get(
+                f"{self.base_url}/rest/v1/user_privacy_settings",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': '*'
+                }
+            )
+            
+            if response.status_code == 200 and response.json():
+                return response.json()[0]
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error getting privacy settings: {e}")
+            return None
+
     def update_privacy_settings(self, user_id: str, settings: dict) -> dict:
         """
         Update user privacy settings.
