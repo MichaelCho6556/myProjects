@@ -45,7 +45,7 @@ import time
 import time
 from typing import Dict, List, Optional, Any
 from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
-from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
+from utils.batchOperations import BatchOperationsManager
 
 load_dotenv()
 
@@ -9003,12 +9003,15 @@ def update_list_item(list_id, item_id):
             headers={**supabase_client.headers, 'Prefer': 'return=representation'},
             params={
                 'list_id': f'eq.{list_id}',
-                'item_id': f'eq.{item_id}'
+                'id': f'eq.{item_id}'
             },
             json=filtered_data
         )
         
-        success = update_response.status_code == 200 and update_response.json()
+        print(f"Update response status: {update_response.status_code}")
+        print(f"Update response body: {update_response.text}")
+        
+        success = update_response.status_code == 200
         
         if success:
             return jsonify({
@@ -9067,6 +9070,485 @@ def remove_item_from_list(list_id, item_id):
     except Exception as e:
         print(f"Error removing item from list: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/lists/<int:list_id>/batch-operations', methods=['POST'])
+@require_auth
+def execute_batch_operation(list_id):
+    """
+    Execute batch operations on multiple list items.
+    
+    Supports bulk updates for status, rating, tags, and other operations
+    on multiple list items simultaneously for improved efficiency.
+    
+    Expected JSON payload:
+    {
+        "operation_type": "bulk_status_update|bulk_rating_update|bulk_add_tags|bulk_remove_tags|bulk_remove|bulk_copy_to_list",
+        "item_ids": ["item_id_1", "item_id_2", ...],
+        "operation_data": {
+            "status": "completed",  // for status update
+            "rating": 8.5,          // for rating update
+            "tags": ["tag1", "tag2"], // for tag operations
+            "targetListId": "list_id" // for copy operations
+        }
+    }
+    
+    Returns:
+        JSON response with operation results and affected count
+    """
+    try:
+        current_user = g.current_user
+        user_id = current_user['id']
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "Request body is required"
+            }), 400
+            
+        # Validate required fields
+        operation_type = data.get('operation_type')
+        item_ids = data.get('item_ids', [])
+        operation_data = data.get('operation_data', {})
+        
+        if not operation_type:
+            return jsonify({
+                "success": False,
+                "error": "operation_type is required"
+            }), 400
+            
+        if not item_ids or not isinstance(item_ids, list):
+            return jsonify({
+                "success": False,
+                "error": "item_ids must be a non-empty list"
+            }), 400
+            
+        if len(item_ids) > 100:  # Prevent excessive batch sizes
+            return jsonify({
+                "success": False,
+                "error": "Maximum 100 items allowed per batch operation"
+            }), 400
+        
+        # Initialize batch operations manager
+        import psycopg2
+        from utils.batchOperations import create_batch_operations_manager
+        
+        # Get database connection - we'll need to create one for the batch operations
+        db_config = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'database': os.getenv('DB_NAME', 'postgres'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', ''),
+            'port': os.getenv('DB_PORT', '5432')
+        }
+        
+        conn = psycopg2.connect(**db_config)
+        batch_manager = create_batch_operations_manager(conn)
+        
+        # Execute the batch operation
+        result = batch_manager.perform_batch_operation(
+            user_id=user_id,
+            list_id=str(list_id),
+            operation_type=operation_type,
+            item_ids=item_ids,
+            operation_data=operation_data
+        )
+        
+        # Log the operation for analytics
+        try:
+            activity_data = {
+                'user_id': user_id,
+                'activity_type': 'batch_operation',
+                'item_uid': f"list_{list_id}",
+                'activity_data': {
+                    'operation_type': operation_type,
+                    'item_count': len(item_ids),
+                    'affected_count': result.affected_count,
+                    'success': result.success
+                },
+                'created_at': datetime.now().isoformat()
+            }
+            
+            requests.post(
+                f"{supabase_client.base_url}/rest/v1/user_activity",
+                headers=supabase_client.headers,
+                json=activity_data
+            )
+        except Exception as log_error:
+            # Don't fail the operation if logging fails
+            print(f"Failed to log batch operation: {str(log_error)}")
+        
+        # Return result
+        status_code = 200 if result.get('success') else 400
+        
+        return jsonify(result), status_code
+        
+    except Exception as e:
+        print(f"Error executing batch operation: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": f"Failed to execute batch operation: {str(e)}",
+            "affected_count": 0
+        }), 500
+
+@app.route('/api/auth/filter-presets', methods=['GET'])
+@require_auth
+def get_filter_presets():
+    """Get user's saved filter presets"""
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        
+        # Get user's filter presets from Supabase using direct HTTP requests
+        user_response = requests.get(
+            f"{supabase_client.base_url}/rest/v1/filter_presets",
+            headers=supabase_client.headers,
+            params={
+                'user_id': f'eq.{user_id}',
+                'select': '*',
+                'order': 'usage_count.desc'
+            }
+        )
+        
+        presets = user_response.json() if user_response.status_code == 200 else []
+        
+        # Also get public presets
+        public_response = requests.get(
+            f"{supabase_client.base_url}/rest/v1/filter_presets",
+            headers=supabase_client.headers,
+            params={
+                'is_public': 'eq.true',
+                'select': '*',
+                'order': 'usage_count.desc',
+                'limit': 10
+            }
+        )
+        
+        public_presets = public_response.json() if public_response.status_code == 200 else []
+        
+        # Mark public presets
+        for preset in public_presets:
+            preset['is_public_preset'] = True
+        
+        all_presets = presets + public_presets
+        
+        return jsonify(all_presets), 200
+        
+    except Exception as e:
+        print(f"Error fetching filter presets: {str(e)}")
+        return jsonify({'error': 'Failed to fetch filter presets'}), 500
+
+@app.route('/api/auth/filter-presets', methods=['POST'])
+@require_auth
+def create_filter_preset():
+    """Create a new filter preset"""
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        # Validate required fields
+        name = data.get('name')
+        filters = data.get('filters')
+        
+        if not name or not filters:
+            return jsonify({'error': 'name and filters are required'}), 400
+        
+        preset_data = {
+            'user_id': user_id,
+            'name': name.strip(),
+            'description': data.get('description', '').strip() or None,
+            'filters': filters,
+            'is_public': data.get('is_public', False),
+            'usage_count': 0,
+            'created_at': datetime.utcnow().isoformat(),
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        
+        # Insert into Supabase using direct HTTP request
+        create_headers = supabase_client.headers.copy()
+        create_headers['Prefer'] = 'return=representation'
+        
+        response = requests.post(
+            f"{supabase_client.base_url}/rest/v1/filter_presets",
+            headers=create_headers,
+            json=preset_data
+        )
+        
+        if response.status_code == 201 and response.json():
+            return jsonify(response.json()[0]), 201
+        else:
+            return jsonify({'error': 'Failed to create filter preset'}), 500
+            
+    except Exception as e:
+        print(f"Error creating filter preset: {str(e)}")
+        return jsonify({'error': 'Failed to create filter preset'}), 500
+
+@app.route('/api/auth/filter-presets/<preset_id>/use', methods=['POST'])
+@require_auth
+def use_filter_preset(preset_id):
+    """Increment usage count for a filter preset"""
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        
+        # Update usage count using direct HTTP request
+        response = requests.patch(
+            f"{supabase_client.base_url}/rest/v1/filter_presets",
+            headers=supabase_client.headers,
+            params={'id': f'eq.{preset_id}'},
+            json={'usage_count': 'usage_count + 1'}
+        )
+        
+        return jsonify({'success': True}), 200
+        
+    except Exception as e:
+        print(f"Error updating filter preset usage: {str(e)}")
+        return jsonify({'error': 'Failed to update usage count'}), 500
+
+@app.route('/api/auth/filter-presets/<preset_id>', methods=['DELETE'])
+@require_auth
+def delete_filter_preset(preset_id):
+    """Delete a user's filter preset"""
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        
+        # Delete preset (only if user owns it) using direct HTTP request
+        response = requests.delete(
+            f"{supabase_client.base_url}/rest/v1/filter_presets",
+            headers=supabase_client.headers,
+            params={
+                'id': f'eq.{preset_id}',
+                'user_id': f'eq.{user_id}'
+            }
+        )
+        
+        return jsonify({'success': True}), 200
+        
+    except Exception as e:
+        print(f"Error deleting filter preset: {str(e)}")
+        return jsonify({'error': 'Failed to delete filter preset'}), 500
+
+@app.route('/api/auth/lists/<int:list_id>/analytics', methods=['GET'])
+@require_auth
+def get_list_analytics(list_id):
+    """Get analytics data for a custom list"""
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        
+        # Verify list ownership
+        list_response = requests.get(
+            f"{supabase_client.base_url}/rest/v1/custom_lists",
+            headers=supabase_client.headers,
+            params={
+                'id': f'eq.{list_id}',
+                'user_id': f'eq.{user_id}',
+                'select': 'id,user_id'
+            }
+        )
+        
+        if list_response.status_code != 200 or not list_response.json():
+            return jsonify({'error': 'List not found or access denied'}), 403
+        
+        # Get cached analytics or calculate
+        cache_key = f"analytics:list:{list_id}"
+        try:
+            # Check cache (you can implement Redis caching here)
+            cached_analytics = None  # Redis get would go here
+            
+            if cached_analytics:
+                return jsonify(cached_analytics), 200
+        except:
+            pass
+        
+        # Calculate analytics
+        analytics = calculate_list_analytics(list_id, user_id)
+        
+        # Cache the results (you can implement Redis caching here)
+        # Redis set with 30 minute TTL would go here
+        
+        return jsonify(analytics), 200
+        
+    except Exception as e:
+        print(f"Error fetching list analytics: {str(e)}")
+        return jsonify({'error': 'Failed to fetch analytics'}), 500
+
+def calculate_list_analytics(list_id: str, user_id: str) -> dict:
+    """Calculate comprehensive analytics for a custom list"""
+    try:
+        # Get list items
+        items_response = requests.get(
+            f"{supabase_client.base_url}/rest/v1/list_items",
+            headers=supabase_client.headers,
+            params={
+                'list_id': f'eq.{list_id}',
+                'select': '*'
+            }
+        )
+        
+        items = items_response.json() if items_response.status_code == 200 else []
+        
+        if not items:
+            return {
+                'total_items': 0,
+                'completion_stats': {},
+                'rating_distribution': {},
+                'genre_breakdown': {},
+                'media_type_distribution': {},
+                'time_analysis': {},
+                'recommendations': []
+            }
+        
+        # Extract personal data for analysis
+        personal_data_items = []
+        for item in items:
+            personal_data = item.get('personal_data', {}) or {}
+            if isinstance(personal_data, str):
+                import json
+                try:
+                    personal_data = json.loads(personal_data)
+                except:
+                    personal_data = {}
+            
+            personal_data_items.append({
+                **item,
+                'personalRating': personal_data.get('personalRating'),
+                'watchStatus': personal_data.get('watchStatus', 'plan_to_watch'),
+                'customTags': personal_data.get('customTags', []),
+                'dateCompleted': personal_data.get('dateCompleted'),
+                'rewatchCount': personal_data.get('rewatchCount', 0)
+            })
+        
+        # Calculate statistics
+        analytics = {
+            'total_items': len(items),
+            'completion_stats': _calculate_completion_stats(personal_data_items),
+            'rating_distribution': _calculate_rating_distribution(personal_data_items),
+            'genre_breakdown': _calculate_genre_breakdown(personal_data_items),
+            'media_type_distribution': _calculate_media_type_distribution(personal_data_items),
+            'time_analysis': _calculate_time_analysis(personal_data_items),
+            'tag_analysis': _calculate_tag_analysis(personal_data_items),
+            'recommendations': _generate_list_recommendations(personal_data_items, user_id)
+        }
+        
+        return analytics
+        
+    except Exception as e:
+        print(f"Error calculating list analytics: {str(e)}")
+        return {'error': 'Failed to calculate analytics'}
+
+def _calculate_completion_stats(items: list) -> dict:
+    """Calculate completion statistics"""
+    status_counts = {}
+    total = len(items)
+    
+    for item in items:
+        status = item.get('watchStatus', 'plan_to_watch')
+        status_counts[status] = status_counts.get(status, 0) + 1
+    
+    return {
+        'total_items': total,
+        'status_distribution': status_counts,
+        'completion_rate': (status_counts.get('completed', 0) / total * 100) if total > 0 else 0,
+        'in_progress_rate': (status_counts.get('watching', 0) / total * 100) if total > 0 else 0
+    }
+
+def _calculate_rating_distribution(items: list) -> dict:
+    """Calculate rating distribution"""
+    ratings = [item.get('personalRating') for item in items if item.get('personalRating') is not None]
+    
+    if not ratings:
+        return {'average_rating': 0, 'total_rated': 0, 'distribution': {}}
+    
+    distribution = {}
+    for rating in ratings:
+        bucket = int(rating)  # Group by integer rating
+        distribution[bucket] = distribution.get(bucket, 0) + 1
+    
+    return {
+        'average_rating': sum(ratings) / len(ratings),
+        'total_rated': len(ratings),
+        'highest_rating': max(ratings),
+        'lowest_rating': min(ratings),
+        'distribution': distribution
+    }
+
+def _calculate_genre_breakdown(items: list) -> dict:
+    """Calculate genre distribution"""
+    # This would need to fetch actual genre data from the items
+    # For now, return a placeholder
+    return {
+        'top_genres': [],
+        'genre_distribution': {},
+        'genre_diversity_score': 0
+    }
+
+def _calculate_media_type_distribution(items: list) -> dict:
+    """Calculate media type distribution"""
+    type_counts = {}
+    for item in items:
+        media_type = item.get('media_type', 'unknown')
+        type_counts[media_type] = type_counts.get(media_type, 0) + 1
+    
+    return type_counts
+
+def _calculate_time_analysis(items: list) -> dict:
+    """Calculate time-based analytics"""
+    completed_items = [item for item in items if item.get('watchStatus') == 'completed']
+    
+    if not completed_items:
+        return {'completion_trend': [], 'average_completion_time': 0}
+    
+    # Group completions by month
+    completion_trend = {}
+    for item in completed_items:
+        date_completed = item.get('dateCompleted')
+        if date_completed:
+            try:
+                date_obj = datetime.fromisoformat(date_completed.replace('Z', '+00:00'))
+                month_key = date_obj.strftime('%Y-%m')
+                completion_trend[month_key] = completion_trend.get(month_key, 0) + 1
+            except:
+                continue
+    
+    return {
+        'completion_trend': completion_trend,
+        'total_completed': len(completed_items),
+        'completion_months': len(completion_trend)
+    }
+
+def _calculate_tag_analysis(items: list) -> dict:
+    """Calculate custom tag analytics"""
+    all_tags = []
+    for item in items:
+        tags = item.get('customTags', [])
+        all_tags.extend(tags)
+    
+    if not all_tags:
+        return {'top_tags': [], 'total_unique_tags': 0}
+    
+    tag_counts = {}
+    for tag in all_tags:
+        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+    
+    # Sort by usage
+    top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+    
+    return {
+        'top_tags': [{'tag': tag, 'count': count} for tag, count in top_tags],
+        'total_unique_tags': len(tag_counts),
+        'total_tag_usage': len(all_tags)
+    }
+
+def _generate_list_recommendations(items: list, user_id: str) -> list:
+    """Generate recommendations based on list content"""
+    # This would generate smart recommendations
+    # For now, return placeholder
+    return [
+        {'type': 'similar_items', 'count': 5, 'description': 'Items similar to your high-rated entries'},
+        {'type': 'genre_expansion', 'count': 3, 'description': 'Explore new genres based on your preferences'},
+        {'type': 'completion_boost', 'count': 2, 'description': 'Items to help complete your watchlist'}
+    ]
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)

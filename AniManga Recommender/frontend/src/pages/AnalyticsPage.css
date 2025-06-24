@@ -1,0 +1,131 @@
+/* Analytics Page Styles */
+.analytics-page {
+  min-height: calc(100vh - 60px);
+  background: var(--background-primary);
+  padding: 0;
+}
+
+.analytics-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* Header Section */
+.analytics-header {
+  padding: 24px 0 32px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 32px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.breadcrumb a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+.breadcrumb a:hover {
+  opacity: 0.8;
+}
+
+.breadcrumb .separator {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.breadcrumb .current {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.page-title h1 {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+  line-height: 1.2;
+}
+
+.page-title p {
+  font-size: 16px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Content Section */
+.analytics-content {
+  padding-bottom: 40px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .analytics-container {
+    padding: 0 12px;
+  }
+
+  .analytics-header {
+    padding: 16px 0 24px;
+    margin-bottom: 24px;
+  }
+
+  .page-title h1 {
+    font-size: 24px;
+  }
+
+  .page-title p {
+    font-size: 14px;
+  }
+
+  .breadcrumb {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .analytics-container {
+    padding: 0 8px;
+  }
+
+  .analytics-header {
+    padding: 12px 0 20px;
+    margin-bottom: 20px;
+  }
+
+  .page-title h1 {
+    font-size: 20px;
+  }
+}
+
+/* Dark Theme Support */
+[data-theme="dark"] .analytics-page {
+  background: var(--background-primary);
+}
+
+[data-theme="dark"] .analytics-header {
+  border-color: var(--border-color);
+}
+
+/* Print Styles */
+@media print {
+  .analytics-header {
+    border-bottom: 2px solid #000;
+  }
+
+  .breadcrumb {
+    display: none;
+  }
+
+  .page-title h1 {
+    color: #000;
+  }
+}

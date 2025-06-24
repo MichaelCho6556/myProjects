@@ -1,0 +1,157 @@
+.time-range-picker {
+  position: relative;
+  display: inline-block;
+}
+
+.time-range-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 6px;
+  background: var(--bg-color, white);
+  color: var(--text-color, #374151);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.time-range-trigger:hover {
+  border-color: var(--border-hover-color, #d1d5db);
+}
+
+.date-range-display {
+  font-weight: 500;
+}
+
+.granularity-display {
+  color: var(--text-secondary-color, #6b7280);
+  font-size: 12px;
+}
+
+.chevron {
+  transition: transform 0.2s ease;
+}
+
+.chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.time-range-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  margin-top: 4px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  background: var(--bg-color, white);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  min-width: 300px;
+}
+
+.dropdown-content {
+  padding: 16px;
+}
+
+.date-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.input-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary-color, #6b7280);
+}
+
+.input-group input {
+  padding: 8px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.granularity-selector {
+  margin-bottom: 16px;
+}
+
+.granularity-selector label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary-color, #6b7280);
+  margin-bottom: 8px;
+}
+
+.granularity-options {
+  display: flex;
+  gap: 4px;
+}
+
+.granularity-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 4px;
+  background: var(--bg-color, white);
+  color: var(--text-color, #374151);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.granularity-btn:hover {
+  background: var(--bg-hover-color, #f9fafb);
+}
+
+.granularity-btn.active {
+  background: var(--primary-color, #3b82f6);
+  color: white;
+  border-color: var(--primary-color, #3b82f6);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cancel-btn,
+.apply-btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-btn {
+  border: 1px solid var(--border-color, #e5e7eb);
+  background: var(--bg-color, white);
+  color: var(--text-color, #374151);
+}
+
+.cancel-btn:hover {
+  background: var(--bg-hover-color, #f9fafb);
+}
+
+.apply-btn {
+  border: 1px solid var(--primary-color, #3b82f6);
+  background: var(--primary-color, #3b82f6);
+  color: white;
+}
+
+.apply-btn:hover {
+  background: var(--primary-hover-color, #2563eb);
+}
