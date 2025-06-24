@@ -1,0 +1,318 @@
+.groupable-list {
+  width: 100%;
+  position: relative;
+}
+
+/* Loading State */
+.groupable-list.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.loading-spinner {
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.loading-spinner::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-top: 2px solid var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Empty State */
+.groupable-list.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.empty-message {
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+/* View Mode Layouts */
+.groupable-list.view-mode-compact {
+  /* Compact layout with density controls */
+}
+
+.groupable-list.view-mode-grid {
+  /* Grid layout handled by individual group sections */
+}
+
+/* Density Variations for Compact Mode */
+.groupable-list.density-comfortable {
+  --item-spacing: 1rem;
+  --item-padding: 1rem;
+}
+
+.groupable-list.density-cozy {
+  --item-spacing: 0.75rem;
+  --item-padding: 0.75rem;
+}
+
+.groupable-list.density-compact {
+  --item-spacing: 0.5rem;
+  --item-padding: 0.5rem;
+}
+
+/* Apply density spacing to groups in compact mode */
+.groupable-list.view-mode-compact .group-section {
+  margin-bottom: var(--item-spacing);
+}
+
+.groupable-list.view-mode-compact .group-header {
+  padding: var(--item-padding);
+}
+
+.groupable-list.view-mode-compact .group-content {
+  padding: calc(var(--item-padding) * 0.5);
+}
+
+/* Drag Overlay */
+.drag-overlay {
+  opacity: 0.8;
+  transform: rotate(5deg);
+  z-index: 1000;
+  pointer-events: none;
+  background: var(--bg-secondary);
+  border: 2px solid var(--accent-primary);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Grid View Specific Styles */
+.groupable-list.view-mode-grid .group-section {
+  border-radius: 16px;
+}
+
+.groupable-list.view-mode-grid .group-content {
+  padding: 1.5rem;
+}
+
+.groupable-list.view-mode-grid .group-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+/* Compact View Specific Styles */
+.groupable-list.view-mode-compact .group-section {
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.groupable-list.view-mode-compact .group-header {
+  padding: 0.75rem 1rem;
+}
+
+.groupable-list.view-mode-compact .group-title {
+  font-size: 1rem;
+}
+
+.groupable-list.view-mode-compact .group-icon {
+  font-size: 1rem;
+}
+
+.groupable-list.view-mode-compact .group-count {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.375rem;
+}
+
+/* Compact View as Default List Styles */
+.groupable-list.view-mode-compact .group-section {
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.groupable-list.view-mode-compact .group-items {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .groupable-list.view-mode-grid .group-items {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+  }
+
+  .groupable-list.view-mode-grid .group-content {
+    padding: 1rem;
+  }
+
+  /* Switch to list layout on mobile for grid view */
+  .groupable-list.view-mode-grid .group-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .groupable-list.view-mode-grid .group-content {
+    padding: 0.75rem;
+  }
+
+  .groupable-list.view-mode-compact .group-header {
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Force single column on small screens */
+  .groupable-list.view-mode-grid .group-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
+/* Animation for view mode transitions */
+.groupable-list {
+  transition: all 0.3s ease;
+}
+
+.groupable-list .group-section {
+  transition: all 0.3s ease;
+}
+
+/* Focus trap for keyboard navigation */
+.groupable-list:focus-within {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .groupable-list .group-section {
+    border: 2px solid;
+  }
+
+  .drag-overlay {
+    border: 3px solid var(--accent-primary);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .groupable-list,
+  .groupable-list .group-section,
+  .loading-spinner::before {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* Print styles */
+@media print {
+  .groupable-list {
+    background: white;
+    color: black;
+  }
+
+  .group-section {
+    break-inside: avoid;
+    border: 1px solid #ccc;
+    margin-bottom: 1rem;
+  }
+
+  .group-header {
+    background: #f5f5f5;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .collapse-toggle {
+    display: none;
+  }
+
+  .group-content {
+    display: block !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .drag-overlay {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Performance optimizations for large lists */
+.groupable-list .group-section {
+  contain: layout style;
+}
+
+.groupable-list .group-items {
+  contain: layout;
+}
+
+/* Virtualization support (when implemented) */
+.groupable-list.virtualized {
+  height: 100%;
+  overflow: auto;
+}
+
+.groupable-list.virtualized .group-section {
+  will-change: transform;
+}
+
+/* Accessibility improvements */
+.groupable-list[role="grid"] .group-section {
+  role: "rowgroup";
+}
+
+.groupable-list[role="grid"] .group-items {
+  role: "row";
+}
+
+/* Custom scrollbar for webkit browsers */
+.groupable-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.groupable-list::-webkit-scrollbar-track {
+  background: var(--bg-overlay);
+  border-radius: 3px;
+}
+
+.groupable-list::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.groupable-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}

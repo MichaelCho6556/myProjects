@@ -21,6 +21,8 @@ import {
 } from "@dnd-kit/sortable";
 import { restrictToVerticalAxis, restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { SortableListItem } from "./SortableListItem";
+import { BatchOperationsProvider, useBatchOperations } from "../../context/BatchOperationsProvider";
+import { BatchOperationsToolbar } from "./BatchOperationsToolbar";
 import { ListItem } from "../../types/social";
 
 interface SortableListProps {
@@ -37,9 +39,13 @@ interface SortableListProps {
   onQuickRate?: (itemId: string, rating: number) => Promise<void>;
   onUpdateStatus?: (itemId: string, status: string) => Promise<void>;
   onAddTag?: (itemId: string, tag: string) => Promise<void>;
+  // Batch operations props
+  listId?: string | undefined;
+  onBatchOperationComplete?: () => void;
 }
 
-export const SortableList: React.FC<SortableListProps> = ({
+// Internal component that uses the batch operations context
+const SortableListInner: React.FC<SortableListProps> = ({
   items,
   onReorder,
   onRemoveItem,
@@ -52,9 +58,14 @@ export const SortableList: React.FC<SortableListProps> = ({
   onQuickRate,
   onUpdateStatus,
   onAddTag,
+  listId,
+  onBatchOperationComplete,
 }) => {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+
+  // Batch operations context
+  const { isSelectionMode, toggleSelectionMode } = useBatchOperations();
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -69,11 +80,22 @@ export const SortableList: React.FC<SortableListProps> = ({
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
+
+    // Don't allow dragging during selection mode
+    if (isSelectionMode) {
+      return;
+    }
+
     setActiveId(active.id as string);
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+
+    // Don't handle drag end during selection mode
+    if (isSelectionMode) {
+      return;
+    }
 
     setActiveId(null);
 
@@ -239,104 +261,164 @@ export const SortableList: React.FC<SortableListProps> = ({
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
-    >
-      <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-2">
-          {items.map((item, index) => (
-            <SortableListItem
-              key={item.id}
-              item={item}
-              index={index}
-              onRemove={onRemoveItem || (() => {})}
-              onEdit={handleEditItem}
-              onSave={handleSaveEdit}
-              onCancelEdit={handleCancelEdit}
-              isEditing={editingItemId === item.id}
-              // New context menu props
-              userLists={userLists}
-              onQuickRate={handleQuickRate}
-              onUpdateStatus={handleUpdateStatus}
-              onAddTag={handleAddTag}
-              onCopyToList={handleCopyToList}
-            />
-          ))}
-        </div>
-      </SortableContext>
-
-      <DragOverlay>
-        {activeItem ? (
-          <div className="sortable-list-item drag-overlay">
-            {/* Simplified drag preview - just the essential elements */}
-
-            {/* Drag Handle */}
-            <div className="drag-handle">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+    <>
+      {/* Multi-Select Header */}
+      {items.length > 0 && (
+        <div className="list-header">
+          <div className="list-header-left">
+            <span className="items-count">{items.length} items</span>
+          </div>
+          <div className="list-header-right">
+            <button
+              onClick={toggleSelectionMode}
+              className={`multi-select-btn ${isSelectionMode ? "active" : ""}`}
+              title={isSelectionMode ? "Exit selection mode" : "Enter selection mode"}
+            >
+              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
-            </div>
+              <span>{isSelectionMode ? "Cancel" : "Select"}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
-            {/* Item Image */}
-            <div className="item-image-wrapper">
-              {activeItem.imageUrl ? (
-                <img src={activeItem.imageUrl} alt={activeItem.title} className="item-image" />
-              ) : (
-                <div className="item-placeholder">
-                  <span className="item-position">
-                    {items.findIndex((item) => item.id === activeItem.id) + 1}
-                  </span>
-                </div>
-              )}
-            </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
+      >
+        <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {items.map((item, index) => (
+              <SortableListItem
+                key={item.id}
+                item={item}
+                index={index}
+                onRemove={onRemoveItem || (() => {})}
+                onEdit={handleEditItem}
+                onSave={handleSaveEdit}
+                onCancelEdit={handleCancelEdit}
+                isEditing={editingItemId === item.id}
+                // New context menu props
+                userLists={userLists}
+                onQuickRate={handleQuickRate}
+                onUpdateStatus={handleUpdateStatus}
+                onAddTag={handleAddTag}
+                onCopyToList={handleCopyToList}
+              />
+            ))}
+          </div>
+        </SortableContext>
 
-            {/* Simplified Item Content */}
-            <div className="item-content">
-              <h4 className="item-title">{activeItem.title}</h4>
-              <div className="item-meta">
-                <span className="item-type">{activeItem.mediaType}</span>
-                <span className="item-position-badge">
-                  Position #{items.findIndex((item) => item.id === activeItem.id) + 1}
-                </span>
-              </div>
-            </div>
+        <DragOverlay>
+          {activeItem ? (
+            <div className="sortable-list-item drag-overlay">
+              {/* Simplified drag preview - just the essential elements */}
 
-            {/* Drag indicator instead of action buttons */}
-            <div className="item-actions">
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: "36px",
-                  height: "36px",
-                  borderRadius: "8px",
-                  background: "var(--accent-primary)",
-                  color: "white",
-                }}
-              >
-                <svg
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  style={{ width: "18px", height: "18px" }}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-                  />
+              {/* Drag Handle */}
+              <div className="drag-handle">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                 </svg>
               </div>
+
+              {/* Item Image */}
+              <div className="item-image-wrapper">
+                {activeItem.imageUrl ? (
+                  <img src={activeItem.imageUrl} alt={activeItem.title} className="item-image" />
+                ) : (
+                  <div className="item-placeholder">
+                    <span className="item-position">
+                      {items.findIndex((item) => item.id === activeItem.id) + 1}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Simplified Item Content */}
+              <div className="item-content">
+                <h4 className="item-title">{activeItem.title}</h4>
+                <div className="item-meta">
+                  <span className="item-type">{activeItem.mediaType}</span>
+                  <span className="item-position-badge">
+                    Position #{items.findIndex((item) => item.id === activeItem.id) + 1}
+                  </span>
+                </div>
+              </div>
+
+              {/* Drag indicator instead of action buttons */}
+              <div className="item-actions">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "36px",
+                    height: "36px",
+                    borderRadius: "8px",
+                    background: "var(--accent-primary)",
+                    color: "white",
+                  }}
+                >
+                  <svg
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    style={{ width: "18px", height: "18px" }}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                    />
+                  </svg>
+                </div>
+              </div>
             </div>
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      {/* Batch Operations Toolbar */}
+      {listId && (
+        <BatchOperationsToolbar
+          items={items}
+          userLists={userLists}
+          onRefresh={onBatchOperationComplete || (() => {})}
+        />
+      )}
+    </>
+  );
+};
+
+// Main component that provides the batch operations context
+export const SortableList: React.FC<SortableListProps> = (props) => {
+  const { listId, onBatchOperationComplete } = props;
+
+  // Only provide batch operations context if listId is provided
+  if (!listId) {
+    return <SortableListInner {...props} />;
+  }
+
+  return (
+    <BatchOperationsProvider
+      listId={listId}
+      onOperationComplete={() => {
+        if (onBatchOperationComplete) {
+          onBatchOperationComplete();
+        }
+      }}
+    >
+      <SortableListInner {...props} />
+    </BatchOperationsProvider>
   );
 };

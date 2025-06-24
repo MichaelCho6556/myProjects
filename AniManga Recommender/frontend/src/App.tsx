@@ -13,6 +13,7 @@ import { UserProfilePage } from "./pages/UserProfilePage";
 import { UserSearchPage } from "./pages/UserSearchPage";
 import { PrivacySettingsPage } from "./pages/PrivacySettingsPage";
 import { ListDiscoveryPage } from "./pages/ListDiscoveryPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import NetworkStatus from "./components/Feedback/NetworkStatus";
 import "./App.css";
@@ -34,6 +35,7 @@ const App: React.FC = () => {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/item/:uid" element={<ItemDetailPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/lists" element={<UserListsPage />} />
                 <Route path="/profile" element={<UserListsPage />} />
                 <Route path="/my-lists" element={<MyCustomListsPage />} />

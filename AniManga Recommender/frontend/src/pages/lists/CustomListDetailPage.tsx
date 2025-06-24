@@ -1,13 +1,18 @@
 // ABOUTME: Custom list detail page for viewing and editing individual user-created lists with drag-and-drop reordering
 // ABOUTME: Provides comprehensive list management including item reordering, editing, and sharing functionality
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
-import { SortableList } from "../../components/lists/SortableList";
+
 import { EditListModal } from "../../components/lists/EditListModal";
 import { AddItemsModal } from "../../components/lists/AddItemsModal";
+import { AdvancedFilterBar, FilterConfig } from "../../components/lists/AdvancedFilterBar";
+import { BatchOperationsProvider } from "../../context/BatchOperationsProvider";
+import { BatchOperationsToolbar } from "../../components/lists/BatchOperationsToolbar";
+import { ViewModeSelector, ViewSettings } from "../../components/lists/ViewModeSelector";
+import { GroupableList } from "../../components/lists/GroupableList";
 
 import LoadingBanner from "../../components/Loading/LoadingBanner";
 import { CustomList, ListItem } from "../../types/social";
@@ -27,8 +32,158 @@ export const CustomListDetailPage: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddItemsModalOpen, setIsAddItemsModalOpen] = useState(false);
   const [userLists, setUserLists] = useState<Array<{ id: string; name: string; itemCount: number }>>([]);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+
+  // Advanced filtering state
+  const [filters, setFilters] = useState<FilterConfig>({
+    status: { values: [], operator: "includes" },
+    rating: { min: 0, max: 10, includeUnrated: true },
+    tags: { values: [], operator: "any" },
+    dateRange: { field: "addedAt", start: null, end: null },
+    mediaType: { values: [] },
+    rewatchCount: { min: 0, max: 50 },
+    search: "",
+  });
+
+  // Visual organization state with localStorage persistence
+  const [viewSettings, setViewSettings] = useState<ViewSettings>(() => {
+    // Load saved settings from localStorage
+    const savedSettings = localStorage.getItem("animanga_view_settings");
+    const defaultSettings = {
+      viewMode: "compact" as const,
+      groupBy: "none" as const,
+      sortBy: "position" as const,
+      sortDirection: "asc" as const,
+      showEmptyGroups: false,
+      compactDensity: "cozy" as const,
+    };
+
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        return { ...defaultSettings, ...parsed };
+      } catch (error) {
+        return defaultSettings;
+      }
+    }
+
+    return defaultSettings;
+  });
+
+  // Save view settings to localStorage whenever they change
+  const updateViewSettings = (newSettings: ViewSettings) => {
+    setViewSettings(newSettings);
+    localStorage.setItem("animanga_view_settings", JSON.stringify(newSettings));
+  };
 
   useDocumentTitle(list ? `${list.title} - Custom List` : "Custom List");
+
+  // Filtered and sorted items based on current filters
+  const filteredItems = useMemo(() => {
+    let filtered = [...items];
+
+    // Apply status filter
+    if (filters.status.values.length > 0) {
+      filtered = filtered.filter((item) => {
+        const itemStatus = item.watchStatus || "plan_to_watch";
+        const isIncluded = filters.status.values.includes(itemStatus);
+        return filters.status.operator === "includes" ? isIncluded : !isIncluded;
+      });
+    }
+
+    // Apply rating filter
+    if (!filters.rating.includeUnrated || filters.rating.min > 0 || filters.rating.max < 10) {
+      filtered = filtered.filter((item) => {
+        const rating = item.personalRating || 0;
+        if (rating === 0 && !filters.rating.includeUnrated) return false;
+        return rating >= filters.rating.min && rating <= filters.rating.max;
+      });
+    }
+
+    // Apply tags filter
+    if (filters.tags.values.length > 0) {
+      filtered = filtered.filter((item) => {
+        const itemTags = item.customTags || [];
+        const hasAnyTag = filters.tags.values.some((tag) => itemTags.includes(tag));
+        const hasAllTags = filters.tags.values.every((tag) => itemTags.includes(tag));
+        const hasNoTags = !filters.tags.values.some((tag) => itemTags.includes(tag));
+
+        switch (filters.tags.operator) {
+          case "any":
+            return hasAnyTag;
+          case "all":
+            return hasAllTags;
+          case "none":
+            return hasNoTags;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Apply date range filter
+    if (filters.dateRange.start || filters.dateRange.end) {
+      filtered = filtered.filter((item) => {
+        let dateToCheck: Date | null = null;
+
+        switch (filters.dateRange.field) {
+          case "addedAt":
+            dateToCheck = item.addedAt ? new Date(item.addedAt) : null;
+            break;
+          case "dateStarted":
+            dateToCheck = item.dateStarted ? new Date(item.dateStarted) : null;
+            break;
+          case "dateCompleted":
+            dateToCheck = item.dateCompleted ? new Date(item.dateCompleted) : null;
+            break;
+        }
+
+        if (!dateToCheck) return false;
+
+        if (filters.dateRange.start && dateToCheck < filters.dateRange.start) return false;
+        if (filters.dateRange.end && dateToCheck > filters.dateRange.end) return false;
+
+        return true;
+      });
+    }
+
+    // Apply media type filter
+    if (filters.mediaType.values.length > 0) {
+      filtered = filtered.filter((item) => filters.mediaType.values.includes(item.mediaType || "anime"));
+    }
+
+    // Apply rewatch count filter
+    if (filters.rewatchCount.min > 0 || filters.rewatchCount.max < 50) {
+      filtered = filtered.filter((item) => {
+        const rewatchCount = item.rewatchCount || 0;
+        return rewatchCount >= filters.rewatchCount.min && rewatchCount <= filters.rewatchCount.max;
+      });
+    }
+
+    // Apply search filter
+    if (filters.search.trim()) {
+      const searchTerm = filters.search.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.title.toLowerCase().includes(searchTerm) ||
+          (item.notes && item.notes.toLowerCase().includes(searchTerm)) ||
+          (item.customTags && item.customTags.some((tag) => tag.toLowerCase().includes(searchTerm)))
+      );
+    }
+
+    return filtered;
+  }, [items, filters]);
+
+  // Extract available tags from all items
+  const availableTags = useMemo(() => {
+    const tags = new Set<string>();
+    items.forEach((item) => {
+      if (item.customTags) {
+        item.customTags.forEach((tag) => tags.add(tag));
+      }
+    });
+    return Array.from(tags).sort();
+  }, [items]);
 
   const fetchListDetails = async () => {
     if (!listId || !user) return;
@@ -37,15 +192,10 @@ export const CustomListDetailPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
 
-      console.log("Fetching list details for listId:", listId);
-
       const [listResponse, itemsResponse] = await Promise.all([
         get(`/api/auth/lists/${listId}`),
         get(`/api/auth/lists/${listId}/items`),
       ]);
-
-      console.log("List response:", listResponse);
-      console.log("Items response:", itemsResponse);
 
       const listData = listResponse.data || listResponse;
       const itemsData = itemsResponse.data || itemsResponse || [];
@@ -57,10 +207,52 @@ export const CustomListDetailPage: React.FC = () => {
       };
 
       setList(updatedListData);
-      setItems(itemsData);
+
+      // Find localStorage keys for user
+
+      // Merge localStorage personal data with fetched items
+      const itemsWithPersonalData = itemsData.map((item: ListItem) => {
+        // Use the same key pattern as the save handlers: enhanced_${itemUid}
+        const enhancedKey = `enhanced_${item.itemUid}`;
+        let storedData = localStorage.getItem(enhancedKey);
+
+        // Fallback to old pattern if needed
+        if (!storedData) {
+          const oldKey = `animanga_personal_${user?.id}_${item.id}`;
+          storedData = localStorage.getItem(oldKey);
+        }
+
+        if (storedData) {
+          try {
+            const personalData = JSON.parse(storedData);
+            const mergedItem = {
+              ...item,
+              personalRating: personalData.personalRating || item.personalRating,
+              watchStatus:
+                personalData.watchStatus ||
+                ((item.watchStatus as any) !== "undefined" ? item.watchStatus : undefined),
+              customTags: personalData.customTags || item.customTags,
+              dateStarted: personalData.dateStarted || item.dateStarted,
+              dateCompleted: personalData.dateCompleted || item.dateCompleted,
+              rewatchCount: personalData.rewatchCount || item.rewatchCount,
+              notes: personalData.notes || item.notes,
+            };
+
+            return mergedItem;
+          } catch (error) {
+            return item;
+          }
+        }
+
+        // Handle case where API returns string "undefined" instead of actual undefined
+        return {
+          ...item,
+          watchStatus: (item.watchStatus as any) !== "undefined" ? item.watchStatus : undefined,
+        };
+      });
+
+      setItems(itemsWithPersonalData);
     } catch (err: any) {
-      console.error("Failed to fetch list details:", err);
-      console.error("Error response:", err.response);
       if (err.response?.status === 404) {
         setError("List not found or you do not have permission to view it.");
       } else {
@@ -74,13 +266,15 @@ export const CustomListDetailPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchListDetails();
-  }, [listId, user]);
+    if (listId && user) {
+      fetchListDetails();
+    }
+  }, [listId, user?.id]); // Only depend on user.id to prevent unnecessary refetches
 
   // Load user's other lists for context menu "Copy to List" functionality
   useEffect(() => {
     const fetchUserLists = async () => {
-      if (!user) return;
+      if (!user?.id) return;
 
       try {
         const response = await get("/api/auth/lists");
@@ -96,13 +290,13 @@ export const CustomListDetailPage: React.FC = () => {
         } else if (Array.isArray(response)) {
           allLists = response;
         } else {
-          console.warn("Unexpected API response format for user lists:", response);
           allLists = [];
         }
 
         // Filter out current list and map to simplified format
         const otherLists = allLists
-          .filter((l: any) => l.id !== listId)
+          .filter((l: any) => l.id !== parseInt(listId || "0"))
+          .filter((l: any) => l.name !== "tests" && l.name !== "erer") // Filter out the unwanted lists
           .slice(0, 5) // Limit to 5 lists for context menu
           .map((l: any) => ({
             id: l.id,
@@ -112,14 +306,14 @@ export const CustomListDetailPage: React.FC = () => {
 
         setUserLists(otherLists);
       } catch (error) {
-        console.error("Failed to load user lists:", error);
-        // Set empty array if API fails
         setUserLists([]);
       }
     };
 
-    fetchUserLists();
-  }, [user, listId, get]);
+    if (user?.id && listId) {
+      fetchUserLists();
+    }
+  }, [user?.id, listId]); // Remove 'get' dependency to prevent unnecessary refetches
 
   const handleReorderItems = async (newItems: ListItem[]) => {
     if (!listId || isReordering) return;
@@ -147,7 +341,6 @@ export const CustomListDetailPage: React.FC = () => {
         setList((prev) => (prev ? { ...prev, updatedAt: response.updated_at } : null));
       }
     } catch (error: any) {
-      console.error("Failed to reorder items:", error);
       // Revert optimistic update
       setItems(previousItems);
 
@@ -186,13 +379,12 @@ export const CustomListDetailPage: React.FC = () => {
         setList((prev) => (prev ? { ...prev, itemCount: prev.itemCount - 1 } : null));
       }
     } catch (error) {
-      console.error("Failed to remove item:", error);
       // Show error notification
     }
   };
 
-  const handleEditItem = (_item: ListItem) => {
-    // No longer opening modal - inline editing handles this now
+  const handleEditItem = (item: ListItem) => {
+    setEditingItemId(item.id);
   };
 
   const handleSaveItemEdit = async (itemId: string, updatedData: Partial<ListItem>) => {
@@ -251,9 +443,9 @@ export const CustomListDetailPage: React.FC = () => {
         prevItems.map((item) => (item.id === itemId ? { ...item, ...updatedData } : item))
       );
 
-      // No modal to close - inline editing handles its own state
+      // Clear editing state
+      setEditingItemId(null);
     } catch (error) {
-      console.error("Failed to update item:", error);
       throw error; // Let the inline editor handle the error
     }
   };
@@ -273,14 +465,25 @@ export const CustomListDetailPage: React.FC = () => {
       await put(`/api/auth/lists/${listId}`, updatedData);
       setList((prev) => (prev ? { ...prev, ...updatedData } : null));
     } catch (error) {
-      console.error("Failed to update list:", error);
       throw error;
     }
   };
 
-  const handleItemsAdded = () => {
-    // Refresh the list to show new items and update count
-    fetchListDetails();
+  const handleItemsAdded = async () => {
+    // Only refresh items, don't refetch the entire list to preserve local edits
+    try {
+      const itemsResponse = await get(`/api/auth/lists/${listId}/items`);
+      const itemsData = itemsResponse.data || itemsResponse || [];
+
+      setItems(itemsData);
+
+      // Update item count without refetching the whole list
+      if (list) {
+        setList((prev) => (prev ? { ...prev, itemCount: itemsData.length } : null));
+      }
+    } catch (error) {
+      fetchListDetails();
+    }
   };
 
   const isOwner = user && list && list.userId === user.id;
@@ -375,9 +578,9 @@ export const CustomListDetailPage: React.FC = () => {
           </Link>
           <div className="list-header">
             <div className="text-center">
-              <div className="mb-8">
+              <div className="error-icon-container mb-6">
                 <svg
-                  className="w-8 h-8 mx-auto text-red-500 mb-4"
+                  className="error-icon"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -386,15 +589,13 @@ export const CustomListDetailPage: React.FC = () => {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    strokeWidth={2}
+                    strokeWidth={1.5}
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
                   />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-                Oops! Something went wrong
-              </h2>
-              <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+              <h2 className="error-title">Oops! Something went wrong</h2>
+              <p className="error-message">
                 {error
                   ? `We couldn't load this custom list: ${error}`
                   : "The custom list you're looking for couldn't be found or may have been removed."}
@@ -581,93 +782,122 @@ export const CustomListDetailPage: React.FC = () => {
           </div>
         )}
 
+        {/* Advanced Filter Bar */}
+        {isOwner && items.length > 0 && listId && (
+          <AdvancedFilterBar
+            filters={filters}
+            onFiltersChange={setFilters}
+            availableTags={availableTags}
+            itemCount={items.length}
+            filteredCount={filteredItems.length}
+          />
+        )}
+
+        {/* Visual Organization Controls */}
+        {items.length > 0 && (
+          <ViewModeSelector
+            settings={viewSettings}
+            onSettingsChange={updateViewSettings}
+            itemCount={filteredItems.length}
+          />
+        )}
+
         {/* List Items */}
         <div className="list-content">
-          <SortableList
-            items={items}
-            onReorder={handleReorderItems}
-            onRemoveItem={isOwner ? handleRemoveItem : () => {}}
-            onEditItem={isOwner ? handleEditItem : () => {}}
-            onSaveItemEdit={isOwner ? handleSaveItemEdit : () => Promise.resolve()}
-            isLoading={false}
-            emptyMessage={
-              isOwner
-                ? "Your list is ready for some awesome anime and manga! Click 'Add Items' above to start building your collection."
-                : "This list is empty, but great things are coming soon!"
-            }
-            // Context menu props
-            userLists={userLists}
-            onQuickRate={async (itemId: string, rating: number) => {
-              // Handle quick rating - save to localStorage for personal tracking
-              const currentItem = items.find((item) => item.id === itemId);
-              if (!currentItem) return;
+          {listId && (
+            <BatchOperationsProvider listId={listId} onOperationComplete={fetchListDetails}>
+              <BatchOperationsToolbar
+                items={filteredItems}
+                userLists={userLists}
+                onRefresh={fetchListDetails}
+              />
+              <GroupableList
+                viewSettings={viewSettings}
+                items={filteredItems}
+                onReorder={handleReorderItems}
+                onRemoveItem={isOwner ? handleRemoveItem : () => {}}
+                onEditItem={isOwner ? handleEditItem : () => {}}
+                onSaveItemEdit={isOwner ? handleSaveItemEdit : () => Promise.resolve()}
+                editingItemId={editingItemId}
+                onCancelEdit={() => setEditingItemId(null)}
+                isLoading={false}
+                emptyMessage={
+                  isOwner
+                    ? "Your list is ready for some awesome anime and manga! Click 'Add Items' above to start building your collection."
+                    : "This list is empty, but great things are coming soon!"
+                }
+                userLists={userLists}
+                onQuickRate={async (itemId: string, rating: number) => {
+                  // Handle quick rating - save to localStorage for personal tracking
+                  const currentItem = items.find((item) => item.id === itemId);
+                  if (!currentItem) return;
 
-              const storageKey = `enhanced_${currentItem.itemUid}`;
-              const existingData = JSON.parse(localStorage.getItem(storageKey) || "{}");
-              const personalData = {
-                ...existingData,
-                personalRating: rating,
-                lastUpdated: new Date().toISOString(),
-              };
-              localStorage.setItem(storageKey, JSON.stringify(personalData));
+                  const storageKey = `enhanced_${currentItem.itemUid}`;
+                  const existingData = JSON.parse(localStorage.getItem(storageKey) || "{}");
+                  const personalData = {
+                    ...existingData,
+                    personalRating: rating,
+                    lastUpdated: new Date().toISOString(),
+                  };
+                  localStorage.setItem(storageKey, JSON.stringify(personalData));
 
-              // Update local state for immediate UI feedback
-              setItems((prev) =>
-                prev.map((item) => (item.id === itemId ? { ...item, personalRating: rating } : item))
-              );
-            }}
-            onUpdateStatus={async (itemId: string, status: string) => {
-              // Handle status update - save to localStorage for personal tracking
-              const currentItem = items.find((item) => item.id === itemId);
-              if (!currentItem) return;
+                  // Update local state for immediate UI feedback
+                  setItems((prev) =>
+                    prev.map((item) => (item.id === itemId ? { ...item, personalRating: rating } : item))
+                  );
+                }}
+                onUpdateStatus={async (itemId: string, status: string) => {
+                  // Handle status update - save to localStorage for personal tracking
+                  const currentItem = items.find((item) => item.id === itemId);
+                  if (!currentItem) return;
 
-              const storageKey = `enhanced_${currentItem.itemUid}`;
-              const existingData = JSON.parse(localStorage.getItem(storageKey) || "{}");
-              const personalData = {
-                ...existingData,
-                watchStatus: status,
-                lastUpdated: new Date().toISOString(),
-              };
-              localStorage.setItem(storageKey, JSON.stringify(personalData));
+                  const storageKey = `enhanced_${currentItem.itemUid}`;
+                  const existingData = JSON.parse(localStorage.getItem(storageKey) || "{}");
+                  const personalData = {
+                    ...existingData,
+                    watchStatus: status,
+                    lastUpdated: new Date().toISOString(),
+                  };
+                  localStorage.setItem(storageKey, JSON.stringify(personalData));
 
-              // Update local state for immediate UI feedback
-              setItems((prev) =>
-                prev.map((item) => (item.id === itemId ? { ...item, watchStatus: status as any } : item))
-              );
-            }}
-            onAddTag={async (itemId: string, tag: string) => {
-              // Handle tag addition - save to localStorage for personal tracking
-              const currentItem = items.find((item) => item.id === itemId);
-              if (!currentItem) return;
+                  // Update local state for immediate UI feedback
+                  setItems((prev) =>
+                    prev.map((item) => (item.id === itemId ? { ...item, watchStatus: status as any } : item))
+                  );
+                }}
+                onAddTag={async (itemId: string, tag: string) => {
+                  // Handle tag addition - save to localStorage for personal tracking
+                  const currentItem = items.find((item) => item.id === itemId);
+                  if (!currentItem) return;
 
-              const currentTags = currentItem.customTags || [];
-              const trimmedTag = tag.trim().toLowerCase();
+                  const currentTags = currentItem.customTags || [];
+                  const trimmedTag = tag.trim().toLowerCase();
 
-              if (currentTags.includes(trimmedTag) || currentTags.length >= 10) {
-                return; // Tag exists or too many tags
-              }
+                  if (currentTags.includes(trimmedTag) || currentTags.length >= 10) {
+                    return; // Tag exists or too many tags
+                  }
 
-              const newTags = [...currentTags, trimmedTag];
-              const storageKey = `enhanced_${currentItem.itemUid}`;
-              const existingData = JSON.parse(localStorage.getItem(storageKey) || "{}");
-              const personalData = {
-                ...existingData,
-                customTags: newTags,
-                lastUpdated: new Date().toISOString(),
-              };
-              localStorage.setItem(storageKey, JSON.stringify(personalData));
+                  const newTags = [...currentTags, trimmedTag];
+                  const storageKey = `enhanced_${currentItem.itemUid}`;
+                  const existingData = JSON.parse(localStorage.getItem(storageKey) || "{}");
+                  const personalData = {
+                    ...existingData,
+                    customTags: newTags,
+                    lastUpdated: new Date().toISOString(),
+                  };
+                  localStorage.setItem(storageKey, JSON.stringify(personalData));
 
-              // Update local state for immediate UI feedback
-              setItems((prev) =>
-                prev.map((item) => (item.id === itemId ? { ...item, customTags: newTags } : item))
-              );
-            }}
-            onCopyToList={async (itemId: string, targetListId: string) => {
-              // Handle copying to another list
-              console.log(`Copying item ${itemId} to list ${targetListId}`);
-              // TODO: Implement actual copy functionality when backend supports it
-            }}
-          />
+                  // Update local state for immediate UI feedback
+                  setItems((prev) =>
+                    prev.map((item) => (item.id === itemId ? { ...item, customTags: newTags } : item))
+                  );
+                }}
+                onCopyToList={async () => {
+                  // TODO: Implement actual copy functionality when backend supports it
+                }}
+              />
+            </BatchOperationsProvider>
+          )}
         </div>
 
         {/* Modals */}

@@ -59,6 +59,7 @@ import DashboardSkeleton from "../components/Loading/DashboardSkeleton";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import CollapsibleSection from "../components/CollapsibleSection";
 import EmptyState from "../components/EmptyState";
+import { ListAnalyticsDashboard } from "../components/analytics/ListAnalyticsDashboard";
 import "./DashboardPage.css";
 import { supabase } from "../lib/supabase";
 
@@ -198,48 +199,51 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
   /**
    * Helper function for debounced section refresh to prevent rapid API calls
    */
-  const debouncedSectionRefresh = useCallback((sectionName: keyof typeof sectionLoading, delay: number = 1000) => {
-    // Clear existing timer for this section
-    if (refreshTimers.current[sectionName]) {
-      clearTimeout(refreshTimers.current[sectionName]);
-    }
+  const debouncedSectionRefresh = useCallback(
+    (sectionName: keyof typeof sectionLoading, delay: number = 1000) => {
+      // Clear existing timer for this section
+      if (refreshTimers.current[sectionName]) {
+        clearTimeout(refreshTimers.current[sectionName]);
+      }
 
-    // Check if section is already loading
-    if (sectionLoading[sectionName]) {
-      return Promise.resolve();
-    }
+      // Check if section is already loading
+      if (sectionLoading[sectionName]) {
+        return Promise.resolve();
+      }
 
-    setSectionLoading(prev => ({ ...prev, [sectionName]: true }));
+      setSectionLoading((prev) => ({ ...prev, [sectionName]: true }));
 
-    return new Promise<void>((resolve) => {
-      refreshTimers.current[sectionName] = setTimeout(async () => {
-        try {
-          await fetchDashboardData();
-        } finally {
-          setSectionLoading(prev => ({ ...prev, [sectionName]: false }));
-          resolve();
-        }
-      }, delay);
-    });
-  }, [sectionLoading]);
+      return new Promise<void>((resolve) => {
+        refreshTimers.current[sectionName] = setTimeout(async () => {
+          try {
+            await fetchDashboardData();
+          } finally {
+            setSectionLoading((prev) => ({ ...prev, [sectionName]: false }));
+            resolve();
+          }
+        }, delay);
+      });
+    },
+    [sectionLoading]
+  );
 
   /**
    * Section-specific refresh functions for individual loading states
    */
   const refreshRecommendations = useCallback(async (): Promise<void> => {
-    await debouncedSectionRefresh('recommendations', 500);
+    await debouncedSectionRefresh("recommendations", 500);
   }, [debouncedSectionRefresh]);
 
   const refreshItemLists = useCallback(async (): Promise<void> => {
-    await debouncedSectionRefresh('itemLists', 500);
+    await debouncedSectionRefresh("itemLists", 500);
   }, [debouncedSectionRefresh]);
 
   const refreshQuickActions = useCallback(async (): Promise<void> => {
-    await debouncedSectionRefresh('quickActions', 500);
+    await debouncedSectionRefresh("quickActions", 500);
   }, [debouncedSectionRefresh]);
 
   const refreshActivityFeed = useCallback(async (): Promise<void> => {
-    await debouncedSectionRefresh('activityFeed', 500);
+    await debouncedSectionRefresh("activityFeed", 500);
   }, [debouncedSectionRefresh]);
 
   // Set up cross-tab synchronization for real-time updates
@@ -269,7 +273,7 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
   // Cleanup timers on unmount
   useEffect(() => {
     return () => {
-      Object.values(refreshTimers.current).forEach(timer => {
+      Object.values(refreshTimers.current).forEach((timer) => {
         if (timer) clearTimeout(timer);
       });
     };
@@ -331,11 +335,11 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
               // This would typically open the auth modal
               window.location.href = "/auth";
             },
-            variant: "primary"
+            variant: "primary",
           }}
           secondaryAction={{
             text: "Browse without signing in",
-            href: "/"
+            href: "/",
           }}
         />
       </div>
@@ -371,11 +375,11 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
           actionButton={{
             text: "Browse Anime & Manga",
             href: "/",
-            variant: "primary"
+            variant: "primary",
           }}
           secondaryAction={{
             text: "Learn How to Get Started",
-            href: "/help/getting-started"
+            href: "/help/getting-started",
           }}
         />
       </div>
@@ -433,6 +437,15 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
               isLoading={sectionLoading.quickActions}
             >
               <QuickActions onRefresh={fetchDashboardData} />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              id="analytics"
+              title="Analytics Dashboard"
+              icon="📊"
+              showRefreshButton={false}
+            >
+              <ListAnalyticsDashboard />
             </CollapsibleSection>
           </div>
 

@@ -11,6 +11,7 @@ import { InlineEditPanel } from "./InlineEditPanel";
 import { ContextMenu, ContextMenuItem, ContextMenuAction } from "../common/ContextMenu";
 import { useContextMenu } from "../../hooks/useContextMenu";
 import { useToastActions } from "../Feedback/ToastProvider";
+import { useBatchOperations } from "../../context/BatchOperationsProvider";
 import "./SortableListItem.css";
 
 interface SortableListItemProps {
@@ -46,6 +47,11 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
   const { success: showSuccessToast, error: showErrorToast } = useToastActions();
   const [isConfirmingRemove, setIsConfirmingRemove] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+
+  // Batch operations context
+  const { isSelectionMode, selectedItems, toggleItem } = useBatchOperations();
+
+  const isSelected = selectedItems.has(item.id);
 
   const {
     isContextMenuOpen,
@@ -322,14 +328,31 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
     setIsConfirmingRemove(false);
   };
 
+  // Handle selection checkbox click
+  const handleSelectionClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isSelectionMode) {
+      toggleItem(item.id, index, e.shiftKey, [item]);
+    }
+  };
+
+  // Handle item click during selection mode
+  const handleItemClick = (e: React.MouseEvent) => {
+    if (isSelectionMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleItem(item.id, index, e.shiftKey, [item]);
+    }
+  };
+
   // Handle right-click context menu
   const handleItemContextMenu = (e: React.MouseEvent) => {
     // Always prevent default context menu, even if we can't show our custom one
     e.preventDefault();
     e.stopPropagation();
 
-    // Don't show context menu during drag or while editing
-    if (isDragging || isEditing) {
+    // Don't show context menu during drag, edit, or selection mode
+    if (isDragging || isEditing || isSelectionMode) {
       return;
     }
 
@@ -430,19 +453,34 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
         style={style}
         className={`sortable-list-item ${isDragging ? "dragging" : ""} ${isEditing ? "being-edited" : ""} ${
           isOver ? "drop-zone" : ""
-        }`}
+        } ${isSelectionMode ? "selection-mode" : ""} ${isSelected ? "selected" : ""}`}
         data-item-id={item.id}
         onContextMenu={handleItemContextMenu}
         onKeyDown={handleItemKeyDown}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchMove}
+        onClick={handleItemClick}
         tabIndex={0}
         role="listitem"
-        aria-label={`${enhancedItem.title}, position ${
-          index + 1
-        }. Right-click or long-press for more options`}
+        aria-label={`${enhancedItem.title}, position ${index + 1}. ${
+          isSelectionMode ? "Click to select/deselect" : "Right-click or long-press for more options"
+        }`}
       >
+        {/* Selection Checkbox */}
+        {isSelectionMode && (
+          <div
+            className={`selection-checkbox ${isSelected ? "checked" : ""}`}
+            onClick={handleSelectionClick}
+            role="checkbox"
+            aria-checked={isSelected}
+            aria-label={`${isSelected ? "Deselect" : "Select"} ${enhancedItem.title}`}
+          >
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        )}
         {/* Drag Handle */}
         <button
           className="drag-handle"

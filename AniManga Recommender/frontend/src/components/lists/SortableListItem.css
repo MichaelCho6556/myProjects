@@ -16,6 +16,99 @@
   cursor: default;
   min-height: 80px;
   align-items: start;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Grid View Layout Override */
+.group-items.grid-layout .sortable-list-item {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 200px;
+  padding: 1.25rem;
+  gap: 1rem;
+}
+
+.group-items.grid-layout .drag-handle {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 2;
+}
+
+.group-items.grid-layout .item-image-wrapper {
+  width: 60px;
+  height: 80px;
+  align-self: center;
+  margin: 0 auto;
+}
+
+.group-items.grid-layout .item-content {
+  text-align: center;
+  gap: 0.5rem;
+}
+
+.group-items.grid-layout .item-left-metadata {
+  min-width: unset;
+  align-items: center;
+}
+
+.group-items.grid-layout .item-actions {
+  justify-content: center;
+  margin-top: auto;
+}
+
+/* Compact View Layout Override with Density Variations */
+.group-items.compact-layout .sortable-list-item {
+  gap: 0.5rem;
+}
+
+/* Comfortable Density */
+.groupable-list.density-comfortable .group-items.compact-layout .sortable-list-item {
+  padding: 1rem;
+  min-height: 80px;
+}
+
+.groupable-list.density-comfortable .group-items.compact-layout .item-image-wrapper {
+  width: 40px;
+  height: 56px;
+}
+
+/* Cozy Density (Default) */
+.groupable-list.density-cozy .group-items.compact-layout .sortable-list-item {
+  padding: 0.75rem;
+  min-height: 70px;
+}
+
+.groupable-list.density-cozy .group-items.compact-layout .item-image-wrapper {
+  width: 36px;
+  height: 50px;
+}
+
+/* Compact Density */
+.groupable-list.density-compact .group-items.compact-layout .sortable-list-item {
+  padding: 0.5rem 0.75rem;
+  min-height: 60px;
+}
+
+.groupable-list.density-compact .group-items.compact-layout .item-image-wrapper {
+  width: 32px;
+  height: 44px;
+}
+
+.groupable-list.density-compact .group-items.compact-layout .item-title {
+  font-size: 0.875rem;
+}
+
+.groupable-list.density-compact .group-items.compact-layout .item-type,
+.groupable-list.density-compact .group-items.compact-layout .item-position-badge {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+}
+
+.groupable-list.density-compact .group-items.compact-layout .item-left-metadata {
+  min-width: 100px;
 }
 
 .sortable-list-item.being-edited {
