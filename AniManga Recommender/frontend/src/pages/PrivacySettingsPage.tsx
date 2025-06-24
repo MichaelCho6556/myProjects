@@ -1,294 +1,368 @@
 // ABOUTME: Privacy settings page for controlling user profile and activity visibility
 // ABOUTME: Provides comprehensive privacy controls with form validation and user feedback
 
-import React, { useState, useEffect } from 'react';
-import { useCurrentUserProfile } from '../hooks/useUserProfile';
-import { PrivacySettings } from '../types/social';
-import LoadingBanner from '../components/Loading/LoadingBanner';
-import ErrorFallback from '../components/Error/ErrorFallback';
+import React, { useState, useEffect } from "react";
+import { useCurrentUserProfile } from "../hooks/useUserProfile";
+import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
+import "./PrivacySettingsPage.css";
 
-export const PrivacySettingsPage: React.FC = () => {
-  const { privacySettings, isLoading, error, updatePrivacySettings } = useCurrentUserProfile();
-  const [formData, setFormData] = useState<PrivacySettings>({
-    profileVisibility: 'Public',
-    listVisibility: 'Public',
-    activityVisibility: 'Public',
-    showCompletionStats: true
+interface PrivacySettings {
+  profile_visibility: string;
+  list_visibility: string;
+  activity_visibility: string;
+  allow_contact: boolean;
+  show_online_status: boolean;
+}
+
+const PrivacySettingsPage: React.FC = () => {
+  const { profile, isLoading: profileLoading } = useCurrentUserProfile();
+  const { makeAuthenticatedRequest } = useAuthenticatedApi();
+
+  const [settings, setSettings] = useState<PrivacySettings>({
+    profile_visibility: "public",
+    list_visibility: "public",
+    activity_visibility: "public",
+    allow_contact: true,
+    show_online_status: true,
   });
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [saveMessage, setSaveMessage] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [hasChanges, setHasChanges] = useState(false);
 
-  // Update form when privacy settings are loaded
   useEffect(() => {
-    if (privacySettings) {
-      setFormData(privacySettings);
+    if (!profileLoading && profile) {
+      loadPrivacySettings();
     }
-  }, [privacySettings]);
+  }, [profileLoading, profile]);
 
-  // Check for changes
-  useEffect(() => {
-    if (privacySettings) {
-      const hasChanges = JSON.stringify(formData) !== JSON.stringify(privacySettings);
-      setHasChanges(hasChanges);
+  const loadPrivacySettings = async () => {
+    try {
+      const response = await makeAuthenticatedRequest("/api/auth/privacy-settings");
+      const data = response.data || response;
+
+      if (data && typeof data === "object") {
+        setSettings({
+          profile_visibility: data.profile_visibility || "public",
+          list_visibility: data.list_visibility || "public",
+          activity_visibility: data.activity_visibility || "public",
+          allow_contact: data.allow_contact !== false,
+          show_online_status: data.show_online_status !== false,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to load privacy settings:", error);
+      setSaveMessage({
+        type: "error",
+        message: "Failed to load privacy settings. Please try again.",
+      });
+    } finally {
+      setIsLoading(false);
     }
-  }, [formData, privacySettings]);
-
-  const handleVisibilityChange = (
-    field: keyof PrivacySettings,
-    value: string | boolean
-  ) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    setSaveMessage(null);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async () => {
     setIsSaving(true);
     setSaveMessage(null);
 
     try {
-      await updatePrivacySettings(formData);
-      setSaveMessage('Privacy settings saved successfully!');
-      setHasChanges(false);
-    } catch (err) {
-      setSaveMessage('Failed to save privacy settings. Please try again.');
+      await makeAuthenticatedRequest("/api/auth/privacy-settings", {
+        method: "PUT",
+        body: JSON.stringify(settings),
+      });
+
+      setSaveMessage({
+        type: "success",
+        message: "Privacy settings saved successfully!",
+      });
+    } catch (error: any) {
+      setSaveMessage({
+        type: "error",
+        message: error.message || "Failed to save privacy settings. Please try again.",
+      });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleReset = () => {
-    if (privacySettings) {
-      setFormData(privacySettings);
-      setSaveMessage(null);
-    }
+    setSettings({
+      profile_visibility: "public",
+      list_visibility: "public",
+      activity_visibility: "public",
+      allow_contact: true,
+      show_online_status: true,
+    });
+    setSaveMessage(null);
   };
 
-  if (isLoading) {
-    return <LoadingBanner message="Loading privacy settings..." isVisible={true} />;
+  if (profileLoading || isLoading) {
+    return (
+      <div className="privacy-settings-page">
+        <div className="privacy-container">
+          <div className="privacy-header">
+            <h1 className="privacy-title">Privacy Settings</h1>
+            <p className="privacy-subtitle">Loading your privacy preferences...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  if (error) {
-    return <ErrorFallback error={error} />;
+  if (!profile) {
+    return (
+      <div className="privacy-settings-page">
+        <div className="privacy-container">
+          <div className="privacy-header">
+            <h1 className="privacy-title">Privacy Settings</h1>
+            <p className="privacy-subtitle">Please log in to access privacy settings.</p>
+          </div>
+        </div>
+      </div>
+    );
   }
-
-  const visibilityOptions = [
-    { value: 'Public', label: 'Public', description: 'Visible to everyone' },
-    { value: 'Friends Only', label: 'Friends Only', description: 'Only visible to users you follow who also follow you' },
-    { value: 'Private', label: 'Private', description: 'Only visible to you' }
-  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Privacy Settings
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Control who can see your profile, lists, and activities
-          </p>
+    <div className="privacy-settings-page">
+      <div className="privacy-container">
+        <div className="privacy-header">
+          <h1 className="privacy-title">Privacy Settings</h1>
+          <p className="privacy-subtitle">Control who can see your information and activity</p>
         </div>
 
-        {/* Settings Form */}
-        <form onSubmit={handleSave} className="space-y-8">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+        {saveMessage && <div className={`save-message ${saveMessage.type}`}>{saveMessage.message}</div>}
+
+        <form className="privacy-form" onSubmit={(e) => e.preventDefault()}>
+          <div className="settings-card">
             {/* Profile Visibility */}
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Profile Visibility
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Choose who can view your profile page and basic information
-              </p>
-              
-              <div className="space-y-3">
-                {visibilityOptions.map(option => (
-                  <label
+            <div className="settings-section">
+              <div className="section-header">
+                <h3 className="section-title">
+                  <svg className="section-icon" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4Zm-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10Z" />
+                  </svg>
+                  Profile Visibility
+                </h3>
+                <p className="section-description">Choose who can view your profile information</p>
+              </div>
+              <div className="options-grid">
+                {[
+                  { value: "public", label: "Public", description: "Anyone can view your profile" },
+                  {
+                    value: "friends",
+                    label: "Friends Only",
+                    description: "Only your friends can see your profile",
+                  },
+                  { value: "private", label: "Private", description: "Only you can see your profile" },
+                ].map((option) => (
+                  <div
                     key={option.value}
-                    className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                    className={`option-card ${
+                      settings.profile_visibility === option.value ? "selected" : ""
+                    }`}
+                    onClick={() => setSettings({ ...settings, profile_visibility: option.value })}
                   >
-                    <input
-                      type="radio"
-                      name="profileVisibility"
-                      value={option.value}
-                      checked={formData.profileVisibility === option.value}
-                      onChange={(e) => handleVisibilityChange('profileVisibility', e.target.value)}
-                      className="mt-1 w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {option.label}
+                    <div className="option-content">
+                      <div className="custom-radio">
+                        <input
+                          type="radio"
+                          className="hidden-input"
+                          name="profile_visibility"
+                          value={option.value}
+                          checked={settings.profile_visibility === option.value}
+                          onChange={() => {}}
+                        />
                       </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        {option.description}
+                      <div className="option-details">
+                        <div className="option-label">{option.label}</div>
+                        <div className="option-description">{option.description}</div>
                       </div>
                     </div>
-                  </label>
+                  </div>
                 ))}
               </div>
             </div>
 
             {/* List Visibility */}
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                List Visibility
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Control who can see your anime and manga lists
-              </p>
-              
-              <div className="space-y-3">
-                {visibilityOptions.map(option => (
-                  <label
+            <div className="settings-section">
+              <div className="section-header">
+                <h3 className="section-title">
+                  <svg className="section-icon" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z" />
+                  </svg>
+                  List Visibility
+                </h3>
+                <p className="section-description">Control who can see your anime and manga lists</p>
+              </div>
+              <div className="options-grid">
+                {[
+                  { value: "public", label: "Public", description: "Anyone can view your lists" },
+                  { value: "friends", label: "Friends Only", description: "Only friends can see your lists" },
+                  { value: "private", label: "Private", description: "Only you can see your lists" },
+                ].map((option) => (
+                  <div
                     key={option.value}
-                    className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                    className={`option-card ${settings.list_visibility === option.value ? "selected" : ""}`}
+                    onClick={() => setSettings({ ...settings, list_visibility: option.value })}
                   >
-                    <input
-                      type="radio"
-                      name="listVisibility"
-                      value={option.value}
-                      checked={formData.listVisibility === option.value}
-                      onChange={(e) => handleVisibilityChange('listVisibility', e.target.value)}
-                      className="mt-1 w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {option.label}
+                    <div className="option-content">
+                      <div className="custom-radio">
+                        <input
+                          type="radio"
+                          className="hidden-input"
+                          name="list_visibility"
+                          value={option.value}
+                          checked={settings.list_visibility === option.value}
+                          onChange={() => {}}
+                        />
                       </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        {option.description}
+                      <div className="option-details">
+                        <div className="option-label">{option.label}</div>
+                        <div className="option-description">{option.description}</div>
                       </div>
                     </div>
-                  </label>
+                  </div>
                 ))}
               </div>
             </div>
 
             {/* Activity Visibility */}
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Activity Visibility
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Choose who can see your recent activities and updates
-              </p>
-              
-              <div className="space-y-3">
-                {visibilityOptions.map(option => (
-                  <label
+            <div className="settings-section">
+              <div className="section-header">
+                <h3 className="section-title">
+                  <svg className="section-icon" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zM8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM7.5 3a.5.5 0 0 1 1 0v5.21l3.248 1.856a.5.5 0 0 1-.496.868L7.5 9.5V3z" />
+                  </svg>
+                  Activity Visibility
+                </h3>
+                <p className="section-description">Choose who can see your recent activity</p>
+              </div>
+              <div className="options-grid">
+                {[
+                  { value: "public", label: "Public", description: "Activity visible to everyone" },
+                  {
+                    value: "friends",
+                    label: "Friends Only",
+                    description: "Activity visible to friends only",
+                  },
+                  { value: "private", label: "Private", description: "Activity hidden from others" },
+                ].map((option) => (
+                  <div
                     key={option.value}
-                    className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                    className={`option-card ${
+                      settings.activity_visibility === option.value ? "selected" : ""
+                    }`}
+                    onClick={() => setSettings({ ...settings, activity_visibility: option.value })}
                   >
-                    <input
-                      type="radio"
-                      name="activityVisibility"
-                      value={option.value}
-                      checked={formData.activityVisibility === option.value}
-                      onChange={(e) => handleVisibilityChange('activityVisibility', e.target.value)}
-                      className="mt-1 w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {option.label}
+                    <div className="option-content">
+                      <div className="custom-radio">
+                        <input
+                          type="radio"
+                          className="hidden-input"
+                          name="activity_visibility"
+                          value={option.value}
+                          checked={settings.activity_visibility === option.value}
+                          onChange={() => {}}
+                        />
                       </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        {option.description}
+                      <div className="option-details">
+                        <div className="option-label">{option.label}</div>
+                        <div className="option-description">{option.description}</div>
                       </div>
                     </div>
-                  </label>
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* Statistics Visibility */}
-            <div className="p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Statistics Display
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Additional privacy controls for your profile statistics
-              </p>
-              
-              <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.showCompletionStats}
-                  onChange={(e) => handleVisibilityChange('showCompletionStats', e.target.checked)}
-                  className="mt-1 w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded"
-                />
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900 dark:text-white">
-                    Show Completion Statistics
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Display your completion counts, average ratings, and progress statistics on your profile
+            {/* Contact & Status Settings */}
+            <div className="settings-section">
+              <div className="section-header">
+                <h3 className="section-title">
+                  <svg className="section-icon" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-5 6s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H1zM11 3.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5zm.5 2.5a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1h-4zm2 3a.5.5 0 0 0 0 1h2a.5.5 0 0 0 0-1h-2zm0 3a.5.5 0 0 0 0 1h2a.5.5 0 0 0 0-1h-2z" />
+                  </svg>
+                  Contact & Status
+                </h3>
+                <p className="section-description">Manage communication and online status preferences</p>
+              </div>
+              <div className="options-grid">
+                <div
+                  className={`checkbox-card ${settings.allow_contact ? "checked" : ""}`}
+                  onClick={() => setSettings({ ...settings, allow_contact: !settings.allow_contact })}
+                >
+                  <div className="checkbox-content">
+                    <div className="custom-checkbox">
+                      <input
+                        type="checkbox"
+                        className="hidden-input"
+                        checked={settings.allow_contact}
+                        onChange={() => {}}
+                      />
+                    </div>
+                    <div className="option-details">
+                      <div className="checkbox-label">Allow Contact</div>
+                      <div className="checkbox-description">
+                        Let others send you messages and friend requests
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </label>
+                <div
+                  className={`checkbox-card ${settings.show_online_status ? "checked" : ""}`}
+                  onClick={() =>
+                    setSettings({ ...settings, show_online_status: !settings.show_online_status })
+                  }
+                >
+                  <div className="checkbox-content">
+                    <div className="custom-checkbox">
+                      <input
+                        type="checkbox"
+                        className="hidden-input"
+                        checked={settings.show_online_status}
+                        onChange={() => {}}
+                      />
+                    </div>
+                    <div className="option-details">
+                      <div className="checkbox-label">Show Online Status</div>
+                      <div className="checkbox-description">Display when you're online to other users</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Save Message */}
-          {saveMessage && (
-            <div className={`p-4 rounded-lg ${
-              saveMessage.includes('success') 
-                ? 'bg-green-50 border border-green-200 text-green-700 dark:bg-green-900/50 dark:border-green-800 dark:text-green-300'
-                : 'bg-red-50 border border-red-200 text-red-700 dark:bg-red-900/50 dark:border-red-800 dark:text-red-300'
-            }`}>
-              {saveMessage}
-            </div>
-          )}
+          <div className="action-buttons">
+            <button type="button" className="btn btn-secondary" onClick={handleReset} disabled={isSaving}>
+              Reset to Defaults
+            </button>
+            <button type="button" className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save Settings"}
+            </button>
+          </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-end">
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={!hasChanges || isSaving}
-              className="
-                px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300
-                rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors
-                disabled:opacity-50 disabled:cursor-not-allowed
-              "
-            >
-              Reset Changes
-            </button>
-            <button
-              type="submit"
-              disabled={!hasChanges || isSaving}
-              className="
-                px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700
-                disabled:opacity-50 disabled:cursor-not-allowed transition-colors
-                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-              "
-            >
-              {isSaving ? 'Saving...' : 'Save Settings'}
-            </button>
+          <div className="privacy-notice">
+            <div className="notice-content">
+              <svg className="notice-icon" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
+                <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z" />
+              </svg>
+              <div className="notice-text">
+                <div className="notice-title">Privacy Information</div>
+                Your privacy settings may take a few minutes to take effect across all features. These
+                settings only apply to other users - site administrators can always access your data as needed
+                for moderation purposes.
+              </div>
+            </div>
           </div>
         </form>
-
-        {/* Privacy Notice */}
-        <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <div className="flex gap-3">
-            <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div className="text-sm text-blue-700 dark:text-blue-300">
-              <p className="font-medium mb-1">Privacy Notice</p>
-              <p>
-                Your privacy settings take effect immediately. Note that some cached data may take a few minutes to update across the platform.
-                You can change these settings at any time.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
 };
+
+export default PrivacySettingsPage;

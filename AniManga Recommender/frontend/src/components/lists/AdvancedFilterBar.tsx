@@ -226,7 +226,7 @@ export const AdvancedFilterBar: React.FC<AdvancedFilterBarProps> = ({
     try {
       const presetData = {
         name: presetName.trim(),
-        description: presetDescription.trim() || null,
+        description: presetDescription && presetDescription.trim() ? presetDescription.trim() : "",
         filters,
         isPublic: false,
       };
