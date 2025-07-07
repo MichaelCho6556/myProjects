@@ -300,8 +300,13 @@ const FilterBar: React.FC<FilterBarProps> = ({
       classNamePrefix: "react-select",
       menuPlacement: "auto" as const,
       menuPortalTarget: document.body,
-      isSearchable: true,
+      isSearchable: false, // ✅ DISABLED: Remove search to fix UI blocking
       closeMenuOnScroll: false,
+      openMenuOnClick: true,
+      openMenuOnFocus: false,
+      blurInputOnSelect: true,
+      escapeClearsValue: false,
+      backspaceRemovesValue: false,
     }),
     [customSelectStyles, filtersLoading, loading]
   );
@@ -321,11 +326,16 @@ const FilterBar: React.FC<FilterBarProps> = ({
       classNamePrefix: "react-select",
       menuPlacement: "auto" as const,
       menuPortalTarget: document.body,
-      isSearchable: true,
+      isSearchable: false, // ✅ DISABLED: Remove search to fix UI blocking
       isMulti: true,
       closeMenuOnSelect: false,
       closeMenuOnScroll: false,
       blurInputOnSelect: false,
+      openMenuOnClick: true,
+      openMenuOnFocus: false,
+      escapeClearsValue: false,
+      backspaceRemovesValue: false, // Disabled since search is off
+      hideSelectedOptions: false,
       onMenuOpen: () => {
         // Scroll multi-select containers to top when menu opens
         setTimeout(() => {

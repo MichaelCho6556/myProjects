@@ -6,7 +6,8 @@
       "Bash(sg:*)",
       "Bash(python:*)",
       "Bash(awk:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

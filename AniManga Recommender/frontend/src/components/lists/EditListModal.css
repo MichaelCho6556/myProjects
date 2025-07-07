@@ -91,11 +91,20 @@
   padding: 0.75rem 1rem;
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: var(--bg-overlay);
-  color: var(--text-primary);
+  background: var(--bg-overlay) !important; /* Ensure background override */
+  color: var(--text-primary) !important; /* Ensure text color override */
   font-size: 0.9rem;
   transition: all 0.2s ease;
   box-sizing: border-box;
+  font-weight: 500; /* Add font-weight for better readability */
+}
+
+/* Ensure placeholder text is readable */
+.form-input::placeholder,
+.form-textarea::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+  font-weight: 400;
 }
 
 .form-input:focus,
@@ -200,8 +209,12 @@
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Responsive Design */
@@ -209,23 +222,23 @@
   .edit-list-modal-overlay {
     padding: 0.5rem;
   }
-  
+
   .modal-header {
     padding: 1.25rem 1.5rem;
   }
-  
+
   .modal-title {
     font-size: 1.25rem;
   }
-  
+
   .modal-form {
     padding: 1.5rem;
   }
-  
+
   .modal-actions {
     flex-direction: column;
   }
-  
+
   .btn {
     width: 100%;
   }

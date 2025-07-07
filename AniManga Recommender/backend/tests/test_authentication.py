@@ -361,25 +361,35 @@ class TestProtectedRoutes:
     @pytest.mark.integration
     def test_protected_route_access_authorized(self, client):
         """Test protected endpoint access with valid token"""
-        # Mock valid token
-        valid_token = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        # Generate a real valid JWT token using the same secret and algorithm as app.py
+        import jwt
+        from datetime import datetime, timedelta, timezone
         
-        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify:
-            mock_verify.return_value = {
-                'sub': 'user_123',
-                'user_id': 'user_123',
-                'email': 'test@example.com',
-                'role': 'authenticated'
-            }
-            
-            # Test profile endpoint
-            response = client.get(
-                '/api/auth/profile',
-                headers={'Authorization': valid_token}
-            )
-            
-            # Should not get 401 Unauthorized
-            assert response.status_code != 401
+        # Use the same secret key as app.verify_token
+        secret_key = 'test-jwt-secret'  # Default secret from app.py
+        algorithm = 'HS256'
+        
+        # Create a valid payload with required fields
+        payload = {
+            'sub': 'user_123',
+            'user_id': 'user_123',
+            'email': 'test@example.com',
+            'role': 'authenticated',
+            'iat': datetime.now(tz=timezone.utc),
+            'exp': datetime.now(tz=timezone.utc) + timedelta(hours=1)
+        }
+        
+        # Generate real JWT token
+        valid_token = jwt.encode(payload, secret_key, algorithm=algorithm)
+        
+        # Test profile endpoint with real token verification
+        response = client.get(
+            '/api/auth/profile',
+            headers={'Authorization': f'Bearer {valid_token}'}
+        )
+        
+        # Should not get 401 Unauthorized
+        assert response.status_code != 401
     
     @pytest.mark.integration
     def test_protected_route_unauthorized(self, client):
