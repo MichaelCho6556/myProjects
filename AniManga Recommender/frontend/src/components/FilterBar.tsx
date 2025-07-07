@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import Select from "react-select";
 import { FilterBarProps, CustomSelectStyles } from "../types";
 
@@ -172,6 +172,15 @@ const FilterBar: React.FC<FilterBarProps> = ({
     handleResetFilters,
   } = handlers;
 
+  // State for search input values
+  const [inputValues, setInputValues] = useState({
+    genre: '',
+    theme: '',
+    demographic: '',
+    studio: '',
+    author: ''
+  });
+
   /**
    * Memoized custom styles for react-select components
    *
@@ -216,6 +225,15 @@ const FilterBar: React.FC<FilterBarProps> = ({
         margin: "0px",
         padding: "0px",
         fontSize: "0.95rem",
+        background: "transparent",
+        border: "none",
+        outline: "none",
+        minWidth: "2px",
+        width: "auto",
+        display: "inline-block",
+        boxSizing: "border-box",
+        opacity: 1,
+        pointerEvents: "auto",
       }),
       placeholder: (provided: any) => ({
         ...provided,
@@ -299,8 +317,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
       isDisabled: filtersLoading || loading,
       classNamePrefix: "react-select",
       menuPlacement: "auto" as const,
-      menuPortalTarget: document.body,
-      isSearchable: false, // ✅ DISABLED: Remove search to fix UI blocking
+      isSearchable: false,
       closeMenuOnScroll: false,
       openMenuOnClick: true,
       openMenuOnFocus: false,
@@ -312,58 +329,47 @@ const FilterBar: React.FC<FilterBarProps> = ({
   );
 
   /**
-   * Memoized common props for multi-select react-select components
-   *
-   * @performance
-   * - Memoized with React.useCallback to prevent recreation
-   * - Reduces prop drilling by centralizing common configurations
-   * - Dependencies array ensures updates when loading states change
+   * Create multi-select props with controlled input
    */
   const getMultiSelectProps = useCallback(
-    () => ({
+    (fieldName: keyof typeof inputValues) => ({
       styles: customSelectStyles,
       isDisabled: filtersLoading || loading,
       classNamePrefix: "react-select",
       menuPlacement: "auto" as const,
-      menuPortalTarget: document.body,
-      isSearchable: false, // ✅ DISABLED: Remove search to fix UI blocking
+      isSearchable: true,
       isMulti: true,
       closeMenuOnSelect: false,
       closeMenuOnScroll: false,
       blurInputOnSelect: false,
       openMenuOnClick: true,
       openMenuOnFocus: false,
-      escapeClearsValue: false,
-      backspaceRemovesValue: false, // Disabled since search is off
+      escapeClearsValue: true,
+      backspaceRemovesValue: true,
       hideSelectedOptions: false,
-      onMenuOpen: () => {
-        // Scroll multi-select containers to top when menu opens
-        setTimeout(() => {
-          const containers = document.querySelectorAll(".react-select__value-container--is-multi");
-          containers.forEach((container) => {
-            if (container.scrollTop > 0) {
-              container.scrollTo({ top: 0, behavior: "smooth" });
-            }
-          });
-        }, 100);
+      inputValue: inputValues[fieldName],
+      onInputChange: (inputValue: string, { action }: { action: string }) => {
+        if (action === 'input-change') {
+          setInputValues(prev => ({ ...prev, [fieldName]: inputValue }));
+        } else if (action === 'menu-close' || action === 'set-value' || action === 'input-blur') {
+          setInputValues(prev => ({ ...prev, [fieldName]: '' }));
+        }
       },
+      onMenuClose: () => {
+        setInputValues(prev => ({ ...prev, [fieldName]: '' }));
+      },
+      filterOption: (option: any, inputValue: string) => {
+        if (!inputValue) return true;
+        return option.label.toLowerCase().includes(inputValue.toLowerCase());
+      },
+      noOptionsMessage: ({ inputValue }: { inputValue: string }) => 
+        inputValue ? `No options match "${inputValue}"` : "No options available",
+      loadingMessage: () => "Loading options...",
+      isClearable: false,
     }),
-    [customSelectStyles, filtersLoading, loading]
+    [customSelectStyles, filtersLoading, loading, inputValues]
   );
 
-  /**
-   * Helper function to scroll multi-select containers to top
-   */
-  const scrollMultiSelectToTop = useCallback(() => {
-    setTimeout(() => {
-      const containers = document.querySelectorAll(".react-select__value-container--is-multi");
-      containers.forEach((container) => {
-        if (container.scrollTop > 0) {
-          container.scrollTo({ top: 0, behavior: "smooth" });
-        }
-      });
-    }, 50);
-  }, []);
 
   /**
    * Type-safe wrapper functions for react-select onChange handlers
@@ -374,41 +380,36 @@ const FilterBar: React.FC<FilterBarProps> = ({
   const handleGenreChangeWrapper = useCallback(
     (newValue: any) => {
       handleGenreChange(newValue as readonly any[] | null);
-      scrollMultiSelectToTop();
     },
-    [handleGenreChange, scrollMultiSelectToTop]
+    [handleGenreChange]
   );
 
   const handleThemeChangeWrapper = useCallback(
     (newValue: any) => {
       handleThemeChange(newValue as readonly any[] | null);
-      scrollMultiSelectToTop();
     },
-    [handleThemeChange, scrollMultiSelectToTop]
+    [handleThemeChange]
   );
 
   const handleDemographicChangeWrapper = useCallback(
     (newValue: any) => {
       handleDemographicChange(newValue as readonly any[] | null);
-      scrollMultiSelectToTop();
     },
-    [handleDemographicChange, scrollMultiSelectToTop]
+    [handleDemographicChange]
   );
 
   const handleStudioChangeWrapper = useCallback(
     (newValue: any) => {
       handleStudioChange(newValue as readonly any[] | null);
-      scrollMultiSelectToTop();
     },
-    [handleStudioChange, scrollMultiSelectToTop]
+    [handleStudioChange]
   );
 
   const handleAuthorChangeWrapper = useCallback(
     (newValue: any) => {
       handleAuthorChange(newValue as readonly any[] | null);
-      scrollMultiSelectToTop();
     },
-    [handleAuthorChange, scrollMultiSelectToTop]
+    [handleAuthorChange]
   );
 
   return (
@@ -449,7 +450,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <div className="filter-group">
         <label htmlFor="genreFilter">Genres:</label>
         <Select
-          {...getMultiSelectProps()}
+          {...getMultiSelectProps('genre')}
           id="genreFilter"
           name="genreFilter"
           options={genreOptions}
@@ -464,7 +465,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <div className="filter-group">
         <label htmlFor="themeFilter">Themes:</label>
         <Select
-          {...getMultiSelectProps()}
+          {...getMultiSelectProps('theme')}
           id="themeFilter"
           name="themeFilter"
           options={themeOptions}
@@ -479,7 +480,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <div className="filter-group">
         <label htmlFor="demographicFilter">Demographics:</label>
         <Select
-          {...getMultiSelectProps()}
+          {...getMultiSelectProps('demographic')}
           id="demographicFilter"
           options={demographicOptions}
           value={selectedDemographic}
@@ -493,7 +494,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <div className="filter-group">
         <label htmlFor="studioFilter">Studios:</label>
         <Select
-          {...getMultiSelectProps()}
+          {...getMultiSelectProps('studio')}
           id="studioFilter"
           options={studioOptions}
           value={selectedStudio}
@@ -507,7 +508,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <div className="filter-group">
         <label htmlFor="authorFilter">Authors:</label>
         <Select
-          {...getMultiSelectProps()}
+          {...getMultiSelectProps('author')}
           id="authorFilter"
           options={authorOptions}
           value={selectedAuthor}
