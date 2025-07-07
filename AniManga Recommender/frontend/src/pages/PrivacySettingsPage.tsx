@@ -10,8 +10,11 @@ interface PrivacySettings {
   profile_visibility: string;
   list_visibility: string;
   activity_visibility: string;
-  allow_contact: boolean;
-  show_online_status: boolean;
+  show_following: boolean;
+  show_followers: boolean;
+  show_statistics: boolean;
+  allow_friend_requests: boolean;
+  show_recently_watched: boolean;
 }
 
 const PrivacySettingsPage: React.FC = () => {
@@ -22,8 +25,11 @@ const PrivacySettingsPage: React.FC = () => {
     profile_visibility: "public",
     list_visibility: "public",
     activity_visibility: "public",
-    allow_contact: true,
-    show_online_status: true,
+    show_following: true,
+    show_followers: true,
+    show_statistics: true,
+    allow_friend_requests: true,
+    show_recently_watched: true,
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -49,8 +55,11 @@ const PrivacySettingsPage: React.FC = () => {
           profile_visibility: data.profile_visibility || "public",
           list_visibility: data.list_visibility || "public",
           activity_visibility: data.activity_visibility || "public",
-          allow_contact: data.allow_contact !== false,
-          show_online_status: data.show_online_status !== false,
+          show_following: data.show_following !== false,
+          show_followers: data.show_followers !== false,
+          show_statistics: data.show_statistics !== false,
+          allow_friend_requests: data.allow_friend_requests !== false,
+          show_recently_watched: data.show_recently_watched !== false,
         });
       }
     } catch (error) {
@@ -93,8 +102,11 @@ const PrivacySettingsPage: React.FC = () => {
       profile_visibility: "public",
       list_visibility: "public",
       activity_visibility: "public",
-      allow_contact: true,
-      show_online_status: true,
+      show_following: true,
+      show_followers: true,
+      show_statistics: true,
+      allow_friend_requests: true,
+      show_recently_watched: true,
     });
     setSaveMessage(null);
   };
@@ -152,7 +164,7 @@ const PrivacySettingsPage: React.FC = () => {
                 {[
                   { value: "public", label: "Public", description: "Anyone can view your profile" },
                   {
-                    value: "friends",
+                    value: "friends_only",
                     label: "Friends Only",
                     description: "Only your friends can see your profile",
                   },
@@ -200,7 +212,11 @@ const PrivacySettingsPage: React.FC = () => {
               <div className="options-grid">
                 {[
                   { value: "public", label: "Public", description: "Anyone can view your lists" },
-                  { value: "friends", label: "Friends Only", description: "Only friends can see your lists" },
+                  {
+                    value: "friends_only",
+                    label: "Friends Only",
+                    description: "Only friends can see your lists",
+                  },
                   { value: "private", label: "Private", description: "Only you can see your lists" },
                 ].map((option) => (
                   <div
@@ -244,7 +260,7 @@ const PrivacySettingsPage: React.FC = () => {
                 {[
                   { value: "public", label: "Public", description: "Activity visible to everyone" },
                   {
-                    value: "friends",
+                    value: "friends_only",
                     label: "Friends Only",
                     description: "Activity visible to friends only",
                   },
@@ -278,43 +294,79 @@ const PrivacySettingsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Contact & Status Settings */}
+            {/* Additional Privacy Settings */}
             <div className="settings-section">
               <div className="section-header">
                 <h3 className="section-title">
                   <svg className="section-icon" fill="currentColor" viewBox="0 0 16 16">
                     <path d="M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-5 6s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H1zM11 3.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5zm.5 2.5a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1h-4zm2 3a.5.5 0 0 0 0 1h2a.5.5 0 0 0 0-1h-2zm0 3a.5.5 0 0 0 0 1h2a.5.5 0 0 0 0-1h-2z" />
                   </svg>
-                  Contact & Status
+                  Additional Privacy Settings
                 </h3>
-                <p className="section-description">Manage communication and online status preferences</p>
+                <p className="section-description">Control what information is visible to other users</p>
               </div>
               <div className="options-grid">
                 <div
-                  className={`checkbox-card ${settings.allow_contact ? "checked" : ""}`}
-                  onClick={() => setSettings({ ...settings, allow_contact: !settings.allow_contact })}
+                  className={`checkbox-card ${settings.show_following ? "checked" : ""}`}
+                  onClick={() => setSettings({ ...settings, show_following: !settings.show_following })}
                 >
                   <div className="checkbox-content">
                     <div className="custom-checkbox">
                       <input
                         type="checkbox"
                         className="hidden-input"
-                        checked={settings.allow_contact}
+                        checked={settings.show_following}
                         onChange={() => {}}
                       />
                     </div>
                     <div className="option-details">
-                      <div className="checkbox-label">Allow Contact</div>
-                      <div className="checkbox-description">
-                        Let others send you messages and friend requests
-                      </div>
+                      <div className="checkbox-label">Show Following List</div>
+                      <div className="checkbox-description">Allow others to see who you're following</div>
                     </div>
                   </div>
                 </div>
                 <div
-                  className={`checkbox-card ${settings.show_online_status ? "checked" : ""}`}
+                  className={`checkbox-card ${settings.show_followers ? "checked" : ""}`}
+                  onClick={() => setSettings({ ...settings, show_followers: !settings.show_followers })}
+                >
+                  <div className="checkbox-content">
+                    <div className="custom-checkbox">
+                      <input
+                        type="checkbox"
+                        className="hidden-input"
+                        checked={settings.show_followers}
+                        onChange={() => {}}
+                      />
+                    </div>
+                    <div className="option-details">
+                      <div className="checkbox-label">Show Followers List</div>
+                      <div className="checkbox-description">Allow others to see your followers</div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className={`checkbox-card ${settings.show_statistics ? "checked" : ""}`}
+                  onClick={() => setSettings({ ...settings, show_statistics: !settings.show_statistics })}
+                >
+                  <div className="checkbox-content">
+                    <div className="custom-checkbox">
+                      <input
+                        type="checkbox"
+                        className="hidden-input"
+                        checked={settings.show_statistics}
+                        onChange={() => {}}
+                      />
+                    </div>
+                    <div className="option-details">
+                      <div className="checkbox-label">Show Statistics</div>
+                      <div className="checkbox-description">Display your viewing statistics to others</div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className={`checkbox-card ${settings.allow_friend_requests ? "checked" : ""}`}
                   onClick={() =>
-                    setSettings({ ...settings, show_online_status: !settings.show_online_status })
+                    setSettings({ ...settings, allow_friend_requests: !settings.allow_friend_requests })
                   }
                 >
                   <div className="checkbox-content">
@@ -322,13 +374,34 @@ const PrivacySettingsPage: React.FC = () => {
                       <input
                         type="checkbox"
                         className="hidden-input"
-                        checked={settings.show_online_status}
+                        checked={settings.allow_friend_requests}
                         onChange={() => {}}
                       />
                     </div>
                     <div className="option-details">
-                      <div className="checkbox-label">Show Online Status</div>
-                      <div className="checkbox-description">Display when you're online to other users</div>
+                      <div className="checkbox-label">Allow Friend Requests</div>
+                      <div className="checkbox-description">Let others send you friend requests</div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className={`checkbox-card ${settings.show_recently_watched ? "checked" : ""}`}
+                  onClick={() =>
+                    setSettings({ ...settings, show_recently_watched: !settings.show_recently_watched })
+                  }
+                >
+                  <div className="checkbox-content">
+                    <div className="custom-checkbox">
+                      <input
+                        type="checkbox"
+                        className="hidden-input"
+                        checked={settings.show_recently_watched}
+                        onChange={() => {}}
+                      />
+                    </div>
+                    <div className="option-details">
+                      <div className="checkbox-label">Show Recently Watched</div>
+                      <div className="checkbox-description">Display your recently watched items</div>
                     </div>
                   </div>
                 </div>

@@ -131,34 +131,37 @@ class LoadTester:
     """Utility class for load testing"""
     
     @staticmethod
-    def simulate_concurrent_requests(client, endpoint: str, method: str = 'GET', 
+    def simulate_concurrent_requests(endpoint: str, method: str = 'GET', 
                                    data: dict = None, headers: dict = None, 
                                    concurrent_users: int = 10, 
                                    requests_per_user: int = 5) -> List[Dict[str, Any]]:
-        """Simulate concurrent requests to an endpoint"""
+        """Simulate concurrent requests to an endpoint using isolated test clients per thread
+        (Avoids Flask context conflicts by ensuring each thread has its own client context)"""
         results = []
-        
+        from app import app as flask_app
+
         def make_request():
             start_time = time.time()
             try:
-                if method.upper() == 'GET':
-                    response = client.get(endpoint, headers=headers)
-                elif method.upper() == 'POST':
-                    response = client.post(endpoint, json=data, headers=headers)
-                elif method.upper() == 'PUT':
-                    response = client.put(endpoint, json=data, headers=headers)
-                elif method.upper() == 'DELETE':
-                    response = client.delete(endpoint, headers=headers)
-                else:
-                    raise ValueError(f"Unsupported method: {method}")
-                    
-                end_time = time.time()
-                return {
-                    'status_code': response.status_code,
-                    'response_time': end_time - start_time,
-                    'success': 200 <= response.status_code < 300,
-                    'data': response.get_json() if hasattr(response, 'get_json') else None
-                }
+                with flask_app.test_client() as thread_client:
+                    if method.upper() == 'GET':
+                        response = thread_client.get(endpoint, headers=headers)
+                    elif method.upper() == 'POST':
+                        response = thread_client.post(endpoint, json=data, headers=headers)
+                    elif method.upper() == 'PUT':
+                        response = thread_client.put(endpoint, json=data, headers=headers)
+                    elif method.upper() == 'DELETE':
+                        response = thread_client.delete(endpoint, headers=headers)
+                    else:
+                        raise ValueError(f"Unsupported method: {method}")
+
+                    end_time = time.time()
+                    return {
+                        'status_code': response.status_code,
+                        'response_time': end_time - start_time,
+                        'success': 200 <= response.status_code < 300,
+                        'data': response.get_json() if hasattr(response, 'get_json') else None
+                    }
             except Exception as e:
                 end_time = time.time()
                 return {
@@ -190,10 +193,7 @@ def app():
         yield flask_app
 
 
-@pytest.fixture
-def client(app):
-    """Create test client"""
-    return app.test_client()
+# Removed client fixture - using the one from conftest.py with proper monkeypatch
 
 
 @pytest.fixture
@@ -477,7 +477,6 @@ class TestPerformanceD1:
         # Sustained load test
         for i in range(5):  # 5 rounds of load
             results = LoadTester.simulate_concurrent_requests(
-                client=client,
                 endpoint='/api/items/search?q=test',
                 method='GET',
                 headers=auth_headers,

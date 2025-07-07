@@ -85,10 +85,11 @@
   color: #1e40af !important;
   font-size: 1rem;
   letter-spacing: 0.025em;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
-  background-color: rgba(255, 255, 255, 0.9);
-  padding: 2px 6px;
-  border-radius: 4px;
+  text-shadow: none; /* Remove problematic text shadow */
+  background-color: rgba(255, 255, 255, 0.95); /* More opaque background for better contrast */
+  padding: 4px 8px; /* Increased padding for better readability */
+  border-radius: 6px;
+  border: 1px solid rgba(30, 64, 175, 0.2); /* Add border for definition */
 }
 
 .form-group label[for="display-name"],
@@ -111,20 +112,23 @@
 .form-group input {
   width: 100%;
   padding: 1rem;
-  border: 2px solid #d1d5db;
+  border: 3px solid #d1d5db;
   border-radius: 12px;
-  font-size: 1rem;
+  font-size: 1.1rem;
   box-sizing: border-box;
   transition: all 0.3s ease;
   background-color: #ffffff !important;
   color: #111827 !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
+  text-shadow: none;
+  -webkit-text-stroke: 0.2px #000000;
 }
 
 .form-group input::placeholder {
-  color: #4b5563 !important;
-  font-weight: 500;
+  color: #374151 !important; /* Darker, more readable placeholder text */
+  font-weight: 600;
   opacity: 1;
+  font-size: 1rem;
 }
 
 .form-group input:focus {
@@ -145,7 +149,8 @@
 .form-group input[type="text"] {
   background: #ffffff !important;
   color: #111827 !important;
-  font-weight: 700; /* Extra bold for display name */
+  font-weight: 800; /* Extra bold for display name */
+  text-shadow: 0.5px 0.5px 0 rgba(0, 0, 0, 0.1);
 }
 
 .form-group input[type="text"]:focus {
@@ -163,7 +168,8 @@
 .form-group input[type="email"] {
   background: #ffffff !important;
   color: #111827 !important;
-  font-weight: 600;
+  font-weight: 700;
+  text-shadow: 0.5px 0.5px 0 rgba(0, 0, 0, 0.1);
 }
 
 .form-group input[type="email"]:focus {
@@ -174,8 +180,9 @@
 .form-group input[type="password"] {
   background: #ffffff !important;
   color: #111827 !important;
-  font-weight: 600;
+  font-weight: 700;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
+  text-shadow: 0.5px 0.5px 0 rgba(0, 0, 0, 0.1);
 }
 
 .form-group input[type="password"]:focus {
@@ -354,4 +361,44 @@
   .form-group input {
     min-height: 48px;
   }
+}
+
+/* ✅ MISSING: Password validation styling - completely absent! */
+.password-requirements {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background-color: rgba(249, 250, 251, 0.95);
+  border-radius: 8px;
+  border: 1px solid rgba(209, 213, 219, 0.8);
+}
+
+.password-errors {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.password-error {
+  color: #dc2626 !important; /* Bright red for visibility */
+  font-weight: 600 !important;
+  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+  padding: 0.3rem 0;
+  text-shadow: none !important; /* Remove any text shadows */
+  background-color: rgba(254, 242, 242, 0.8); /* Light red background */
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  border-left: 3px solid #dc2626;
+}
+
+.password-success {
+  color: #16a34a !important; /* Bright green for visibility */
+  font-weight: 600 !important;
+  font-size: 0.9rem;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  text-shadow: none !important; /* Remove any text shadows */
+  background-color: rgba(240, 253, 244, 0.8); /* Light green background */
+  border-radius: 4px;
+  border-left: 3px solid #16a34a;
 }

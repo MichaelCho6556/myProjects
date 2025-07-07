@@ -636,10 +636,14 @@ export const parseError = (error: ApiError, context?: string): ParsedError => {
 /**
  * Enhanced logging with retry information
  */
-export const logError = (_parsedError: ParsedError, _componentName: string = "Unknown"): void => {
-  // Error information is tracked internally without console logging
-  // For production applications, integrate with error tracking services like Sentry
-  // This prevents sensitive error details from being exposed in browser console
+export const logError = (parsedError: ParsedError, componentName: string = "Unknown"): void => {
+  const logMessage = `[${componentName}] ${parsedError.technicalDetails}`;
+  
+  if (parsedError.statusCode && parsedError.statusCode >= 400 && parsedError.statusCode < 500) {
+    console.warn(logMessage, parsedError.originalError);
+  } else {
+    console.error(logMessage, parsedError.originalError);
+  }
 };
 
 /**

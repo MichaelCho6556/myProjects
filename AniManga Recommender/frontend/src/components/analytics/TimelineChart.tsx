@@ -31,7 +31,17 @@ export const TimelineChart: React.FC<TimelineChartProps> = ({
   error,
   height = 350,
 }) => {
-  const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const isDark = (() => {
+    try {
+      return typeof window !== 'undefined' && 
+             window.matchMedia && 
+             typeof window.matchMedia === 'function'
+        ? window.matchMedia("(prefers-color-scheme: dark)")?.matches || false
+        : false;
+    } catch {
+      return false;
+    }
+  })();
   const theme = getChartTheme(isDark);
 
   // Merge primary and secondary data

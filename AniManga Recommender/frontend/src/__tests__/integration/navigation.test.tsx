@@ -245,7 +245,7 @@ describe("Navigation Flow Tests", () => {
         () => {
           expect(screen.getByRole("search")).toBeInTheDocument();
           // Check for Navbar search functionality
-          expect(screen.getByPlaceholderText(/search titles/i)).toBeInTheDocument();
+          expect(screen.getByPlaceholderText(/search anime, manga, or @users/i)).toBeInTheDocument();
         },
         { timeout: 3000 }
       );
@@ -287,7 +287,7 @@ describe("Navigation Flow Tests", () => {
         () => {
           expect(screen.getByRole("search")).toBeInTheDocument();
           // Check for Navbar search functionality
-          expect(screen.getByPlaceholderText(/search titles/i)).toBeInTheDocument();
+          expect(screen.getByPlaceholderText(/search anime, manga, or @users/i)).toBeInTheDocument();
         },
         { timeout: 3000 }
       );
@@ -356,7 +356,7 @@ describe("Navigation Flow Tests", () => {
       await waitFor(() => {
         expect(screen.getByRole("search")).toBeInTheDocument();
         // Check for Navbar search functionality
-        expect(screen.getByPlaceholderText(/search titles/i)).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(/search anime, manga, or @users/i)).toBeInTheDocument();
       });
     });
   });
