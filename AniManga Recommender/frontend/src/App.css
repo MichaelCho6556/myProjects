@@ -1607,23 +1607,23 @@ input:focus-visible {
   font-size: 1.2rem;
 }
 
-/* ✅ ENHANCED: Much larger, more professional dropdown menus */
+/* Clean dropdown menu styling */
 .filter-bar .react-select__menu {
-  z-index: 99999 !important;
-  background: var(--bg-dark) !important;
-  border: 2px solid var(--border-color) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.2) !important;
-  margin-top: 8px !important;
-  min-width: 280px !important; /* ✅ FIXED: Larger minimum width */
-  max-height: 400px !important; /* ✅ FIXED: Reasonable dropdown height */
-  overflow-y: auto !important;
-  position: absolute !important; /* ✅ CRITICAL: Return to absolute positioning */
+  z-index: 9999;
+  background: var(--bg-dark);
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.2);
+  margin-top: 8px;
+  min-width: 280px;
+  max-height: 400px;
+  overflow-y: auto;
+  position: absolute;
 }
 
-/* ✅ ENHANCED: Menu portal with maximum z-index */
+/* Menu portal z-index */
 .filter-bar .react-select__menu-portal {
-  z-index: 99999 !important;
+  z-index: 10000;
 }
 
 /* ✅ ENHANCED: Much larger, more professional dropdown options */
@@ -1710,17 +1710,17 @@ body {
 
 /* ✅ ENHANCED: Specific portal styling for filter dropdowns */
 div[class*="react-select__menu-portal"] {
-  z-index: 99999 !important;
+  z-index: 10000;
 }
 
-/* ✅ CRITICAL: Global override for react-select menus in filter context */
+/* Global menu positioning */
 .filter-bar .react-select__menu,
 .filter-bar .react-select__menu-portal > .react-select__menu {
-  position: fixed !important; /* ✅ CRITICAL: Fixed positioning prevents movement */
-  z-index: 99999 !important;
-  min-width: 250px !important; /* Professional minimum width */
-  max-width: 400px !important; /* Reasonable maximum width */
-  width: auto !important; /* Auto width for content */
+  position: absolute;
+  z-index: 9999;
+  min-width: 250px;
+  max-width: 400px;
+  width: auto;
 }
 
 /* ✅ ENHANCED: Professional menu notices */
@@ -2362,12 +2362,26 @@ label {
 .filter-bar .react-select__value-container {
   padding: 0 16px !important;
   height: 41px !important; /* Account for border */
-  display: flex !important; /* Back to flex since no search overlay needed */
+  display: flex !important;
   align-items: center !important;
   flex-wrap: nowrap !important;
   overflow: hidden !important;
   box-sizing: border-box !important;
   cursor: pointer !important; /* Ensure clickable */
+}
+
+/* ✅ MULTI-SELECT: Value Container for Search */
+.filter-bar .react-select__value-container--is-multi {
+  padding: 6px 16px !important;
+  min-height: 41px !important;
+  height: auto !important;
+  max-height: 120px !important;
+  overflow-y: auto !important;
+  flex-wrap: wrap !important;
+  align-content: flex-start !important;
+  gap: 2px !important;
+  align-items: flex-start !important;
+  cursor: text !important; /* Text cursor for search */
 }
 
 /* ✅ PROFESSIONAL: Placeholder and Single Value - Left Aligned */
@@ -2389,33 +2403,85 @@ label {
   color: var(--text-muted) !important;
 }
 
-/* ✅ CLEAN: Input containers hidden since search is disabled */
+/* ✅ CLEAN REACT-SELECT SEARCH IMPLEMENTATION */
+
+/* COMPLETELY INVISIBLE SEARCH INPUT - NO LAYOUT IMPACT */
 .filter-bar .react-select__input-container {
-  display: none !important; /* Hide since search is disabled */
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
+.filter-bar .react-select__control:not(.react-select__control--is-multi) .react-select__input-container {
+  display: none; /* Hide search input for single-select */
+}
+
+.filter-bar .react-select__control--is-multi .react-select__input-container {
+  display: block;
+}
+
+/* Search input - completely hidden, only functional */
 .filter-bar .react-select__input {
-  display: none !important; /* Hide since search is disabled */
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: transparent;
+  font-size: 0.95rem;
+  outline: none;
+  opacity: 0;
 }
 
-/* ✅ PROFESSIONAL: Indicators Container */
+.filter-bar .react-select__control--is-multi .react-select__input {
+  display: block;
+  cursor: default;
+}
+
+.filter-bar .react-select__control:not(.react-select__control--is-multi) .react-select__input {
+  display: none; /* Hide search input for single-select */
+}
+
+/* Value container - normal layout, no special positioning */
+.filter-bar .react-select__value-container--is-multi {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  min-height: 36px;
+}
+
+/* Selected values - normal styling */
+.filter-bar .react-select__multi-value {
+  margin: 2px;
+}
+
+/* Indicators container */
 .filter-bar .react-select__indicators {
-  height: 41px !important;
-  display: flex !important;
-  align-items: center !important;
-  padding: 0 8px !important;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
 }
 
 .filter-bar .react-select__dropdown-indicator {
-  color: var(--text-muted) !important;
-  padding: 0 4px !important;
-  transition: color 0.2s ease !important;
+  color: var(--text-muted);
+  padding: 0 4px;
+  transition: color 0.2s ease;
 }
 
 .filter-bar .react-select__dropdown-indicator:hover {
-  color: var(--text-primary) !important;
+  color: var(--text-primary);
 }
 
 .filter-bar .react-select__indicator-separator {
-  display: none !important; /* ✅ Clean look without separator */
+  display: none;
 }
