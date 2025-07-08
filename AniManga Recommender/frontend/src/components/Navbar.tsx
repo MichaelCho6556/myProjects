@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { AuthModal } from "./Auth/AuthModal";
 import { useRealTimeNotifications } from "../hooks/useRealTimeNotifications";
-import { csrfUtils, sanitizeInput, sanitizeSearchInput } from "../utils/security"; // ✅ NEW: Import security utilities
+import { sanitizeInput } from "../utils/security";
 import EnhancedSearch from "./EnhancedSearch";
 import "./Navbar.css";
 

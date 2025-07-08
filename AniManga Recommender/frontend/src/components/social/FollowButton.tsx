@@ -2,10 +2,8 @@
 // ABOUTME: Handles follow relationships between users with optimistic updates and error handling
 
 import React, { useState } from 'react';
-import { useAuthenticatedApi } from '../../hooks/useAuthenticatedApi';
 
 interface FollowButtonProps {
-  username: string;
   isFollowing: boolean;
   onToggleFollow: () => Promise<void>;
   disabled?: boolean;
@@ -13,7 +11,6 @@ interface FollowButtonProps {
 }
 
 export const FollowButton: React.FC<FollowButtonProps> = ({
-  username,
   isFollowing,
   onToggleFollow,
   disabled = false,
@@ -22,7 +19,6 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [optimisticIsFollowing, setOptimisticIsFollowing] = useState(isFollowing);
   const [error, setError] = useState<string | null>(null);
-  const api = useAuthenticatedApi();
 
   // Update optimistic state when prop changes
   React.useEffect(() => {
@@ -41,22 +37,11 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
     setIsLoading(true);
 
     try {
-      // Call the backend API directly for immediate feedback
-      const response = await api.post(`/api/auth/follow/${username}`);
-      const result = response.data;
-      
-      if (result.success) {
-        // Update with the actual result from backend
-        setOptimisticIsFollowing(result.is_following);
-      } else {
-        // Revert if the backend operation failed
-        setOptimisticIsFollowing(previousState);
-        setError(result.error || 'Failed to update follow status');
-        return;
-      }
-      
-      // Call parent's onToggleFollow for any additional state updates
+      // Call parent's onToggleFollow which handles the API call
       await onToggleFollow();
+      
+      // The parent will update the isFollowing prop, which will update our optimistic state
+      // No need to make a separate API call here
     } catch (error) {
       // Revert optimistic update on failure
       setOptimisticIsFollowing(previousState);
@@ -64,9 +49,6 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
       const errorMessage = error instanceof Error ? error.message : 'Failed to update follow status';
       setError(errorMessage);
       console.error('Failed to toggle follow:', error);
-      
-      // Show error notification (you could integrate with a toast system here)
-      // For now, just console.error
     } finally {
       setIsLoading(false);
     }

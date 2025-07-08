@@ -249,26 +249,6 @@ except Exception as e:
     supabase_client = None
     auth_client = None
 
-# Initialize clients
-try:
-    supabase_client = SupabaseClient()
-    
-    # Initialize auth client with required parameters
-    base_url = (os.getenv('SUPABASE_URL') or '').strip().rstrip('/')
-    api_key = (os.getenv('SUPABASE_KEY') or '').strip()
-    service_key = (os.getenv('SUPABASE_SERVICE_KEY') or '').strip()
-    
-    if base_url and api_key and service_key:
-        auth_client = SupabaseAuthClient(base_url, api_key, service_key)
-        print("✅ Supabase clients initialized successfully")
-    else:
-        print("[WARNING] Auth client not initialized: missing environment variables")
-        auth_client = None
-except Exception as e:
-    print(f"[ERROR] Failed to initialize Supabase clients: {e}")
-    supabase_client = None
-    auth_client = None
-
 # Simple in-memory cache for media types
 _media_type_cache: Dict[str, Any] = {}
 
@@ -399,8 +379,11 @@ def load_data_and_tfidf_from_supabase() -> None:
     try:
         print("🚀 Starting data load from Supabase...")
         
-        # Initialize Supabase client
-        supabase_client = SupabaseClient()
+        # Use global Supabase client
+        global supabase_client
+        if supabase_client is None:
+            print("⚠️ Supabase client not initialized, creating new instance...")
+            supabase_client = SupabaseClient()
         
         # Get data as DataFrame from Supabase
         print("📊 Loading items from Supabase...")
@@ -5166,10 +5149,10 @@ def get_public_user_profile(username):
                 user_metadata = user_info.get('user_metadata', {})
                 existing_username = user_metadata.get('username')
                 
-                # Check if the requested username matches the user's metadata username or email prefix
+                # Check if the requested username matches the user's metadata username or email prefix (case-insensitive)
                 is_own_profile = (
-                    (existing_username and username == existing_username) or
-                    (user_email and username == user_email.split('@')[0])
+                    (existing_username and username.lower() == existing_username.lower()) or
+                    (user_email and username.lower() == user_email.split('@')[0].lower())
                 )
                 
                 if is_own_profile:
@@ -5183,12 +5166,14 @@ def get_public_user_profile(username):
                     
                     if created_profile:
                         print(f"Profile created successfully for {username}")
-                        # Fetch the complete profile data after creation
+                        # Fetch the complete profile data after creation with enhanced logging
+                        print(f"Fetching complete profile data for newly created user {username}")
                         profile = auth_client.get_user_profile_by_username(username, viewer_id)
                         if profile:
+                            print(f"Successfully retrieved complete profile for {username}")
                             return jsonify(profile)
                         else:
-                            print(f"Failed to fetch created profile for {username}")
+                            print(f"CRITICAL: Failed to fetch created profile for {username} - this should not happen with the case-insensitive fix")
                     else:
                         # Profile creation failed - might already exist, try to fetch it
                         print(f"Profile creation failed for {username}, attempting to fetch existing profile")
@@ -5246,6 +5231,11 @@ def get_public_user_stats(username):
         500: Server Error - Database error
     """
     try:
+        global supabase_client
+        print(f"Debug: supabase_client type in get_public_user_stats: {type(supabase_client)}")
+        print(f"Debug: supabase_client has get_user_stats: {hasattr(supabase_client, 'get_user_stats') if supabase_client else 'None'}")
+        if supabase_client:
+            print(f"Debug: supabase_client dir: {[attr for attr in dir(supabase_client) if 'get_user' in attr]}")
         # Get viewer ID from auth if available
         viewer_id = None
         auth_header = request.headers.get('Authorization')
@@ -5262,15 +5252,200 @@ def get_public_user_stats(username):
             return jsonify({'error': 'User not found or profile is private'}), 404
             
         user_id = profile['id']
-        stats = supabase_client.get_user_stats(user_id, viewer_id)
         
-        if stats:
-            return jsonify(stats)
-        else:
-            return jsonify({'error': 'Statistics not available'}), 404
+        # Additional safety check
+        if supabase_client is None or not hasattr(supabase_client, 'get_user_stats'):
+            print("Error: supabase_client is None or missing get_user_stats method")
+            print("Attempting to reinitialize supabase_client...")
+            try:
+                # Force module reload to ensure we have the latest class definition
+                import importlib
+                import supabase_client as sc_module
+                importlib.reload(sc_module)
+                supabase_client = sc_module.SupabaseClient()
+                print("✅ SupabaseClient reinitialized successfully")
+                if not hasattr(supabase_client, 'get_user_stats'):
+                    print("❌ get_user_stats method still not found after reinitialization")
+                    print(f"Available methods: {[method for method in dir(supabase_client) if not method.startswith('_')]}")
+                    return jsonify({'error': 'Database service temporarily unavailable'}), 503
+            except Exception as reinit_error:
+                print(f"❌ Failed to reinitialize SupabaseClient: {reinit_error}")
+                return jsonify({'error': 'Database service temporarily unavailable'}), 503
+            
+        # Try to call get_user_stats with fallback error handling
+        try:
+            stats = supabase_client.get_user_stats(user_id, viewer_id)
+            
+            # If stats is None due to privacy settings, return empty stats instead of 404
+            if stats is None:
+                print(f"Stats privacy restricted for user {user_id}, returning empty stats")
+                stats = {
+                    'user_id': user_id,
+                    'total_anime_watched': 0,
+                    'total_manga_read': 0,
+                    'total_hours_watched': 0,
+                    'total_chapters_read': 0,
+                    'average_score': 0,
+                    'completion_rate': 0,
+                    'current_streak_days': 0,
+                    'longest_streak_days': 0,
+                    'favorite_genres': [],
+                    'status_counts': {
+                        'watching': 0,
+                        'completed': 0,
+                        'plan_to_watch': 0,
+                        'dropped': 0,
+                        'on_hold': 0,
+                    },
+                    'updated_at': '',
+                    'private': True  # Indicate that stats are private
+                }
+                
+        except AttributeError as attr_error:
+            print(f"AttributeError calling get_user_stats: {attr_error}")
+            print("Method not found, using fallback stats...")
+            # Return empty stats instead of failing
+            stats = {
+                'user_id': user_id,
+                'total_anime_watched': 0,
+                'total_manga_read': 0,
+                'total_hours_watched': 0,
+                'total_chapters_read': 0,
+                'average_score': 0,
+                'completion_rate': 0,
+                'current_streak_days': 0,
+                'longest_streak_days': 0,
+                'favorite_genres': [],
+                'status_counts': {
+                    'watching': 0,
+                    'completed': 0,
+                    'plan_to_watch': 0,
+                    'dropped': 0,
+                    'on_hold': 0,
+                },
+                'updated_at': ''
+            }
+        except Exception as e:
+            print(f"Error calling get_user_stats: {e}")
+            # Return empty stats instead of failing
+            stats = {
+                'user_id': user_id,
+                'total_anime_watched': 0,
+                'total_manga_read': 0,
+                'total_hours_watched': 0,
+                'total_chapters_read': 0,
+                'average_score': 0,
+                'completion_rate': 0,
+                'current_streak_days': 0,
+                'longest_streak_days': 0,
+                'favorite_genres': [],
+                'status_counts': {
+                    'watching': 0,
+                    'completed': 0,
+                    'plan_to_watch': 0,
+                    'dropped': 0,
+                    'on_hold': 0,
+                },
+                'updated_at': ''
+            }
+        
+        # Always return stats, never 404
+        return jsonify(stats)
             
     except Exception as e:
         print(f"Error getting user stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<username>/lists', methods=['GET'])
+@require_privacy_check(content_type='profile')
+def get_public_user_lists(username):
+    """
+    Get user's public custom lists by username.
+    
+    Path Parameters:
+        username (str): Username to get lists for
+        
+    Returns:
+        JSON Response containing user's public lists
+        
+    HTTP Status Codes:
+        200: Success - Lists retrieved
+        404: Not Found - User not found or lists private
+        500: Server Error - Database error
+    """
+    try:
+        # Get viewer ID from auth if available
+        viewer_id = None
+        auth_header = request.headers.get('Authorization')
+        if auth_header:
+            try:
+                user_info = auth_client.verify_jwt_token(auth_header)
+                viewer_id = user_info.get('user_id') or user_info.get('sub')
+            except:
+                pass
+        
+        # First get user ID from username
+        profile = auth_client.get_user_profile_by_username(username, viewer_id)
+        if not profile:
+            return jsonify({'error': 'User not found or profile is private'}), 404
+            
+        user_id = profile['id']
+        
+        # Get user's public custom lists
+        lists_response = requests.get(
+            f"{auth_client.base_url}/rest/v1/custom_lists",
+            headers=auth_client.headers,
+            params={
+                'user_id': f'eq.{user_id}',
+                'is_public': 'eq.true',
+                'select': 'id,title,description,created_at,updated_at,is_public,is_collaborative',
+                'order': 'updated_at.desc'
+            }
+        )
+        
+        if lists_response.status_code != 200:
+            print(f"Error fetching user lists: {lists_response.status_code}")
+            return jsonify({'lists': []})
+            
+        lists_data = lists_response.json()
+        
+        # Get item counts for each list
+        enriched_lists = []
+        for list_item in lists_data:
+            # Get count of items in this list
+            count_response = requests.get(
+                f"{auth_client.base_url}/rest/v1/custom_list_items",
+                headers=auth_client.headers,
+                params={
+                    'list_id': f'eq.{list_item["id"]}',
+                    'select': 'id',
+                    'count': 'exact'
+                }
+            )
+            
+            item_count = 0
+            if count_response.status_code == 200:
+                # Supabase returns count in content-range header
+                content_range = count_response.headers.get('content-range', '')
+                if '/' in content_range:
+                    item_count = int(content_range.split('/')[-1])
+            
+            enriched_lists.append({
+                'id': list_item['id'],
+                'title': list_item['title'],
+                'description': list_item.get('description', ''),
+                'itemCount': item_count,
+                'isPublic': list_item['is_public'],
+                'isCollaborative': list_item.get('is_collaborative', False),
+                'createdAt': list_item['created_at'],
+                'updatedAt': list_item['updated_at'],
+                'url': f'/lists/{list_item["id"]}'
+            })
+        
+        return jsonify({'lists': enriched_lists})
+            
+    except Exception as e:
+        print(f"Error getting user lists: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/follow/<username>', methods=['POST'])

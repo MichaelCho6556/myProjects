@@ -2,12 +2,15 @@
 // ABOUTME: Provides centralized state management for all user profile related operations
 
 import { useState, useEffect, useCallback } from "react";
-import { UserProfile, UserStats, PrivacySettings } from "../types/social";
+import { UserProfile, UserStats, PrivacySettings, PublicList } from "../types/social";
 import { useAuthenticatedApi } from "./useAuthenticatedApi";
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 export function useUserProfile(username: string) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
+  const [publicLists, setPublicLists] = useState<PublicList[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const api = useAuthenticatedApi();
@@ -19,8 +22,28 @@ export function useUserProfile(username: string) {
     setError(null);
 
     try {
-      // Fetch profile data - the API returns the profile data directly
-      const rawProfile = await api.get(`/api/users/${username}/profile`);
+      // Check if user is authenticated to include auth headers for profile auto-creation
+      const headers: Record<string, string> = {};
+      
+      try {
+        const { data: { session } } = await import('../lib/supabase').then(m => m.supabase.auth.getSession());
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+      } catch (authError) {
+        console.log('No auth session found, continuing with public request');
+      }
+
+      // Fetch profile data using public API (but with auth if available for auto-creation)
+      const profileResponse = await fetch(`${API_BASE_URL}/api/users/${username}/profile`, {
+        headers
+      });
+      if (!profileResponse.ok) {
+        throw new Error(`HTTP ${profileResponse.status}`);
+      }
+      const rawProfile = await profileResponse.json();
+
+      console.log('Raw profile response:', rawProfile);
 
       // Transform backend response to frontend format
       const transformedProfile: UserProfile = {
@@ -41,39 +64,138 @@ export function useUserProfile(username: string) {
 
       setProfile(transformedProfile);
 
-      // Fetch stats data if available
+      // Fetch stats data if available using public API (with auth if available)
       try {
-        const statsResponse = await api.get(`/api/users/${username}/stats`);
-        const rawStats = statsResponse.data;
+        const statsResponse = await fetch(`${API_BASE_URL}/api/users/${username}/stats`, {
+          headers
+        });
+        
+        if (statsResponse.ok) {
+          const rawStats = await statsResponse.json();
+          console.log('Raw stats response:', rawStats);
+          console.log('Favorite genres from API:', rawStats.favorite_genres);
+          console.log('Completion rate from API:', rawStats.completion_rate);
 
-        if (rawStats) {
-          const transformedStats: UserStats = {
-            totalAnime:
-              (rawStats.total_anime_watched || 0) +
-              (rawStats.watching || 0) +
-              (rawStats.on_hold || 0) +
-              (rawStats.dropped || 0) +
-              (rawStats.plan_to_watch || 0),
-            completedAnime: rawStats.total_anime_watched || 0,
-            totalManga:
-              (rawStats.total_manga_read || 0) + (rawStats.reading || 0) + (rawStats.plan_to_read || 0),
-            completedManga: rawStats.total_manga_read || 0,
-            totalHoursWatched: rawStats.total_hours_watched || 0,
-            totalChaptersRead: rawStats.total_chapters_read || 0,
-            favoriteGenres: rawStats.favorite_genres || [],
-            averageRating: rawStats.average_score || 0,
-            completionRate: rawStats.completion_rate || 0,
-            currentStreak: rawStats.current_streak_days || 0,
-            longestStreak: rawStats.longest_streak_days || 0,
-          };
-
-          setStats(transformedStats);
+          if (rawStats && typeof rawStats === 'object') {
+            // Ensure favorite_genres is always an array
+            const favoriteGenres = Array.isArray(rawStats.favorite_genres) 
+              ? rawStats.favorite_genres 
+              : [];
+            
+            const transformedStats: UserStats = {
+              totalAnime:
+                (rawStats.total_anime_watched || 0) +
+                (rawStats.status_counts?.watching || 0) +
+                (rawStats.status_counts?.on_hold || 0) +
+                (rawStats.status_counts?.dropped || 0) +
+                (rawStats.status_counts?.plan_to_watch || 0),
+              completedAnime: rawStats.total_anime_watched || rawStats.status_counts?.completed || 0,
+              totalManga:
+                (rawStats.total_manga_read || 0) + 
+                (rawStats.status_counts?.reading || 0) + 
+                (rawStats.status_counts?.plan_to_read || 0),
+              completedManga: rawStats.total_manga_read || 0,
+              totalHoursWatched: rawStats.total_hours_watched || 0,
+              totalChaptersRead: rawStats.total_chapters_read || 0,
+              favoriteGenres: favoriteGenres,
+              averageRating: rawStats.average_score || 0,
+              completionRate: rawStats.completion_rate || 0,
+              currentStreak: rawStats.current_streak_days || 0,
+              longestStreak: rawStats.longest_streak_days || 0,
+            };
+            
+            console.log('Transformed stats favorite genres:', transformedStats.favoriteGenres);
+            setStats(transformedStats);
+          } else {
+            // Set default empty stats if no data returned
+            setStats({
+              totalAnime: 0,
+              completedAnime: 0,
+              totalManga: 0,
+              completedManga: 0,
+              totalHoursWatched: 0,
+              totalChaptersRead: 0,
+              favoriteGenres: [],
+              averageRating: 0,
+              completionRate: 0,
+              currentStreak: 0,
+              longestStreak: 0,
+            });
+          }
+        } else if (statsResponse.status === 404) {
+          // User has no stats yet or stats are private - set default empty stats
+          console.log('No stats available for user (404), setting defaults');
+          setStats({
+            totalAnime: 0,
+            completedAnime: 0,
+            totalManga: 0,
+            completedManga: 0,
+            totalHoursWatched: 0,
+            totalChaptersRead: 0,
+            favoriteGenres: [],
+            averageRating: 0,
+            completionRate: 0,
+            currentStreak: 0,
+            longestStreak: 0,
+          });
+        } else {
+          throw new Error(`HTTP ${statsResponse.status}`);
         }
       } catch (statsError) {
-        // Stats might not be available due to privacy settings
-        setStats(null);
+        console.log('Stats fetch error:', statsError);
+        // Set default empty stats on error
+        setStats({
+          totalAnime: 0,
+          completedAnime: 0,
+          totalManga: 0,
+          completedManga: 0,
+          totalHoursWatched: 0,
+          totalChaptersRead: 0,
+          favoriteGenres: [],
+          averageRating: 0,
+          completionRate: 0,
+          currentStreak: 0,
+          longestStreak: 0,
+        });
+      }
+
+      // Fetch public lists data if available using public API (with auth if available)
+      try {
+        const listsResponse = await fetch(`${API_BASE_URL}/api/users/${username}/lists`, {
+          headers
+        });
+        
+        if (listsResponse.ok) {
+          const rawLists = await listsResponse.json();
+          console.log('Raw lists response:', rawLists);
+          
+          if (rawLists && rawLists.lists && Array.isArray(rawLists.lists)) {
+            // Validate each list object has required properties
+            const validLists = rawLists.lists.filter((list: any) => 
+              list && 
+              typeof list.id !== 'undefined' && 
+              typeof list.title === 'string'
+            );
+            console.log('Valid public lists found:', validLists.length);
+            setPublicLists(validLists);
+          } else {
+            console.log('No valid lists structure in response:', rawLists);
+            setPublicLists([]);
+          }
+        } else if (listsResponse.status === 404) {
+          // User has no public lists - set empty array
+          console.log('No public lists available for user (404), setting empty array');
+          setPublicLists([]);
+        } else {
+          throw new Error(`HTTP ${listsResponse.status}`);
+        }
+      } catch (listsError) {
+        console.log('Lists fetch error:', listsError);
+        // Set empty array on error
+        setPublicLists([]);
       }
     } catch (err: any) {
+      console.log('Profile fetch error:', err);
       if (err.response?.status === 404) {
         setError(new Error("User not found"));
       } else {
@@ -82,16 +204,16 @@ export function useUserProfile(username: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [username, api]);
+  }, [username]);
 
   const followUser = useCallback(async () => {
     if (!profile) return;
 
     try {
       const response = await api.post(`/api/auth/follow/${username}`);
-      const result = response.data;
+      const result = response.data || response;
 
-      if (result.success) {
+      if (result && result.success) {
         setProfile((prev) =>
           prev
             ? {
@@ -135,6 +257,7 @@ export function useUserProfile(username: string) {
   return {
     profile,
     stats,
+    publicLists,
     isLoading,
     error,
     refetch: fetchProfile,

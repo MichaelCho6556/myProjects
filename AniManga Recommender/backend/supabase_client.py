@@ -2453,6 +2453,127 @@ class SupabaseClient:
         # Create a temporary auth client instance for this operation
         auth_client = SupabaseAuthClient(self.base_url, self.api_key, self.service_key or self.api_key)
         return auth_client.create_user_profile(user_id, username, display_name)
+    
+    def get_user_stats(self, user_id: str, viewer_id: str = None) -> dict:
+        """
+        Get comprehensive user statistics.
+        
+        Args:
+            user_id (str): User ID to get stats for
+            viewer_id (str, optional): ID of the user viewing the stats
+            
+        Returns:
+            dict: User statistics data
+        """
+        try:
+            # Check privacy settings
+            privacy_response = requests.get(
+                f"{self.base_url}/rest/v1/user_privacy_settings",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': '*'
+                }
+            )
+            
+            privacy_settings = {}
+            if privacy_response.status_code == 200 and privacy_response.json():
+                privacy_settings = privacy_response.json()[0]
+                
+            # Check if viewer can see statistics
+            is_self = viewer_id == user_id
+            if not privacy_settings.get('show_statistics', True) and not is_self:
+                return None
+            
+            # Get user statistics
+            stats_response = requests.get(
+                f"{self.base_url}/rest/v1/user_statistics",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': '*'
+                }
+            )
+            
+            if stats_response.status_code == 200 and stats_response.json():
+                stats = stats_response.json()[0]
+                # Check if we have essential stats, if not trigger real-time calculation
+                if not stats.get('favorite_genres') or stats.get('total_anime_watched') is None:
+                    print(f"Stats incomplete for user {user_id}, falling back to real-time calculation")
+                    # Import here to avoid circular imports
+                    from app import calculate_user_statistics_realtime
+                    fresh_stats = calculate_user_statistics_realtime(user_id)
+                    if fresh_stats:
+                        stats.update(fresh_stats)
+            else:
+                # No cached stats, use real-time calculation
+                print(f"No cached stats for user {user_id}, using real-time calculation")
+                from app import calculate_user_statistics_realtime
+                stats = calculate_user_statistics_realtime(user_id) or {}
+            
+            # Get user items count by status for additional stats
+            items_response = requests.get(
+                f"{self.base_url}/rest/v1/user_items",
+                headers=self.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': 'status'
+                }
+            )
+            
+            items_data = items_response.json() if items_response.status_code == 200 else []
+            
+            # Count by status
+            status_counts = {}
+            for item in items_data:
+                status = item.get('status', 'unknown')
+                status_counts[status] = status_counts.get(status, 0) + 1
+            
+            # Build comprehensive stats with defaults for new users
+            return {
+                'user_id': user_id,
+                'total_anime_watched': stats.get('total_anime_watched', 0),
+                'total_manga_read': stats.get('total_manga_read', 0),
+                'total_hours_watched': stats.get('total_hours_watched', 0),
+                'total_chapters_read': stats.get('total_chapters_read', 0),
+                'average_score': stats.get('average_score', 0),
+                'completion_rate': stats.get('completion_rate', 0),
+                'current_streak_days': stats.get('current_streak_days', 0),
+                'longest_streak_days': stats.get('longest_streak_days', 0),
+                'favorite_genres': stats.get('favorite_genres', []),
+                'status_counts': {
+                    'watching': status_counts.get('watching', 0),
+                    'completed': status_counts.get('completed', 0),
+                    'plan_to_watch': status_counts.get('plan_to_watch', 0),
+                    'dropped': status_counts.get('dropped', 0),
+                    'on_hold': status_counts.get('on_hold', 0),
+                },
+                'updated_at': stats.get('updated_at', '')
+            }
+            
+        except Exception as e:
+            print(f"Error getting user stats: {e}")
+            # Return default stats even on error to prevent 404s
+            return {
+                'user_id': user_id,
+                'total_anime_watched': 0,
+                'total_manga_read': 0,
+                'total_hours_watched': 0,
+                'total_chapters_read': 0,
+                'average_score': 0,
+                'completion_rate': 0,
+                'current_streak_days': 0,
+                'longest_streak_days': 0,
+                'favorite_genres': [],
+                'status_counts': {
+                    'watching': 0,
+                    'completed': 0,
+                    'plan_to_watch': 0,
+                    'dropped': 0,
+                    'on_hold': 0,
+                },
+                'updated_at': ''
+            }
 
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
@@ -2814,6 +2935,7 @@ class SupabaseAuthClient:
         Since: 1.0.0
         """
         try:
+            print(f"Creating user profile with username: '{username}' for user_id: {user_id}")
             data = {
                 'id': user_id,
                 'username': username,
@@ -2827,12 +2949,90 @@ class SupabaseAuthClient:
             )
             
             if response.status_code in [200, 201]:
-                return response.json()
+                created_profile = response.json()
+                print(f"Successfully created profile for user {user_id} with username '{username}'")
+                return created_profile
+            elif response.status_code == 409:
+                # Duplicate key error - profile already exists, try to fetch it
+                print(f"Profile already exists for user {user_id}, attempting to fetch existing profile")
+                try:
+                    existing_profile = self.get_user_profile_by_id(user_id)
+                    if existing_profile:
+                        print(f"Successfully fetched existing profile for user {user_id}")
+                        print(f"Existing profile username field: '{existing_profile.get('username')}'")
+                        
+                        # Check if username field is missing, empty, or contains email format when we expect plain username
+                        existing_username = existing_profile.get('username')
+                        needs_username_update = (
+                            not existing_username or  # NULL or empty
+                            (existing_username != username and '@' in existing_username and username == existing_username.split('@')[0])  # Email format mismatch
+                        )
+                        
+                        if needs_username_update:
+                            if not existing_username:
+                                print(f"Username field is missing/empty, updating with username: '{username}'")
+                            else:
+                                print(f"Username field contains email '{existing_username}' but expected '{username}', updating to correct format")
+                            try:
+                                # Update the existing profile with the username
+                                update_response = requests.patch(
+                                    f"{self.base_url}/rest/v1/user_profiles",
+                                    headers=self.headers,
+                                    params={'id': f'eq.{user_id}'},
+                                    json={'username': username}
+                                )
+                                
+                                if update_response.status_code in [200, 204]:
+                                    print(f"Successfully updated username for user {user_id}")
+                                    # Fetch the updated profile
+                                    updated_profile = self.get_user_profile_by_id(user_id)
+                                    if updated_profile:
+                                        print(f"Updated profile username field: '{updated_profile.get('username')}'")
+                                        return updated_profile
+                                else:
+                                    print(f"Failed to update username - Status: {update_response.status_code}, Response: {update_response.text}")
+                            except Exception as update_error:
+                                print(f"Error updating username for user {user_id}: {update_error}")
+                        
+                        return existing_profile
+                    else:
+                        print(f"Profile exists but could not fetch for user {user_id}")
+                        return None
+                except Exception as fetch_error:
+                    print(f"Error fetching existing profile for user {user_id}: {fetch_error}")
+                    return None
             else:
                 print(f"Failed to create user profile - Status: {response.status_code}, Response: {response.text}")
                 return None
         except Exception as e:
             print(f"Exception creating user profile: {e}")
+            return None
+    
+    def get_user_profile_by_id(self, user_id: str) -> dict:
+        """
+        Get user profile by user ID.
+        
+        Args:
+            user_id (str): User ID to look up
+            
+        Returns:
+            dict: User profile data or None if not found
+        """
+        try:
+            response = requests.get(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers=self.headers,
+                params={
+                    'id': f'eq.{user_id}',
+                    'select': '*'
+                }
+            )
+            
+            if response.status_code == 200 and response.json():
+                return response.json()[0]
+            return None
+        except Exception as e:
+            print(f"Exception getting user profile by ID: {e}")
             return None
     
     def update_user_profile(self, user_id: str, updates: dict) -> dict:
@@ -3030,7 +3230,9 @@ class SupabaseAuthClient:
             dict: User profile data filtered by privacy settings
         """
         try:
-            # Get user profile
+            print(f"Looking up profile for username: '{username}'")
+            
+            # First attempt: exact case match
             response = requests.get(
                 f"{self.base_url}/rest/v1/user_profiles",
                 headers=self.headers,
@@ -3040,8 +3242,23 @@ class SupabaseAuthClient:
                 }
             )
             
+            print(f"Exact match query status: {response.status_code}, found: {len(response.json()) if response.status_code == 200 else 0} profiles")
+            
+            # If exact match fails, try case-insensitive match
+            if response.status_code != 200 or not response.json():
+                print(f"Exact match failed, trying case-insensitive lookup for '{username}'")
+                response = requests.get(
+                    f"{self.base_url}/rest/v1/user_profiles",
+                    headers=self.headers,
+                    params={
+                        'username': f'ilike.{username}',
+                        'select': '*'
+                    }
+                )
+                print(f"Case-insensitive query status: {response.status_code}, found: {len(response.json()) if response.status_code == 200 else 0} profiles")
             
             if response.status_code != 200 or not response.json():
+                print(f"No profile found for username '{username}' with either exact or case-insensitive match")
                 return None
                 
             profile = response.json()[0]
@@ -3119,117 +3336,6 @@ class SupabaseAuthClient:
             print(f"Error getting user profile by username: {e}")
             return None
     
-    def get_user_stats(self, user_id: str, viewer_id: str = None) -> dict:
-        """
-        Get comprehensive user statistics.
-        
-        Args:
-            user_id (str): User ID to get stats for
-            viewer_id (str, optional): ID of the user viewing the stats
-            
-        Returns:
-            dict: User statistics data
-        """
-        try:
-            # Check privacy settings
-            privacy_response = requests.get(
-                f"{self.base_url}/rest/v1/user_privacy_settings",
-                headers=self.headers,
-                params={
-                    'user_id': f'eq.{user_id}',
-                    'select': '*'
-                }
-            )
-            
-            privacy_settings = {}
-            if privacy_response.status_code == 200 and privacy_response.json():
-                privacy_settings = privacy_response.json()[0]
-                
-            # Check if viewer can see statistics
-            is_self = viewer_id == user_id
-            if not privacy_settings.get('show_statistics', True) and not is_self:
-                return None
-            
-            # Get user statistics
-            stats_response = requests.get(
-                f"{self.base_url}/rest/v1/user_statistics",
-                headers=self.headers,
-                params={
-                    'user_id': f'eq.{user_id}',
-                    'select': '*'
-                }
-            )
-            
-            if stats_response.status_code == 200 and stats_response.json():
-                stats = stats_response.json()[0]
-            else:
-                # Return default stats for users without statistics yet
-                stats = {}
-            
-            # Get user items count by status for additional stats
-            items_response = requests.get(
-                f"{self.base_url}/rest/v1/user_items",
-                headers=self.headers,
-                params={
-                    'user_id': f'eq.{user_id}',
-                    'select': 'status'
-                }
-            )
-            
-            items_data = items_response.json() if items_response.status_code == 200 else []
-            
-            # Count by status
-            status_counts = {}
-            for item in items_data:
-                status = item.get('status', 'unknown')
-                status_counts[status] = status_counts.get(status, 0) + 1
-            
-            # Build comprehensive stats with defaults for new users
-            return {
-                'user_id': user_id,
-                'total_anime_watched': stats.get('total_anime_watched', 0),
-                'total_manga_read': stats.get('total_manga_read', 0),
-                'total_hours_watched': stats.get('total_hours_watched', 0),
-                'total_chapters_read': stats.get('total_chapters_read', 0),
-                'average_score': stats.get('average_score', 0),
-                'completion_rate': stats.get('completion_rate', 0),
-                'current_streak_days': stats.get('current_streak_days', 0),
-                'longest_streak_days': stats.get('longest_streak_days', 0),
-                'favorite_genres': stats.get('favorite_genres', []),
-                'status_counts': {
-                    'watching': status_counts.get('watching', 0),
-                    'completed': status_counts.get('completed', 0),
-                    'plan_to_watch': status_counts.get('plan_to_watch', 0),
-                    'dropped': status_counts.get('dropped', 0),
-                    'on_hold': status_counts.get('on_hold', 0),
-                },
-                'updated_at': stats.get('updated_at', '')
-            }
-            
-        except Exception as e:
-            print(f"Error getting user stats: {e}")
-            # Return default stats even on error to prevent 404s
-            return {
-                'user_id': user_id,
-                'total_anime_watched': 0,
-                'total_manga_read': 0,
-                'total_hours_watched': 0,
-                'total_chapters_read': 0,
-                'average_score': 0,
-                'completion_rate': 0,
-                'current_streak_days': 0,
-                'longest_streak_days': 0,
-                'favorite_genres': [],
-                'status_counts': {
-                    'watching': 0,
-                    'completed': 0,
-                    'plan_to_watch': 0,
-                    'dropped': 0,
-                    'on_hold': 0,
-                },
-                'updated_at': ''
-            }
-    
     def toggle_user_follow(self, follower_id: str, username: str) -> dict:
         """
         Follow or unfollow a user by username.
@@ -3242,7 +3348,9 @@ class SupabaseAuthClient:
             dict: Result with success status and is_following boolean
         """
         try:
-            # Get user ID from username
+            print(f"Looking up user to follow: '{username}'")
+            
+            # Get user ID from username - try exact match first
             profile_response = requests.get(
                 f"{self.base_url}/rest/v1/user_profiles",
                 headers=self.headers,
@@ -3252,7 +3360,20 @@ class SupabaseAuthClient:
                 }
             )
             
+            # If exact match fails, try case-insensitive match
             if profile_response.status_code != 200 or not profile_response.json():
+                print(f"Exact match failed for follow, trying case-insensitive lookup for '{username}'")
+                profile_response = requests.get(
+                    f"{self.base_url}/rest/v1/user_profiles",
+                    headers=self.headers,
+                    params={
+                        'username': f'ilike.{username}',
+                        'select': 'id'
+                    }
+                )
+            
+            if profile_response.status_code != 200 or not profile_response.json():
+                print(f"User not found for follow: '{username}'")
                 return {'success': False, 'error': 'User not found'}
                 
             following_id = profile_response.json()[0]['id']
@@ -3272,7 +3393,23 @@ class SupabaseAuthClient:
                 }
             )
             
-            if existing_follow.json():
+            print(f"Debug toggle_follow: follower_id={follower_id}, following_id={following_id}")
+            existing_follows = existing_follow.json()
+            print(f"Debug toggle_follow: existing_follow response={existing_follows}")
+            
+            # Clean up duplicates if any exist
+            if len(existing_follows) > 1:
+                print(f"Warning: Found {len(existing_follows)} duplicate follow relationships, cleaning up...")
+                # Delete all duplicates
+                for follow in existing_follows:
+                    requests.delete(
+                        f"{self.base_url}/rest/v1/user_follows",
+                        headers=self.headers,
+                        params={'id': f'eq.{follow["id"]}'}
+                    )
+                existing_follows = []  # Treat as no existing follow after cleanup
+                
+            if existing_follows:
                 # Unfollow
                 response = requests.delete(
                     f"{self.base_url}/rest/v1/user_follows",

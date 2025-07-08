@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
 import { AnimeItem } from "../types";
@@ -58,13 +58,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
     { value: "dropped", label: "Dropped", color: "#ef4444" },
   ];
 
-  useEffect(() => {
-    if (user) {
-      loadUserItem();
-    }
-  }, [user, item.uid]);
-
-  const loadUserItem = async () => {
+  const loadUserItem = useCallback(async () => {
     try {
       setLoading(true);
       const userItems = await getUserItems();
@@ -87,7 +81,13 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
     } finally {
       setLoading(false);
     }
-  };
+  }, [getUserItems, item.uid]);
+
+  useEffect(() => {
+    if (user) {
+      loadUserItem();
+    }
+  }, [user, item.uid, loadUserItem]);
 
   const handleStatusUpdate = async () => {
     if (!user) return;

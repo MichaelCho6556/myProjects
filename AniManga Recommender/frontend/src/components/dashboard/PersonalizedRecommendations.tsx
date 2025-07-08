@@ -58,13 +58,7 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   const [addingToList, setAddingToList] = useState<Set<string>>(new Set());
   const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (user?.id) {
-      fetchRecommendations();
-    }
-  }, [user?.id, contentTypeFilter]); // Refetch when content type filter changes
-
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -102,7 +96,13 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
     } finally {
       setLoading(false);
     }
-  };
+  }, [makeAuthenticatedRequest, contentTypeFilter]);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchRecommendations();
+    }
+  }, [user?.id, contentTypeFilter, fetchRecommendations]); // Refetch when content type filter changes
 
   // Load more items for a specific section
   const loadMoreItems = async (sectionType: string) => {
