@@ -15,7 +15,7 @@ export const UserProfilePage: React.FC = () => {
   const { username } = useParams<{ username: string }>();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
-  const { profile, stats, isLoading, error, followUser } = useUserProfile(username || "");
+  const { profile, stats, publicLists, isLoading, error, followUser } = useUserProfile(username || "");
 
   // Redirect if no username provided (moved to useEffect to prevent infinite loops)
   useEffect(() => {
@@ -118,7 +118,6 @@ export const UserProfilePage: React.FC = () => {
             <div className="profile-actions">
               {!isOwnProfile && currentUser && (
                 <FollowButton
-                  username={profile.username}
                   isFollowing={profile.isFollowing || false}
                   onToggleFollow={followUser}
                 />
@@ -148,18 +147,18 @@ export const UserProfilePage: React.FC = () => {
         {/* User Statistics */}
         {stats && (
           <section className="profile-stats">
-            <UserStatsComponent stats={stats} showPrivateStats={isOwnProfile || !profile.isPrivate} />
+            <UserStatsComponent stats={stats} />
           </section>
         )}
 
-        {/* Profile Content Grid */}
-        <div className="profile-grid">
-          <div className="profile-main">
+        {/* Profile Content */}
+        <div className="profile-content">
+          {/* Recent Activity and Favorite Genres Row */}
+          <div className="content-row">
             {/* Recent Activity Section */}
             <section className="profile-section">
               <div className="section-header">
                 <div className="section-title">
-                  <span className="section-icon">📈</span>
                   <h2>Recent Activity</h2>
                 </div>
               </div>
@@ -170,7 +169,7 @@ export const UserProfilePage: React.FC = () => {
                   <p>
                     Track {isOwnProfile ? "your" : `${profile.displayName}'s`} recent anime and manga activity
                   </p>
-                  <small>Coming soon...</small>
+                  <small>Coming soon - dashboard-style activity feed</small>
                 </div>
               </div>
             </section>
@@ -179,74 +178,77 @@ export const UserProfilePage: React.FC = () => {
             <section className="profile-section">
               <div className="section-header">
                 <div className="section-title">
-                  <span className="section-icon">🎯</span>
                   <h2>Favorite Genres</h2>
                 </div>
               </div>
               <div className="section-content">
-                <div className="empty-state">
-                  <div className="empty-icon">🏷️</div>
-                  <h3>Genre Preferences</h3>
-                  <p>Discover {isOwnProfile ? "your" : `${profile.displayName}'s`} most watched genres</p>
-                  <small>Coming soon...</small>
-                </div>
+                {stats && stats.favoriteGenres.length > 0 ? (
+                  <div className="genres-list">
+                    {stats.favoriteGenres.slice(0, 5).map((genre, index) => (
+                      <div key={genre} className="genre-item">
+                        <span className="genre-rank">#{index + 1}</span>
+                        <span className="genre-name">{genre}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-state">
+                    <div className="empty-icon">🏷️</div>
+                    <h3>Genre Preferences</h3>
+                    <p>Discover {isOwnProfile ? "your" : `${profile.displayName}'s`} most watched genres</p>
+                    <small>No genre data available</small>
+                  </div>
+                )}
               </div>
             </section>
           </div>
 
-          <div className="profile-sidebar">
-            {/* Public Lists Section */}
-            <section className="profile-section">
-              <div className="section-header">
-                <div className="section-title">
-                  <span className="section-icon">📋</span>
-                  <h2>Public Lists</h2>
-                </div>
+          {/* Public Lists Section */}
+          <section className="profile-section">
+            <div className="section-header">
+              <div className="section-title">
+                <h2>Public Lists</h2>
               </div>
-              <div className="section-content">
-                <div className="empty-state compact">
+            </div>
+            <div className="section-content">
+              {publicLists && publicLists.length > 0 ? (
+                <div className="lists-container">
+                  {publicLists.map((list) => (
+                    <div key={list.id} className="list-item-card">
+                      <div className="list-header">
+                        <h3 className="list-title">{list.title}</h3>
+                        <span className="list-item-count">{list.itemCount} items</span>
+                      </div>
+                      {list.description && (
+                        <p className="list-description">{list.description}</p>
+                      )}
+                      <div className="list-meta">
+                        <span className="list-meta-item">
+                          Updated {new Date(list.updatedAt).toLocaleDateString()}
+                        </span>
+                        {list.isCollaborative && (
+                          <span className="list-badge collaborative">Collaborative</span>
+                        )}
+                      </div>
+                      <button 
+                        onClick={() => navigate(list.url)}
+                        className="list-view-button"
+                      >
+                        View List
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">
                   <div className="empty-icon">📝</div>
                   <h3>Custom Lists</h3>
                   <p>View {isOwnProfile ? "your" : `${profile.displayName}'s`} curated collections</p>
-                  <small>Coming soon...</small>
+                  <small>No public lists available</small>
                 </div>
-              </div>
-            </section>
-
-            {/* Quick Stats Section */}
-            <section className="profile-section">
-              <div className="section-header">
-                <div className="section-title">
-                  <span className="section-icon">⚡</span>
-                  <h2>Quick Stats</h2>
-                </div>
-              </div>
-              <div className="section-content">
-                <div className="quick-stats-list">
-                  {stats && (
-                    <>
-                      <div className="quick-stat-item">
-                        <span className="stat-label">Total Anime</span>
-                        <span className="stat-value">{stats.totalAnime}</span>
-                      </div>
-                      <div className="quick-stat-item">
-                        <span className="stat-label">Total Manga</span>
-                        <span className="stat-value">{stats.totalManga}</span>
-                      </div>
-                      <div className="quick-stat-item">
-                        <span className="stat-label">Hours Watched</span>
-                        <span className="stat-value">{Math.round(stats.totalHoursWatched)}</span>
-                      </div>
-                      <div className="quick-stat-item">
-                        <span className="stat-label">Avg Rating</span>
-                        <span className="stat-value">{stats.averageRating.toFixed(1)}</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </section>
-          </div>
+              )}
+            </div>
+          </section>
         </div>
       </div>
     </div>

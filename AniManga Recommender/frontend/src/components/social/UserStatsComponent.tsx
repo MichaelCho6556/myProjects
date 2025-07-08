@@ -6,12 +6,10 @@ import { UserStats } from '../../types/social';
 
 interface UserStatsComponentProps {
   stats: UserStats;
-  showPrivateStats?: boolean;
 }
 
 export const UserStatsComponent: React.FC<UserStatsComponentProps> = ({
-  stats,
-  showPrivateStats = true
+  stats
 }) => {
   const formatNumber = (num: number): string => {
     if (num >= 1000) {
@@ -34,7 +32,7 @@ export const UserStatsComponent: React.FC<UserStatsComponentProps> = ({
         Statistics
       </h2>
       
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
         {/* Anime Stats */}
         <div className="text-center">
           <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
@@ -80,76 +78,32 @@ export const UserStatsComponent: React.FC<UserStatsComponentProps> = ({
             Avg. Rating
           </div>
         </div>
-      </div>
 
-      {showPrivateStats && (
-        <>
-          {/* Completion Rate */}
-          <div className="mb-6">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Completion Rate
-              </span>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {(stats.completionRate * 100).toFixed(1)}%
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-              <div
-                className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${stats.completionRate * 100}%` }}
-              />
-            </div>
+        {/* Completion Rate */}
+        <div className="text-center">
+          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+            {(stats.completionRate * 100).toFixed(1)}%
           </div>
-
-          {/* Streaks */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="text-lg font-semibold text-orange-600 dark:text-orange-400">
-                {stats.currentStreak}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">
-                Current Streak (days)
-              </div>
-            </div>
-            <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="text-lg font-semibold text-red-600 dark:text-red-400">
-                {stats.longestStreak}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">
-                Longest Streak (days)
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Favorite Genres */}
-      {stats.favoriteGenres.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-            Favorite Genres
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {stats.favoriteGenres.slice(0, 5).map((genre, index) => (
-              <span
-                key={genre}
-                className={`
-                  px-3 py-1 rounded-full text-xs font-medium
-                  ${index === 0 
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
-                    : index === 1
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                    : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                  }
-                `}
-              >
-                #{index + 1} {genre}
-              </span>
-            ))}
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Completion Rate
           </div>
         </div>
-      )}
+
+        {/* Current Streak */}
+        <div className="text-center">
+          <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+            {stats.currentStreak}
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Current Streak
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-500">
+            days
+          </div>
+        </div>
+      </div>
+
+
     </div>
   );
 };

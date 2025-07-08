@@ -308,7 +308,6 @@ const UserCard: React.FC<UserCardProps> = ({ user, currentUser, onFollowToggle, 
         <div className="user-actions" onClick={(e) => e.stopPropagation()}>
           {!isOwnProfile && currentUser && (
             <FollowButton
-              username={user.username}
               isFollowing={user.isFollowing || false}
               onToggleFollow={onFollowToggle}
               size="sm"

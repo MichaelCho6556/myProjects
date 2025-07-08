@@ -55,4 +55,6 @@ apm_artifacts/
 CLAUDE.md
 clauderules.md
 
+.mcp.json
+
 .env

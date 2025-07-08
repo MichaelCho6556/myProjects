@@ -111,7 +111,6 @@ export const UserSearchComponent: React.FC = () => {
                 {/* Follow Button */}
                 <div className="mt-3 flex justify-end">
                   <FollowButton
-                    username={user.username}
                     isFollowing={user.isFollowing || false}
                     onToggleFollow={() => handleFollowUser(user.username)}
                     size="sm"

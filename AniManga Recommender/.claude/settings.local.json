@@ -7,8 +7,22 @@
       "Bash(python:*)",
       "Bash(awk:*)",
       "Bash(npm run lint)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(source:*)",
+      "mcp__zen__analyze",
+      "mcp__zen__debug",
+      "mcp__zen__challenge",
+      "mcp__zen__chat",
+      "mcp__zen__thinkdeep",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "mcp__zen__precommit"
     ],
     "deny": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "zen",
+    "context7"
+  ]
 }

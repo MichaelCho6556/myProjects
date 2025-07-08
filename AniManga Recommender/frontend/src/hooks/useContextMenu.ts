@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 
 export interface ContextMenuPosition {
   x: number;
@@ -17,6 +17,7 @@ export interface UseContextMenuReturn {
   isContextMenuOpen: boolean;
   contextMenuPosition: ContextMenuPosition | null;
   activeItemId: string | null;
+  menuRef: React.RefObject<HTMLElement>;
   openContextMenu: (position: ContextMenuPosition, itemId?: string) => void;
   closeContextMenu: () => void;
   handleContextMenu: (e: React.MouseEvent, itemId?: string) => void;
@@ -31,10 +32,12 @@ export const useContextMenu = (): UseContextMenuReturn => {
   });
 
   const timeoutRef = useRef<number | null>(null);
+  const menuRef = useRef<HTMLElement>(null);
 
   const calculatePosition = useCallback((clickX: number, clickY: number): { x: number; y: number } => {
-    const MENU_WIDTH = 280;
-    const MENU_HEIGHT = 400; // Approximate height for 8+ menu items
+    // Use actual menu dimensions if available, otherwise use reasonable defaults
+    const menuWidth = menuRef.current?.offsetWidth || 280;
+    const menuHeight = menuRef.current?.offsetHeight || 400;
     const EDGE_MARGIN = 10;
 
     const viewportWidth = window.innerWidth;
@@ -44,25 +47,25 @@ export const useContextMenu = (): UseContextMenuReturn => {
     let y = clickY;
 
     // Adjust for right edge overflow
-    if (x + MENU_WIDTH > viewportWidth) {
-      x = Math.max(EDGE_MARGIN, viewportWidth - MENU_WIDTH - EDGE_MARGIN);
+    if (x + menuWidth > viewportWidth) {
+      x = Math.max(EDGE_MARGIN, viewportWidth - menuWidth - EDGE_MARGIN);
     }
 
     // Smart vertical positioning - prefer showing menu above cursor if not enough space below
     const spaceBelow = viewportHeight - clickY;
     const spaceAbove = clickY;
 
-    if (spaceBelow < MENU_HEIGHT && spaceAbove > MENU_HEIGHT) {
+    if (spaceBelow < menuHeight && spaceAbove > menuHeight) {
       // Show menu above the cursor
-      y = Math.max(EDGE_MARGIN, clickY - MENU_HEIGHT);
-    } else if (y + MENU_HEIGHT > viewportHeight) {
+      y = Math.max(EDGE_MARGIN, clickY - menuHeight);
+    } else if (y + menuHeight > viewportHeight) {
       // Not enough space above either, position at bottom with margin
-      y = Math.max(EDGE_MARGIN, viewportHeight - MENU_HEIGHT - EDGE_MARGIN);
+      y = Math.max(EDGE_MARGIN, viewportHeight - menuHeight - EDGE_MARGIN);
     }
 
     // Ensure minimum distance from edges
-    x = Math.max(EDGE_MARGIN, Math.min(x, viewportWidth - MENU_WIDTH - EDGE_MARGIN));
-    y = Math.max(EDGE_MARGIN, Math.min(y, viewportHeight - MENU_HEIGHT - EDGE_MARGIN));
+    x = Math.max(EDGE_MARGIN, Math.min(x, viewportWidth - menuWidth - EDGE_MARGIN));
+    y = Math.max(EDGE_MARGIN, Math.min(y, viewportHeight - menuHeight - EDGE_MARGIN));
 
     const finalPosition = { x: x, y: y };
 
@@ -115,7 +118,7 @@ export const useContextMenu = (): UseContextMenuReturn => {
   }, []);
 
   const handleContextMenu = useCallback(
-    (e: any, itemId?: string) => {
+    (e: React.MouseEvent, itemId?: string) => {
       e.preventDefault();
       e.stopPropagation();
 
@@ -132,7 +135,7 @@ export const useContextMenu = (): UseContextMenuReturn => {
   );
 
   const handleKeyboardMenu = useCallback(
-    (e: any, itemId?: string) => {
+    (e: React.KeyboardEvent, itemId?: string) => {
       if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
         e.preventDefault();
         e.stopPropagation();
@@ -165,10 +168,10 @@ export const useContextMenu = (): UseContextMenuReturn => {
         return;
       }
 
-      const target = event.target as Element;
+      const target = event.target as Node;
 
       // Don't close if clicking within the context menu
-      if (target.closest(".context-menu")) {
+      if (menuRef.current && menuRef.current.contains(target)) {
         return;
       }
 
@@ -212,6 +215,7 @@ export const useContextMenu = (): UseContextMenuReturn => {
     isContextMenuOpen: menuState.isOpen,
     contextMenuPosition: menuState.position,
     activeItemId: menuState.activeItemId,
+    menuRef,
     openContextMenu,
     closeContextMenu,
     handleContextMenu,

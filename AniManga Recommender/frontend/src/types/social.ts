@@ -56,6 +56,18 @@ export interface CustomList {
   items?: ListItem[];
 }
 
+export interface PublicList {
+  id: string;
+  title: string;
+  description?: string;
+  itemCount: number;
+  isPublic: boolean;
+  isCollaborative: boolean;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+}
+
 export interface ListItem {
   id: string;
   itemUid: string;
