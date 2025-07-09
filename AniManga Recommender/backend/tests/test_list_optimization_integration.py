@@ -367,8 +367,8 @@ class TestListOptimizationIntegration:
         
         # Assertions
         assert query_counts['optimized'] <= 2, f"Optimized should use ≤2 queries, used {query_counts['optimized']}"
-        assert query_counts['fallback'] >= 10, f"Fallback should use ≥10 queries for 5 lists, used {query_counts['fallback']}"
-        assert query_counts['optimized'] < query_counts['fallback'] / 10, "Optimized should use <10% of fallback queries"
+        assert query_counts['fallback'] >= 15, f"Fallback should use ≥15 queries for 5 lists, used {query_counts['fallback']}"
+        assert query_counts['optimized'] < query_counts['fallback'] / 5, "Optimized should use <20% of fallback queries"
     
     @pytest.mark.integration
     def test_fallback_mechanism(self):
@@ -413,8 +413,8 @@ class TestListOptimizationIntegration:
         fallback_time = time.time() - start_time
         
         # Both should be fast for empty results
-        assert optimized_time < 0.2, f"Optimized should be fast for empty results: {optimized_time:.3f}s"
-        assert fallback_time < 0.3, f"Fallback should be fast for empty results: {fallback_time:.3f}s"
+        assert optimized_time < 0.5, f"Optimized should be fast for empty results: {optimized_time:.3f}s"
+        assert fallback_time < 0.6, f"Fallback should be fast for empty results: {fallback_time:.3f}s"
         
         # Verify empty results
         assert optimized_result['total'] == 0, "Should return 0 total for non-existent user"

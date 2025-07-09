@@ -1870,6 +1870,28 @@ class SupabaseClient:
                 except Exception as e:
                     print(f"Error calculating item count for list {list_item['id']}: {e}")
                     item_count = 0
+
+                # Calculate followers count from list_followers table
+                followers_count = 0
+                try:
+                    follower_response = requests.get(
+                        f"{self.base_url}/rest/v1/list_followers",
+                        headers={**self.headers, 'Prefer': 'count=exact'},
+                        params={
+                            'list_id': f'eq.{list_item["id"]}',
+                            'select': 'id'
+                        }
+                    )
+                    if follower_response.status_code == 200:
+                        content_range = follower_response.headers.get('Content-Range', '0')
+                        if '/' in content_range:
+                            total_str = content_range.split('/')[-1]
+                            if total_str and total_str != '*':
+                                followers_count = int(total_str)
+                    print(f"List {list_item['id']} has {followers_count} followers")
+                except Exception as e:
+                    print(f"Error calculating followers count for list {list_item['id']}: {e}")
+                    followers_count = 0
                 
                 transformed_list = {
                     'id': list_item['id'],
@@ -1878,7 +1900,7 @@ class SupabaseClient:
                     'description': list_item.get('description'),
                     'privacy': privacy,
                     'itemCount': item_count,  # Now calculates actual item count
-                    'followersCount': 0,  # TODO: Calculate followers count from list_followers table
+                    'followersCount': followers_count,  # Now calculates actual followers count
                     'tags': tags,
                     'createdAt': list_item['created_at'],
                     'updatedAt': list_item['updated_at'],
@@ -1910,7 +1932,7 @@ class SupabaseClient:
                     total = len(lists)
             
             result = {
-                'lists': transformed_lists,
+                'data': transformed_lists,  # Changed from 'lists' to 'data' to match optimized method
                 'total': total,
                 'page': page,
                 'limit': limit,
@@ -1921,7 +1943,7 @@ class SupabaseClient:
             
         except Exception as e:
             print(f"Error getting user custom lists: {e}")
-            return {'lists': [], 'total': 0, 'page': page, 'limit': limit, 'has_more': False}
+            return {'data': [], 'total': 0, 'page': page, 'limit': limit, 'has_more': False}
     
     def create_custom_list(self, user_id: str, list_data: dict) -> dict:
         """
