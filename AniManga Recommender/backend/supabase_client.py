@@ -33,6 +33,7 @@ import pandas as pd
 from typing import Dict, List, Optional, Any, Union, Tuple
 from dotenv import load_dotenv
 import time
+import logging
 try:
     import jwt
 except ImportError:
@@ -44,6 +45,9 @@ from functools import wraps
 from flask import request, jsonify, g
 
 load_dotenv()
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 class SupabaseClient:
     """
@@ -1672,7 +1676,110 @@ class SupabaseClient:
 
     def get_user_custom_lists(self, user_id: str, page: int = 1, limit: int = 20) -> dict:
         """
-        Get all custom lists created by a specific user.
+        Get all custom lists created by a specific user with efficient querying.
+        
+        This method uses PostgreSQL's JSON aggregation to fetch all data in a single query,
+        eliminating the N+1 query problem. Falls back to the original implementation if
+        the optimized function is not available.
+        
+        Args:
+            user_id (str): The UUID of the user whose lists to retrieve
+            page (int): Page number for pagination (default: 1)
+            limit (int): Items per page (default: 20, max: 50)
+            
+        Returns:
+            dict: User's lists with pagination info
+        """
+        try:
+            # Validate and limit page size
+            limit = min(limit, 50)
+            offset = (page - 1) * limit
+            
+            # Try the optimized RPC function first
+            response = requests.post(
+                f"{self.base_url}/rest/v1/rpc/get_user_lists_optimized",
+                headers=self.headers,
+                json={
+                    'p_user_id': user_id,
+                    'p_limit': limit,
+                    'p_offset': offset
+                }
+            )
+            
+            if response.status_code != 200:
+                print(f"Optimized function not available or failed: {response.status_code}")
+                # Fallback to the original method
+                return self._get_user_custom_lists_fallback(user_id, page, limit)
+            
+            lists = response.json()
+            
+            # Get total count in a single query
+            count_response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers={**self.headers, 'Prefer': 'count=exact'},
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': 'id'
+                }
+            )
+            
+            total = 0
+            if count_response.status_code == 200:
+                content_range = count_response.headers.get('Content-Range', '0')
+                if '/' in content_range:
+                    total_str = content_range.split('/')[-1]
+                    if total_str and total_str != '*':
+                        total = int(total_str)
+            
+            # Transform for frontend compatibility
+            transformed_lists = []
+            for list_item in lists:
+                # Handle tags - they come as JSON from the function
+                tags = list_item.get('tags', [])
+                if isinstance(tags, str):
+                    # If tags is a JSON string, parse it
+                    import json
+                    try:
+                        tags = json.loads(tags)
+                    except:
+                        tags = []
+                
+                transformed_list = {
+                    'id': list_item['id'],
+                    'userId': user_id,
+                    'title': list_item['title'],
+                    'description': list_item.get('description'),
+                    'privacy': 'Public' if list_item.get('is_public', True) else 'Private',
+                    'itemCount': list_item.get('item_count', 0),
+                    'followersCount': list_item.get('followers_count', 0),
+                    'tags': tags if isinstance(tags, list) else [],
+                    'createdAt': list_item['created_at'],
+                    'updatedAt': list_item['updated_at'],
+                    'isCollaborative': list_item.get('is_collaborative', False)
+                }
+                transformed_lists.append(transformed_list)
+            
+            print(f"Successfully fetched {len(transformed_lists)} lists using optimized query")
+            
+            return {
+                'data': transformed_lists,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'has_more': (page * limit) < total
+            }
+            
+        except Exception as e:
+            print(f"Error in optimized get_user_custom_lists: {e}")
+            # Fallback to original implementation
+            return self._get_user_custom_lists_fallback(user_id, page, limit)
+    
+    def _get_user_custom_lists_fallback(self, user_id: str, page: int = 1, limit: int = 20) -> dict:
+        """
+        Legacy implementation of get_user_custom_lists with N+1 query issue.
+        
+        This method is kept as a fallback for when the optimized PostgreSQL function
+        is not available. It makes separate queries for tags and item counts for each list.
         
         Args:
             user_id (str): The UUID of the user whose lists to retrieve
@@ -2574,6 +2681,64 @@ class SupabaseClient:
                 },
                 'updated_at': ''
             }
+
+    def get_list_item_counts_batch(self, list_ids: List[str]) -> Dict[str, int]:
+        """
+        Get item counts for multiple lists efficiently in a single query.
+        
+        This method solves the N+1 query problem by fetching counts for multiple lists
+        at once using a single aggregated query instead of individual requests.
+        
+        Args:
+            list_ids (List[str]): List of list IDs to get counts for
+            
+        Returns:
+            Dict[str, int]: Dictionary mapping list_id to item count
+            
+        Example:
+            >>> client = SupabaseClient()
+            >>> counts = client.get_list_item_counts_batch(['list1', 'list2', 'list3'])
+            >>> print(counts)
+            {'list1': 5, 'list2': 12, 'list3': 0}
+        """
+        if not list_ids:
+            return {}
+            
+        try:
+            # Build query to get counts for all lists in one request
+            # Using 'in' operator to filter by multiple list IDs
+            list_ids_str = ','.join(f'"{lid}"' for lid in list_ids)
+            
+            response = self._make_request(
+                'GET',
+                'custom_list_items',
+                params={
+                    'select': 'list_id',
+                    'list_id': f'in.({list_ids_str})'
+                }
+            )
+            
+            if response.status_code == 200:
+                items = response.json()
+                
+                # Count items per list
+                counts = {}
+                for list_id in list_ids:
+                    counts[list_id] = 0
+                    
+                for item in items:
+                    list_id = item.get('list_id')
+                    if list_id in counts:
+                        counts[list_id] += 1
+                        
+                return counts
+            else:
+                logger.error(f"Error fetching batch list counts: HTTP {response.status_code}")
+                return {list_id: 0 for list_id in list_ids}
+                
+        except Exception as e:
+            logger.error(f"Error in batch list count query: {e}")
+            return {list_id: 0 for list_id in list_ids}
 
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
@@ -4484,6 +4649,68 @@ class SupabaseAuthClient:
         except Exception as e:
             print(f"Error deleting review: {e}")
             return False
+
+    def get_list_item_counts_batch(self, list_ids: List[str]) -> Dict[str, int]:
+        """
+        Get item counts for multiple lists efficiently using batch query.
+        
+        This method delegates to the SupabaseClient's batch method but provides
+        a convenient interface for auth-related list operations.
+        
+        Args:
+            list_ids (List[str]): List of list IDs to get counts for
+            
+        Returns:
+            Dict[str, int]: Dictionary mapping list_id to item count
+        """
+        # Create a temporary SupabaseClient instance for batch operations
+        supabase_client = SupabaseClient()
+        return supabase_client.get_list_item_counts_batch(list_ids)
+
+    def get_user_lists(self, user_id: str, is_public: bool = None, include_collaborative: bool = True) -> List[Dict]:
+        """
+        Get user's custom lists with optional filtering.
+        
+        Centralizes list fetching to eliminate direct requests usage and 
+        provide consistent API patterns.
+        
+        Args:
+            user_id (str): User ID to get lists for
+            is_public (bool, optional): Filter by public/private status
+            include_collaborative (bool): Include collaborative lists
+            
+        Returns:
+            List[Dict]: List of custom lists data
+        """
+        try:
+            params = {
+                'user_id': f'eq.{user_id}',
+                'select': 'id,title,description,created_at,updated_at,is_public,is_collaborative',
+                'order': 'updated_at.desc'
+            }
+            
+            if is_public is not None:
+                params['is_public'] = f'eq.{str(is_public).lower()}'
+            
+            if not include_collaborative:
+                params['is_collaborative'] = 'eq.false'
+                
+            response = requests.get(
+                f"{self.base_url}/rest/v1/custom_lists",
+                headers=self.headers,
+                params=params,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Error fetching user lists: HTTP {response.status_code}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Error in get_user_lists: {e}")
+            return []
 
 def require_auth(f):
     """

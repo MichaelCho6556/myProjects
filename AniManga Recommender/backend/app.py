@@ -31,6 +31,7 @@ License: MIT
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 import os
+import logging
 import pandas as pd
 from dotenv import load_dotenv
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -42,7 +43,7 @@ from datetime import datetime, timedelta
 import json
 import ast
 import time
-import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Any
 from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
 from utils.batchOperations import BatchOperationsManager
@@ -58,6 +59,20 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log')
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Initialize ThreadPoolExecutor for asynchronous activity logging
+executor = ThreadPoolExecutor(max_workers=2)
 
 def create_app(config: Optional[Any] = None) -> Flask:
     """
@@ -1838,12 +1853,49 @@ def update_user_item_status(item_uid):
             # ✅ INVALIDATE ALL CACHES so next dashboard load will be fresh
             invalidate_all_user_caches(user_id)
             
-            # Log activity for dashboard updates
-            log_user_activity(user_id, 'status_changed', item_uid, {
-                'new_status': status,
+            # Log multiple activity types based on what changed
+            activity_data = {
+                'status': status,
                 'progress': progress,
-                'rating': rating  # Include rating in activity log
-            })
+                'media_type': item_details.get('media_type', 'unknown')
+            }
+            
+            # Include rating if provided
+            if rating is not None and rating >= 0:
+                activity_data['rating'] = rating
+            
+            # Determine activity types to log
+            # Note: We log multiple activities if multiple things changed
+            
+            # Log when item is newly added (plan_to_watch/plan_to_read is typically first status)
+            if status in ['plan_to_watch', 'plan_to_read']:
+                executor.submit(log_activity_with_error_handling, user_id, 'added', item_uid, activity_data)
+            
+            # Log when item is completed
+            if status == 'completed':
+                executor.submit(log_activity_with_error_handling, user_id, 'completed', item_uid, activity_data)
+            
+            # Log when item is started (watching/reading)
+            elif status in ['watching', 'reading']:
+                executor.submit(log_activity_with_error_handling, user_id, 'started', item_uid, activity_data)
+            
+            # Log when item is dropped
+            elif status == 'dropped':
+                executor.submit(log_activity_with_error_handling, user_id, 'dropped', item_uid, activity_data)
+            
+            # Log rating changes
+            if rating is not None and rating > 0:
+                executor.submit(log_activity_with_error_handling, user_id, 'rated', item_uid, {'rating': rating})
+            
+            # Log progress updates (but not for completed items as that's redundant)
+            if progress > 0 and status != 'completed':
+                executor.submit(log_activity_with_error_handling, user_id, 'updated', item_uid, {
+                    'progress': progress,
+                    'status': status
+                })
+            
+            # Always log status changes for compatibility
+            executor.submit(log_activity_with_error_handling, user_id, 'status_changed', item_uid, activity_data)
             
             return jsonify({'success': True, 'data': result.get('data', {})})
         else:
@@ -1925,6 +1977,8 @@ def remove_user_item(item_uid):
         )
         
         if response.status_code == 204:
+            # Log removal activity
+            executor.submit(log_activity_with_error_handling, user_id, 'removed', item_uid, {'action': 'removed_from_list'})
             return jsonify({'message': 'Item removed successfully'})
         else:
             return jsonify({'error': 'Failed to remove item'}), 400
@@ -2825,6 +2879,8 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
 def get_recent_user_activity(user_id: str, limit: int = 10) -> list:
     """Get user's recent activity"""
     try:
+        print(f"🔎 DEBUG get_recent_user_activity: user_id={user_id}, limit={limit}")
+        
         response = requests.get(
             f"{auth_client.base_url}/rest/v1/user_activity",
             headers=auth_client.headers,
@@ -2835,16 +2891,29 @@ def get_recent_user_activity(user_id: str, limit: int = 10) -> list:
             }
         )
         
+        print(f"📡 DEBUG: user_activity table response status: {response.status_code}")
+        
         if response.status_code == 200:
             activities = response.json()
+            print(f"📋 DEBUG: Found {len(activities)} raw activities from user_activity table")
+            
             # Enrich with item details
             for activity in activities:
                 item_details = get_item_details_simple(activity['item_uid'])
                 activity['item'] = item_details
+                
+            if activities:
+                print(f"✅ DEBUG: First enriched activity: {activities[0]}")
+            
             return activities
+        else:
+            print(f"❌ DEBUG: Failed to fetch from user_activity table: {response.status_code}")
+            print(f"❌ DEBUG: Response text: {response.text}")
         return []
     except Exception as e:
         print(f"Error getting recent activity: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def get_user_items_by_status(user_id: str, status: str, limit: int = 20) -> list:
@@ -3042,6 +3111,35 @@ def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_
         Consider batch logging for high-frequency operations if performance becomes critical.
     """
     try:
+        # Add null check for auth_client
+        if auth_client is None:
+            print("WARNING: Cannot log activity - auth_client not initialized. Check SUPABASE environment variables.")
+            return False
+            
+        # Check for recent 'updated' activity to avoid spam
+        if activity_type == 'updated':
+            # Check for an 'updated' activity for this user/item in the last 30 minutes
+            thirty_minutes_ago = datetime.utcnow() - timedelta(minutes=30)
+            
+            # Query recent activities
+            params = {
+                'user_id': f'eq.{user_id}',
+                'item_uid': f'eq.{item_uid}',
+                'activity_type': 'eq.updated',
+                'created_at': f'gt.{thirty_minutes_ago.isoformat()}'
+            }
+            
+            check_response = requests.get(
+                f"{auth_client.base_url}/rest/v1/user_activity",
+                headers=auth_client.headers,
+                params=params
+            )
+            
+            # If a recent activity exists, skip logging
+            if check_response.status_code == 200 and check_response.json():
+                return True  # Return True as this is intentional skipping
+        
+        # Original logging logic
         data = {
             'user_id': user_id,
             'activity_type': activity_type,
@@ -3058,6 +3156,30 @@ def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_
         return response.status_code in [200, 201]
     except Exception as e:
         print(f"Error logging activity: {e}")
+        return False
+
+def log_activity_with_error_handling(user_id: str, activity_type: str, item_uid: str, activity_data: dict = None):
+    """
+    Wrapper function for log_user_activity with proper error handling for async execution.
+    
+    This function ensures that any errors during activity logging are properly captured
+    and logged when called asynchronously via ThreadPoolExecutor.
+    
+    Args:
+        user_id (str): The UUID of the user performing the activity
+        activity_type (str): Type of activity being performed
+        item_uid (str): Unique identifier of the item involved in the activity
+        activity_data (dict, optional): Additional activity metadata and context
+        
+    Returns:
+        bool: True if activity logging succeeded, False if failed
+    """
+    try:
+        return log_user_activity(user_id, activity_type, item_uid, activity_data)
+    except Exception as e:
+        print(f"ERROR in async activity logging: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def calculate_watch_time(completed_items: list) -> float:
@@ -5360,13 +5482,14 @@ def get_public_user_stats(username):
 @require_privacy_check(content_type='profile')
 def get_public_user_lists(username):
     """
-    Get user's public custom lists by username.
+    Get user's accessible custom lists by username.
+    Includes public lists and friends-only lists if viewer is a friend.
     
     Path Parameters:
         username (str): Username to get lists for
         
     Returns:
-        JSON Response containing user's public lists
+        JSON Response containing user's accessible lists
         
     HTTP Status Codes:
         200: Success - Lists retrieved
@@ -5391,44 +5514,60 @@ def get_public_user_lists(username):
             
         user_id = profile['id']
         
-        # Get user's public custom lists
-        lists_response = requests.get(
-            f"{auth_client.base_url}/rest/v1/custom_lists",
-            headers=auth_client.headers,
-            params={
-                'user_id': f'eq.{user_id}',
-                'is_public': 'eq.true',
-                'select': 'id,title,description,created_at,updated_at,is_public,is_collaborative',
-                'order': 'updated_at.desc'
-            }
-        )
+        # Check privacy settings and friendship status
+        is_own_profile = viewer_id == user_id
+        is_friend = False
+        privacy_settings = None
         
-        if lists_response.status_code != 200:
-            print(f"Error fetching user lists: {lists_response.status_code}")
-            return jsonify({'lists': []})
+        if not is_own_profile and viewer_id:
+            # Import privacy middleware function
+            from middleware.privacy_middleware import are_users_friends
+            is_friend = are_users_friends(viewer_id, user_id)
             
-        lists_data = lists_response.json()
+            # Get privacy settings for the profile owner
+            privacy_settings = auth_client.get_privacy_settings(user_id)
         
-        # Get item counts for each list
+        # Determine which lists to fetch based on privacy settings and relationship
+        lists_data = []
+        
+        # If user is viewing their own profile, fetch all lists
+        if is_own_profile:
+            lists_data = auth_client.get_user_lists(user_id)
+        else:
+            # Always fetch public lists for other users
+            public_lists = auth_client.get_user_lists(user_id, is_public=True)
+            lists_data.extend(public_lists)
+            
+            # If user is a friend and list visibility is friends-only, fetch friends-only lists
+            if is_friend and privacy_settings and privacy_settings.get('list_visibility') == 'friends_only':
+                friends_only_lists = auth_client.get_user_lists(user_id, is_public=False)
+                lists_data.extend(friends_only_lists)
+        
+        # Remove duplicates based on list id
+        unique_lists = {}
+        for list_item in lists_data:
+            unique_lists[list_item['id']] = list_item
+        lists_data = list(unique_lists.values())
+        
+        # Sort by updated_at desc
+        lists_data.sort(key=lambda x: x['updated_at'], reverse=True)
+        
+        # Get item counts for all lists in batch (solves N+1 query problem)
+        list_ids = [str(list_item['id']) for list_item in lists_data]
+        
+        try:
+            # Use batch method to get all counts in one query
+            item_counts = auth_client.get_list_item_counts_batch(list_ids)
+            logger.info(f"Successfully fetched batch counts for {len(list_ids)} lists")
+        except Exception as e:
+            logger.error(f"Error in batch count query, falling back to empty counts: {e}")
+            item_counts = {list_id: 0 for list_id in list_ids}
+        
+        # Build enriched lists with batch counts
         enriched_lists = []
         for list_item in lists_data:
-            # Get count of items in this list
-            count_response = requests.get(
-                f"{auth_client.base_url}/rest/v1/custom_list_items",
-                headers=auth_client.headers,
-                params={
-                    'list_id': f'eq.{list_item["id"]}',
-                    'select': 'id',
-                    'count': 'exact'
-                }
-            )
-            
-            item_count = 0
-            if count_response.status_code == 200:
-                # Supabase returns count in content-range header
-                content_range = count_response.headers.get('content-range', '')
-                if '/' in content_range:
-                    item_count = int(content_range.split('/')[-1])
+            list_id = str(list_item['id'])
+            item_count = item_counts.get(list_id, 0)
             
             enriched_lists.append({
                 'id': list_item['id'],
@@ -5439,13 +5578,159 @@ def get_public_user_lists(username):
                 'isCollaborative': list_item.get('is_collaborative', False),
                 'createdAt': list_item['created_at'],
                 'updatedAt': list_item['updated_at'],
-                'url': f'/lists/{list_item["id"]}'
+                'url': f'/lists/{list_item["id"]}',
+                'isViewerFriend': is_friend,  # Add friendship status for frontend
+                'isOwnProfile': is_own_profile  # Add ownership status for frontend
             })
         
         return jsonify({'lists': enriched_lists})
             
     except Exception as e:
         print(f"Error getting user lists: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/<username>/activity', methods=['GET'])
+@require_privacy_check(content_type='profile')
+def get_user_activity(username):
+    """
+    Get user's recent activity by username.
+    
+    Path Parameters:
+        username (str): Username to get activity for
+        
+    Query Parameters:
+        limit (int): Maximum number of activities to return (default: 20, max: 50)
+        offset (int): Number of activities to skip (default: 0)
+        
+    Returns:
+        JSON Response containing user's recent activities
+        
+    HTTP Status Codes:
+        200: Success - Activities retrieved
+        404: Not Found - User not found or activity private
+        500: Server Error - Database error
+    """
+    try:
+        print(f"🌟 DEBUG get_user_activity: Fetching activity for username: {username}")
+        
+        # Get viewer ID from auth if available
+        viewer_id = None
+        auth_header = request.headers.get('Authorization')
+        if auth_header:
+            try:
+                user_info = auth_client.verify_jwt_token(auth_header)
+                viewer_id = user_info.get('user_id') or user_info.get('sub')
+                print(f"👤 DEBUG: Viewer ID from auth: {viewer_id}")
+            except:
+                print("⚠️ DEBUG: No valid auth token for viewer")
+                pass
+        
+        # First get user ID from username
+        profile = auth_client.get_user_profile_by_username(username, viewer_id)
+        if not profile:
+            print(f"❌ DEBUG: Profile not found for username: {username}")
+            return jsonify({'error': 'User not found or profile is private'}), 404
+            
+        user_id = profile['id']
+        print(f"✅ DEBUG: Resolved username '{username}' to user_id: {user_id}")
+        
+        # Get pagination parameters
+        limit = min(int(request.args.get('limit', 20)), 50)
+        offset = int(request.args.get('offset', 0))
+        
+        # Check if user has activity privacy set to friends-only or private
+        privacy_settings = auth_client.get_privacy_settings(user_id)
+        activity_visibility = privacy_settings.get('activity_visibility', 'public') if privacy_settings else 'public'
+        
+        # Check if viewer can see activity
+        is_own_profile = viewer_id == user_id
+        is_friend = False
+        
+        if not is_own_profile and viewer_id:
+            from middleware.privacy_middleware import are_users_friends
+            is_friend = are_users_friends(viewer_id, user_id)
+        
+        # If activity is private, return empty
+        if activity_visibility == 'private' and not is_own_profile:
+            return jsonify({'activities': []})
+        
+        # If activity is friends-only and viewer is not a friend, return empty
+        if activity_visibility == 'friends_only' and not is_own_profile and not is_friend:
+            return jsonify({'activities': []})
+        
+        # Use the same get_recent_user_activity function that dashboard uses
+        # This ensures consistency between dashboard and profile page
+        print(f"🔍 DEBUG: Fetching activities for user_id: {user_id}, limit: {limit}")
+        activities = get_recent_user_activity(user_id, limit)
+        print(f"📊 DEBUG: Retrieved {len(activities)} activities from get_recent_user_activity")
+        
+        # Log first few activities for debugging
+        if activities:
+            print(f"🎯 DEBUG: First activity: {activities[0]}")
+        else:
+            print("⚠️ DEBUG: No activities returned from get_recent_user_activity")
+        
+        # Filter activities based on offset for pagination
+        if offset > 0 and offset < len(activities):
+            activities = activities[offset:]
+            print(f"📄 DEBUG: After offset filtering, {len(activities)} activities remain")
+        elif offset >= len(activities):
+            activities = []
+            print(f"⚠️ DEBUG: Offset {offset} >= total activities {len(activities)}, returning empty")
+        
+        # Get total count from user_activity table for accurate pagination
+        count_response = requests.get(
+            f"{auth_client.base_url}/rest/v1/user_activity",
+            headers=auth_client.headers,
+            params={
+                'user_id': f'eq.{user_id}',
+                'select': 'count',
+                'limit': '1'
+            }
+        )
+        
+        total_count = 0
+        if count_response.status_code == 200 and count_response.headers.get('content-range'):
+            content_range = count_response.headers.get('content-range', '')
+            print(f"🔢 DEBUG: content-range header: '{content_range}'")
+            if '/' in content_range:
+                count_part = content_range.split('/')[-1]
+                print(f"🔢 DEBUG: count_part: '{count_part}'")
+                # Handle cases where count might be '*' (unknown count)
+                if count_part != '*' and count_part.isdigit():
+                    total_count = int(count_part)
+                else:
+                    # Fallback: use the number of activities we actually got
+                    total_count = len(activities)
+                    print(f"🔢 DEBUG: Using fallback count: {total_count}")
+            else:
+                # No proper content-range, use activities length as fallback
+                total_count = len(activities)
+        else:
+            # Count request failed or no content-range header, use activities length as fallback
+            total_count = len(activities)
+            print(f"🔢 DEBUG: Count request failed (status: {count_response.status_code}), using fallback: {total_count}")
+        
+        # Debug the final response
+        response_data = {
+            'activities': activities,
+            'pagination': {
+                'total': total_count,
+                'limit': limit,
+                'offset': offset,
+                'hasMore': offset + limit < total_count
+            }
+        }
+        
+        print(f"📦 DEBUG: Returning {len(activities)} activities to frontend")
+        print(f"📊 DEBUG: Pagination - total: {total_count}, limit: {limit}, offset: {offset}")
+        if activities:
+            print(f"🎯 DEBUG: Sample activity structure: {list(activities[0].keys()) if activities else 'N/A'}")
+        
+        return jsonify(response_data)
+            
+    except Exception as e:
+        print(f"Error getting user activity: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/follow/<username>', methods=['POST'])
@@ -10204,4 +10489,4 @@ def _generate_list_recommendations(items: list, user_id: str) -> list:
     ]
 
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False)

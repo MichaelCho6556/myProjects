@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { UserProfile, UserStats, PrivacySettings, PublicList } from "../types/social";
+import { UserActivity } from "../types";
 import { useAuthenticatedApi } from "./useAuthenticatedApi";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -11,15 +12,24 @@ export function useUserProfile(username: string) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [publicLists, setPublicLists] = useState<PublicList[]>([]);
+  const [activities, setActivities] = useState<UserActivity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [listsLoading, setListsLoading] = useState(true);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [listsError, setListsError] = useState<Error | null>(null);
+  const [activitiesError, setActivitiesError] = useState<Error | null>(null);
   const api = useAuthenticatedApi();
 
   const fetchProfile = useCallback(async () => {
     if (!username) return;
 
     setIsLoading(true);
+    setListsLoading(true);
+    setActivitiesLoading(true);
     setError(null);
+    setListsError(null);
+    setActivitiesError(null);
 
     try {
       // Check if user is authenticated to include auth headers for profile auto-creation
@@ -187,12 +197,56 @@ export function useUserProfile(username: string) {
           console.log('No public lists available for user (404), setting empty array');
           setPublicLists([]);
         } else {
-          throw new Error(`HTTP ${listsResponse.status}`);
+          throw new Error(`Lists API returned HTTP ${listsResponse.status}`);
         }
       } catch (listsError) {
         console.log('Lists fetch error:', listsError);
-        // Set empty array on error
+        const errorMessage = listsError instanceof Error ? listsError.message : 'Failed to fetch lists';
+        setListsError(new Error(errorMessage));
         setPublicLists([]);
+      } finally {
+        setListsLoading(false);
+      }
+
+      // Fetch user activities if available using public API (with auth if available)
+      try {
+        console.log(`🔍 Frontend: Fetching activities for username: ${username}`);
+        const activitiesUrl = `${API_BASE_URL}/api/users/${username}/activity?limit=20`;
+        console.log(`📡 Frontend: Activities URL: ${activitiesUrl}`);
+        
+        const activitiesResponse = await fetch(activitiesUrl, {
+          headers
+        });
+        
+        console.log(`📊 Frontend: Activities response status: ${activitiesResponse.status}`);
+        
+        if (activitiesResponse.ok) {
+          const rawActivities = await activitiesResponse.json();
+          console.log('✅ Frontend: Raw activities response:', rawActivities);
+          
+          if (rawActivities && rawActivities.activities && Array.isArray(rawActivities.activities)) {
+            console.log(`✅ Frontend: Setting ${rawActivities.activities.length} activities`);
+            setActivities(rawActivities.activities);
+          } else {
+            console.log('⚠️ Frontend: No valid activities structure in response:', rawActivities);
+            setActivities([]);
+          }
+        } else if (activitiesResponse.status === 404) {
+          // User has no activities or they're private - set empty array
+          console.log('⚠️ Frontend: No activities available for user (404), setting empty array');
+          setActivities([]);
+        } else {
+          const errorText = await activitiesResponse.text();
+          console.error(`❌ Frontend: Activities API error - Status: ${activitiesResponse.status}, Body: ${errorText}`);
+          throw new Error(`Activities API returned HTTP ${activitiesResponse.status}`);
+        }
+      } catch (activitiesError) {
+        console.error('❌ Frontend: Activities fetch error:', activitiesError);
+        const errorMessage = activitiesError instanceof Error ? activitiesError.message : 'Failed to fetch activities';
+        setActivitiesError(new Error(errorMessage));
+        setActivities([]);
+      } finally {
+        setActivitiesLoading(false);
       }
     } catch (err: any) {
       console.log('Profile fetch error:', err);
@@ -258,8 +312,13 @@ export function useUserProfile(username: string) {
     profile,
     stats,
     publicLists,
+    activities,
     isLoading,
+    listsLoading,
+    activitiesLoading,
     error,
+    listsError,
+    activitiesError,
     refetch: fetchProfile,
     followUser,
     updatePrivacySettings,
