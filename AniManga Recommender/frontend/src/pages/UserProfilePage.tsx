@@ -9,13 +9,37 @@ import { FollowButton } from "../components/social/FollowButton";
 import LoadingBanner from "../components/Loading/LoadingBanner";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import { useAuth } from "../context/AuthContext";
+import ActivityFeed from "../components/dashboard/ActivityFeed";
 import "./UserProfilePage.css";
 
 export const UserProfilePage: React.FC = () => {
   const { username } = useParams<{ username: string }>();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
-  const { profile, stats, publicLists, isLoading, error, followUser } = useUserProfile(username || "");
+  const { 
+    profile, 
+    stats, 
+    publicLists, 
+    activities, 
+    isLoading, 
+    listsLoading,
+    activitiesLoading,
+    error, 
+    listsError,
+    activitiesError,
+    followUser 
+  } = useUserProfile(username || "");
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('🎯 UserProfilePage Debug:', {
+      username,
+      activitiesLoading,
+      activitiesError,
+      activitiesCount: activities?.length || 0,
+      activities: activities
+    });
+  }, [username, activities, activitiesLoading, activitiesError]);
 
   // Redirect if no username provided (moved to useEffect to prevent infinite loops)
   useEffect(() => {
@@ -58,7 +82,7 @@ export const UserProfilePage: React.FC = () => {
         <div className="dashboard-container">
           <div className="error-state">
             <div className="error-content">
-              <div className="error-icon">👤</div>
+              <div className="error-icon"></div>
               <h2>User Not Found</h2>
               <p>The user "{username}" does not exist or their profile is private.</p>
               <button onClick={() => navigate("/")} className="retry-button">
@@ -144,17 +168,10 @@ export const UserProfilePage: React.FC = () => {
           </div>
         </header>
 
-        {/* User Statistics */}
-        {stats && (
-          <section className="profile-stats">
-            <UserStatsComponent stats={stats} />
-          </section>
-        )}
-
-        {/* Profile Content */}
-        <div className="profile-content">
-          {/* Recent Activity and Favorite Genres Row */}
-          <div className="content-row">
+        {/* New Profile Body Layout */}
+        <div className="profile-body">
+          {/* Main Content Column */}
+          <main className="profile-main-content">
             {/* Recent Activity Section */}
             <section className="profile-section">
               <div className="section-header">
@@ -163,16 +180,192 @@ export const UserProfilePage: React.FC = () => {
                 </div>
               </div>
               <div className="section-content">
-                <div className="empty-state">
-                  <div className="empty-icon">📊</div>
-                  <h3>Activity Timeline</h3>
-                  <p>
-                    Track {isOwnProfile ? "your" : `${profile.displayName}'s`} recent anime and manga activity
-                  </p>
-                  <small>Coming soon - dashboard-style activity feed</small>
-                </div>
+                {activitiesLoading ? (
+                  <div className="activity-loading-skeleton">
+                    <div className="skeleton-activity-item">
+                      <div className="skeleton-line" style={{ width: '70%' }}></div>
+                      <div className="skeleton-line" style={{ width: '40%' }}></div>
+                    </div>
+                    <div className="skeleton-activity-item">
+                      <div className="skeleton-line" style={{ width: '60%' }}></div>
+                      <div className="skeleton-line" style={{ width: '50%' }}></div>
+                    </div>
+                    <div className="skeleton-activity-item">
+                      <div className="skeleton-line" style={{ width: '80%' }}></div>
+                      <div className="skeleton-line" style={{ width: '30%' }}></div>
+                    </div>
+                  </div>
+                ) : activitiesError ? (
+                  <div className="enhanced-empty-state error-state">
+                    <h3>Activity Unavailable</h3>
+                    <p>Unable to load recent activity data. This might be due to privacy settings or a temporary issue.</p>
+                    <small className="error-message">{activitiesError.message}</small>
+                  </div>
+                ) : activities && activities.length > 0 ? (
+                  <ActivityFeed activities={activities} />
+                ) : (
+                  <div className="enhanced-empty-state">
+                    <h3>Activity Timeline</h3>
+                    <p>
+                      Track {isOwnProfile ? "your" : `${profile.displayName}'s`} recent anime and manga activity
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
+
+            {/* Custom Lists Section */}
+            <section className="profile-section">
+              <div className="section-header">
+                <div className="section-title">
+                  <h2>Custom Lists</h2>
+                  {publicLists && publicLists.length > 0 && (
+                    <span className="section-count">{publicLists.length}</span>
+                  )}
+                </div>
+              </div>
+              <div className="section-content">
+                {listsLoading ? (
+                  <div className="lists-loading-skeleton">
+                    <div className="skeleton-list-card">
+                      <div className="skeleton-card-header">
+                        <div className="skeleton-line title" style={{ width: '70%' }}></div>
+                        <div className="skeleton-line" style={{ width: '30%' }}></div>
+                      </div>
+                      <div className="skeleton-line description" style={{ width: '90%' }}></div>
+                      <div className="skeleton-line meta" style={{ width: '50%' }}></div>
+                    </div>
+                    <div className="skeleton-list-card">
+                      <div className="skeleton-card-header">
+                        <div className="skeleton-line title" style={{ width: '60%' }}></div>
+                        <div className="skeleton-line" style={{ width: '25%' }}></div>
+                      </div>
+                      <div className="skeleton-line description" style={{ width: '85%' }}></div>
+                      <div className="skeleton-line meta" style={{ width: '45%' }}></div>
+                    </div>
+                  </div>
+                ) : listsError ? (
+                  <div className="error-state">
+                    <div className="error-icon"></div>
+                    <h3>Lists Unavailable</h3>
+                    <p>Unable to load custom lists. This might be due to privacy settings or a temporary issue.</p>
+                    <small className="error-message">{listsError.message}</small>
+                  </div>
+                ) : publicLists && publicLists.length > 0 ? (
+                  <div className="enhanced-lists-container">
+                    {publicLists.map((list) => (
+                      <div key={list.id} className="enhanced-list-card">
+                        <div className="list-card-header">
+                          <div className="list-primary-info">
+                            <h3 className="list-title">{list.title}</h3>
+                            <div className="list-privacy-indicators">
+                              {!list.isPublic && profile?.isFollowing && (
+                                <span className="privacy-badge friends-only">
+                                  <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                  </svg>
+                                  Friends Only
+                                </span>
+                              )}
+                              {list.isCollaborative && (
+                                <span className="privacy-badge collaborative">
+                                  <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 108 0 4 4 0 00-8 0M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+                                  </svg>
+                                  Collaborative
+                                </span>
+                              )}
+                              {list.isPublic && (
+                                <span className="privacy-badge public">
+                                  <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                  </svg>
+                                  Public
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="list-stats">
+                            <div className="stat-item">
+                              <span className="stat-number">{list.itemCount || 0}</span>
+                              <span className="stat-label">Items</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {list.description && (
+                          <p className="list-description">{list.description}</p>
+                        )}
+                        
+                        <div className="list-footer">
+                          <div className="list-meta">
+                            <span className="list-meta-item">
+                              <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.08 5.74-.08 5.74s-5.58-.02-7.13-.15c-.12-.01-.02-3.77-.02-5.64-.01-2.21.61-3.24.61-3.24s1.25-.86 3.01-.86 2.92.86 2.92.86.76 1.04.69 3.29z"/>
+                              </svg>
+                              Updated {new Date(list.updatedAt).toLocaleDateString()}
+                            </span>
+                            <span className="list-meta-item">
+                              <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/>
+                              </svg>
+                              Created {new Date(list.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <button 
+                            onClick={() => navigate(list.url)}
+                            className="enhanced-view-button"
+                          >
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.08 5.74-.08 5.74s-5.58-.02-7.13-.15c-.12-.01-.02-3.77-.02-5.64-.01-2.21.61-3.24.61-3.24s1.25-.86 3.01-.86 2.92.86 2.92.86.76 1.04.69 3.29z"/>
+                            </svg>
+                            View List
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="enhanced-empty-state">
+                    <h3>No Lists Yet</h3>
+                    <p>
+                      {isOwnProfile 
+                        ? "Create your first custom list to organize your favorite anime and manga"
+                        : `${profile.displayName} hasn't created any ${profile.isFollowing && !isOwnProfile ? 'visible' : 'public'} lists yet`
+                      }
+                    </p>
+                    {isOwnProfile && (
+                      <button 
+                        onClick={() => navigate('/lists/create')}
+                        className="create-list-button"
+                      >
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                        Create Your First List
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+          </main>
+
+          {/* Sidebar Column */}
+          <aside className="profile-sidebar">
+            {/* User Statistics Section */}
+            {stats && (
+              <section className="profile-section">
+                <div className="section-header">
+                  <div className="section-title">
+                    <h2>Statistics</h2>
+                  </div>
+                </div>
+                <div className="section-content">
+                  <UserStatsComponent stats={stats} />
+                </div>
+              </section>
+            )}
 
             {/* Favorite Genres Section */}
             <section className="profile-section">
@@ -183,72 +376,22 @@ export const UserProfilePage: React.FC = () => {
               </div>
               <div className="section-content">
                 {stats && stats.favoriteGenres.length > 0 ? (
-                  <div className="genres-list">
-                    {stats.favoriteGenres.slice(0, 5).map((genre, index) => (
-                      <div key={genre} className="genre-item">
-                        <span className="genre-rank">#{index + 1}</span>
-                        <span className="genre-name">{genre}</span>
-                      </div>
+                  <div className="genres-pills-container">
+                    {stats.favoriteGenres.slice(0, 8).map((genre) => (
+                      <span key={genre} className="genre-pill">
+                        {genre}
+                      </span>
                     ))}
                   </div>
                 ) : (
-                  <div className="empty-state">
-                    <div className="empty-icon">🏷️</div>
+                  <div className="enhanced-empty-state">
                     <h3>Genre Preferences</h3>
                     <p>Discover {isOwnProfile ? "your" : `${profile.displayName}'s`} most watched genres</p>
-                    <small>No genre data available</small>
                   </div>
                 )}
               </div>
             </section>
-          </div>
-
-          {/* Public Lists Section */}
-          <section className="profile-section">
-            <div className="section-header">
-              <div className="section-title">
-                <h2>Public Lists</h2>
-              </div>
-            </div>
-            <div className="section-content">
-              {publicLists && publicLists.length > 0 ? (
-                <div className="lists-container">
-                  {publicLists.map((list) => (
-                    <div key={list.id} className="list-item-card">
-                      <div className="list-header">
-                        <h3 className="list-title">{list.title}</h3>
-                        <span className="list-item-count">{list.itemCount} items</span>
-                      </div>
-                      {list.description && (
-                        <p className="list-description">{list.description}</p>
-                      )}
-                      <div className="list-meta">
-                        <span className="list-meta-item">
-                          Updated {new Date(list.updatedAt).toLocaleDateString()}
-                        </span>
-                        {list.isCollaborative && (
-                          <span className="list-badge collaborative">Collaborative</span>
-                        )}
-                      </div>
-                      <button 
-                        onClick={() => navigate(list.url)}
-                        className="list-view-button"
-                      >
-                        View List
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state">
-                  <div className="empty-icon">📝</div>
-                  <h3>Custom Lists</h3>
-                  <p>View {isOwnProfile ? "your" : `${profile.displayName}'s`} curated collections</p>
-                  <small>No public lists available</small>
-                </div>
-              )}
-            </div>
-          </section>
+          </aside>
         </div>
       </div>
     </div>
