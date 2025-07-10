@@ -52,6 +52,8 @@ PROJECT_DOCUMENTATION.md
 apm_artifacts/
 .cursor/rules/
 
+.env.test
+
 CLAUDE.md
 clauderules.md
 
