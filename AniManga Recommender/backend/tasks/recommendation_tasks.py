@@ -468,7 +468,12 @@ def calculate_popular_lists(self) -> Dict[str, Any]:
             print(f"❌ Failed to import supabase client: {e}")
             raise Exception(f"Supabase client import failed: {e}")
         
-        auth_client = SupabaseAuthClient()
+        # Get Supabase configuration from environment
+        base_url = os.getenv('SUPABASE_URL', '').strip().rstrip('/')
+        api_key = os.getenv('SUPABASE_KEY', '').strip()
+        service_key = os.getenv('SUPABASE_SERVICE_KEY', '').strip()
+        
+        auth_client = SupabaseAuthClient(base_url, api_key, service_key)
         
         # Calculate popular lists based on recent activity
         try:
@@ -628,7 +633,12 @@ def generate_community_recommendations(self, user_id: str) -> Dict[str, Any]:
             print(f"❌ Failed to import required modules: {e}")
             raise Exception(f"Module import failed: {e}")
         
-        auth_client = SupabaseAuthClient()
+        # Get Supabase configuration from environment
+        base_url = os.getenv('SUPABASE_URL', '').strip().rstrip('/')
+        api_key = os.getenv('SUPABASE_KEY', '').strip()
+        service_key = os.getenv('SUPABASE_SERVICE_KEY', '').strip()
+        
+        auth_client = SupabaseAuthClient(base_url, api_key, service_key)
         
         # Get user's preferences and lists
         try:

@@ -19,6 +19,10 @@ export function useUserProfile(username: string) {
   const [error, setError] = useState<Error | null>(null);
   const [listsError, setListsError] = useState<Error | null>(null);
   const [activitiesError, setActivitiesError] = useState<Error | null>(null);
+  const [statsCacheHit, setStatsCacheHit] = useState<boolean | undefined>();
+  const [statsLastUpdated, setStatsLastUpdated] = useState<string | undefined>();
+  const [statsUpdating, setStatsUpdating] = useState<boolean>(false);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timer | null>(null);
   const api = useAuthenticatedApi();
 
   const fetchProfile = useCallback(async () => {
@@ -81,8 +85,26 @@ export function useUserProfile(username: string) {
         });
         
         if (statsResponse.ok) {
-          const rawStats = await statsResponse.json();
-          console.log('Raw stats response:', rawStats);
+          const response = await statsResponse.json();
+          console.log('Raw stats response:', response);
+          
+          // Check if response has new format with cache metadata
+          let rawStats;
+          if (response && response.stats && typeof response.stats === 'object') {
+            // New format with cache metadata
+            rawStats = response.stats;
+            setStatsCacheHit(response.cache_hit || false);
+            setStatsLastUpdated(response.last_updated || undefined);
+            setStatsUpdating(response.updating || false);
+          } else {
+            // Old format - direct stats object
+            rawStats = response;
+            // Clear cache metadata for old format
+            setStatsCacheHit(undefined);
+            setStatsLastUpdated(undefined);
+            setStatsUpdating(false);
+          }
+          
           console.log('Favorite genres from API:', rawStats.favorite_genres);
           console.log('Completion rate from API:', rawStats.completion_rate);
 
@@ -112,6 +134,7 @@ export function useUserProfile(username: string) {
               completionRate: rawStats.completion_rate || 0,
               currentStreak: rawStats.current_streak_days || 0,
               longestStreak: rawStats.longest_streak_days || 0,
+              ratingDistribution: rawStats.rating_distribution || undefined,
             };
             
             console.log('Transformed stats favorite genres:', transformedStats.favoriteGenres);
@@ -304,9 +327,102 @@ export function useUserProfile(username: string) {
     [api, fetchProfile]
   );
 
+  // Refetch function that can force a refresh
+  const refetchStats = useCallback(async (forceRefresh: boolean = false) => {
+    try {
+      const headers: Record<string, string> = {};
+      
+      try {
+        const { data: { session } } = await import('../lib/supabase').then(m => m.supabase.auth.getSession());
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+      } catch (authError) {
+        console.log('No auth session found');
+      }
+
+      const url = forceRefresh 
+        ? `${API_BASE_URL}/api/analytics/user/${profile?.id}/stats?refresh=true`
+        : `${API_BASE_URL}/api/analytics/user/${profile?.id}/stats`;
+      
+      const statsResponse = await fetch(url, { headers });
+      
+      if (statsResponse.ok) {
+        const response = await statsResponse.json();
+        
+        if (response && response.stats) {
+          const rawStats = response.stats;
+          setStatsCacheHit(response.cache_hit || false);
+          setStatsLastUpdated(response.last_updated || undefined);
+          setStatsUpdating(response.updating || false);
+          
+          // Transform stats
+          const favoriteGenres = Array.isArray(rawStats.favorite_genres) 
+            ? rawStats.favorite_genres 
+            : [];
+          
+          const transformedStats: UserStats = {
+            totalAnime:
+              (rawStats.total_anime_watched || 0) +
+              (rawStats.status_counts?.watching || 0) +
+              (rawStats.status_counts?.on_hold || 0) +
+              (rawStats.status_counts?.dropped || 0) +
+              (rawStats.status_counts?.plan_to_watch || 0),
+            completedAnime: rawStats.total_anime_watched || rawStats.status_counts?.completed || 0,
+            totalManga:
+              (rawStats.total_manga_read || 0) + 
+              (rawStats.status_counts?.reading || 0) + 
+              (rawStats.status_counts?.plan_to_read || 0),
+            completedManga: rawStats.total_manga_read || 0,
+            totalHoursWatched: rawStats.total_hours_watched || 0,
+            totalChaptersRead: rawStats.total_chapters_read || 0,
+            favoriteGenres: favoriteGenres,
+            averageRating: rawStats.average_score || 0,
+            completionRate: rawStats.completion_rate || 0,
+            currentStreak: rawStats.current_streak_days || 0,
+            longestStreak: rawStats.longest_streak_days || 0,
+            ratingDistribution: rawStats.rating_distribution || undefined,
+          };
+          
+          setStats(transformedStats);
+          
+          // If stats are updating, start polling
+          if (response.updating && !pollingInterval) {
+            const interval = setInterval(() => {
+              refetchStats(false); // Poll without forcing refresh
+            }, 3000); // Poll every 3 seconds
+            setPollingInterval(interval);
+          } else if (!response.updating && pollingInterval) {
+            // Stop polling when updating is complete
+            clearInterval(pollingInterval);
+            setPollingInterval(null);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error refetching stats:', err);
+    }
+  }, [profile?.id, pollingInterval]);
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
+
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
+
+  // Poll when stats are updating
+  useEffect(() => {
+    if (statsUpdating && profile?.id) {
+      refetchStats(false);
+    }
+  }, [statsUpdating, profile?.id, refetchStats]);
 
   return {
     profile,
@@ -319,7 +435,15 @@ export function useUserProfile(username: string) {
     error,
     listsError,
     activitiesError,
-    refetch: fetchProfile,
+    statsCacheHit,
+    statsLastUpdated,
+    statsUpdating,
+    refetch: () => {
+      fetchProfile();
+      if (profile?.id) {
+        refetchStats(true); // Force refresh when user clicks refresh
+      }
+    },
     followUser,
     updatePrivacySettings,
   };

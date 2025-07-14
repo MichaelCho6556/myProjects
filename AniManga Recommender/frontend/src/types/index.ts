@@ -75,14 +75,22 @@ export interface UserStatistics {
   user_id: string;
   total_anime_watched: number;
   total_manga_read: number;
+  anime_completed: number;
+  manga_completed: number;
+  completion_rate_anime: number;
+  completion_rate_manga: number;
   total_hours_watched: number;
   total_chapters_read: number;
+  average_anime_rating: number;
+  average_manga_rating: number;
   average_score: number;
-  favorite_genres: string[];
+  favorite_genres: Array<{genre: string; count: number}>;
+  rating_distribution: Record<number, number>;
   current_streak_days: number;
   longest_streak_days: number;
   completion_rate: number;
-  updated_at: string;
+  last_updated?: string;
+  updated_at?: string;
 }
 
 export interface UserItem {
@@ -109,6 +117,19 @@ export interface QuickStats {
   dropped: number;
 }
 
+/**
+ * Generic cached response wrapper
+ */
+export interface CachedResponse<T> {
+  data: T;
+  cache_hit: boolean;
+  last_updated?: string;
+  updating?: boolean;
+}
+
+/**
+ * Dashboard response with cache metadata
+ */
 export interface DashboardData {
   user_stats: UserStatistics;
   recent_activity: UserActivity[];
@@ -117,6 +138,52 @@ export interface DashboardData {
   plan_to_watch: UserItem[];
   on_hold: UserItem[];
   quick_stats: QuickStats;
+  cache_hit?: boolean;
+  last_updated?: string;
+  updating?: boolean;
+}
+
+/**
+ * Public user stats response
+ */
+export interface PublicUserStatsResponse {
+  stats: UserStatistics | null;
+  cache_hit: boolean;
+  last_updated?: string;
+  privacy_blocked: boolean;
+  message?: string;
+  user?: {
+    id: string;
+    username: string;
+    avatar_url?: string;
+  };
+}
+
+/**
+ * Content moderation result
+ */
+export interface ModerationResult {
+  toxicity_score: number;
+  flagged: boolean;
+  reason?: string;
+  moderation_status?: 'pending' | 'approved' | 'flagged' | 'removed';
+}
+
+/**
+ * Platform statistics
+ */
+export interface PlatformStatistics {
+  total_users: number;
+  total_anime: number;
+  total_manga: number;
+  total_reviews: number;
+  total_comments: number;
+  active_users_today: number;
+  active_users_week: number;
+  popular_anime: Array<{uid: string; title: string; count: number}>;
+  popular_manga: Array<{uid: string; title: string; count: number}>;
+  trending_genres: Array<{genre: string; count: number}>;
+  cached_at?: string;
 }
 
 /**

@@ -29,6 +29,7 @@ export interface UserStats {
   completionRate: number;
   currentStreak: number;
   longestStreak: number;
+  ratingDistribution?: { [rating: string]: number };
 }
 
 export interface PrivacySettings {

@@ -145,6 +145,108 @@ export const Comment: React.FC<CommentItemProps> = ({
   };
 
   // Process content for mentions and spoilers
+  const renderToxicityIndicators = () => {
+    // Show toxicity warning for regular users
+    if (comment.toxicity_warning && !comment.is_flagged && !canModerate) {
+      const level = comment.toxicity_level || 'medium';
+      return (
+        <div className={`toxicity-warning toxicity-${level}`}>
+          <span className="warning-icon">⚠️</span>
+          <span className="warning-text">
+            This comment may contain potentially offensive content
+          </span>
+          {comment.toxicity_level && (
+            <span className={`toxicity-badge ${level}`}>
+              {level.toUpperCase()}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    // Show detailed toxicity information for moderators and authors
+    if ((canModerate || isAuthor) && comment.toxicity_score !== undefined) {
+      return (
+        <div className="moderation-info">
+          <div className="toxicity-details">
+            <span className="toxicity-score">
+              Toxicity: {(comment.toxicity_score * 100).toFixed(0)}%
+            </span>
+            {comment.analysis_confidence && (
+              <span className="confidence-score" title="Analysis confidence">
+                Confidence: {(comment.analysis_confidence * 100).toFixed(0)}%
+              </span>
+            )}
+            {comment.toxicity_score > 0.3 && (
+              <span className={`toxicity-level ${
+                comment.toxicity_score > 0.8 ? 'high' : 
+                comment.toxicity_score > 0.6 ? 'medium' : 'low'
+              }`}>
+                {comment.toxicity_score > 0.8 ? 'High Risk' : 
+                 comment.toxicity_score > 0.6 ? 'Medium Risk' : 'Low Risk'}
+              </span>
+            )}
+          </div>
+          
+          {comment.toxicity_categories && Object.keys(comment.toxicity_categories).length > 0 && (
+            <div className="toxicity-categories">
+              {Object.entries(comment.toxicity_categories)
+                .filter(([_, isPresent]) => isPresent)
+                .map(([category, _]) => (
+                  <span key={category} className={`category-tag ${category}`}>
+                    {category.replace('_', ' ')}
+                  </span>
+                ))}
+            </div>
+          )}
+          
+          {comment.cache_metadata?.last_analyzed && (
+            <div className="analysis-timestamp">
+              <span className="timestamp-label">Analyzed:</span>
+              <span className="timestamp-value">
+                {new Date(comment.cache_metadata.last_analyzed).toLocaleString()}
+              </span>
+              {comment.cache_metadata.cache_hit && (
+                <span className="cache-indicator" title="Data from cache">📋</span>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const renderAnalysisStatus = () => {
+    const status = comment.cache_metadata?.analysis_status;
+    
+    if (!status || status === 'completed' || status === 'unknown') {
+      return null;
+    }
+
+    const statusConfig = {
+      pending: { icon: '⏳', text: 'Analysis pending...', class: 'pending' },
+      analyzing: { icon: '🔍', text: 'Analyzing content...', class: 'analyzing' },
+      failed: { icon: '❌', text: 'Analysis failed', class: 'failed' }
+    };
+
+    const config = statusConfig[status as keyof typeof statusConfig];
+    if (!config) return null;
+
+    return (
+      <div className={`analysis-status ${config.class}`}>
+        <span className="status-icon">{config.icon}</span>
+        <span className="status-text">{config.text}</span>
+        {status === 'analyzing' && (
+          <div className="analyzing-spinner">
+            <div className="spinner"></div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const processContent = (content: string) => {
     if (comment.deleted) {
       return <span className="deleted-content">{content}</span>;
@@ -207,6 +309,34 @@ export const Comment: React.FC<CommentItemProps> = ({
       </div>
 
       <div className="comment-content">
+        {/* Show moderation status if content is flagged */}
+        {comment.is_flagged && (
+          <div className="moderation-banner">
+            <span className="moderation-icon">⚠️</span>
+            <span className="moderation-text">
+              {comment.moderation_status === 'pending' 
+                ? 'This comment is under review'
+                : comment.moderation_status === 'removed'
+                ? 'This comment has been removed for violating community guidelines'
+                : 'This comment has been flagged'}
+            </span>
+            {isAuthor && comment.moderation_status === 'removed' && (
+              <button 
+                className="appeal-btn"
+                onClick={() => window.location.href = `/appeal/comment/${comment.id}`}
+              >
+                Appeal
+              </button>
+            )}
+          </div>
+        )}
+        
+        {/* Enhanced toxicity indicators */}
+        {renderToxicityIndicators()}
+        
+        {/* Analysis status indicator */}
+        {renderAnalysisStatus()}
+        
         {isEditing ? (
           <div className="comment-edit-form">
             <textarea

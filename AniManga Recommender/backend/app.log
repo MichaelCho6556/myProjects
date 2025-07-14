@@ -46,3 +46,382 @@ LINE 2: ...uid, status, progress, updated_at, rating, notes, start_date...
                 ]
 [parameters: {'user_id': '9dcfec77-6bd0-4982-8689-6621537b1928', 'item_uid': 'anime_1', 'status': 'watching', 'progress': 5, 'rating': 8.0, 'notes': ''}]
 (Background on this error at: https://sqlalche.me/e/20/f405)
+2025-07-10 08:52:18,781 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-10 08:52:18,782 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-10 09:52:22,749 - tests_integration.test_supabase_client - ERROR - Error deleting custom list: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: DELETE FROM custom_lists WHERE id = %(list_id)s]
+[parameters: {'list_id': '58594d8b-0ef7-4de7-91c5-79628b1e370c'}]
+(Background on this error at: https://sqlalche.me/e/20/2j85)
+2025-07-10 09:52:22,750 - tests_integration.test_supabase_client - ERROR - Error getting custom list details: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: 
+                    SELECT id, title, description, is_public, is_collaborative, 
+                           user_id, created_at, updated_at
+                    FROM custom_lists 
+                    WHERE id = %(list_id)s
+                ]
+[parameters: {'list_id': '58594d8b-0ef7-4de7-91c5-79628b1e370c'}]
+(Background on this error at: https://sqlalche.me/e/20/2j85)
+2025-07-10 09:58:50,542 - tests_integration.test_supabase_client - ERROR - Error adding item to custom list: (psycopg2.errors.UndefinedColumn) column "id" does not exist
+LINE 1: SELECT id, uid, title, media_type FROM items WHERE uid = 'an...
+               ^
+HINT:  Perhaps you meant to reference the column "items.uid".
+
+[SQL: SELECT id, uid, title, media_type FROM items WHERE uid = %(uid)s]
+[parameters: {'uid': 'anime_1'}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-07-10 10:03:17,356 - tests_integration.test_supabase_client - ERROR - Error adding item to custom list: (psycopg2.errors.UndefinedColumn) column "notes" of relation "custom_list_items" does not exist
+LINE 3: ...list_id, item_uid, position, personal_rating, status, notes)
+                                                                 ^
+
+[SQL: 
+                    INSERT INTO custom_list_items 
+                    (list_id, item_uid, position, personal_rating, status, notes)
+                    VALUES (%(list_id)s, %(item_uid)s, %(position)s, %(personal_rating)s, %(status)s, %(notes)s)
+                ]
+[parameters: {'list_id': '060d7717-f560-451f-810f-c4c4385887bc', 'item_uid': 'anime_1', 'position': 1, 'personal_rating': 9, 'status': 'completed', 'notes': 'Great addition to the list!'}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-07-10 10:19:24,544 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 3fbc4edf-fd35-40e0-86a4-dd012c65544f, item anime_1
+2025-07-10 10:19:24,547 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 3fbc4edf-fd35-40e0-86a4-dd012c65544f, item anime_2
+2025-07-10 10:19:24,550 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 3fbc4edf-fd35-40e0-86a4-dd012c65544f, item manga_1
+2025-07-10 10:20:29,764 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 711aaf39-e4a9-49e9-a61f-02bda2fcb3a7, item anime_1
+2025-07-10 10:20:29,769 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 711aaf39-e4a9-49e9-a61f-02bda2fcb3a7, item anime_2
+2025-07-10 10:20:29,772 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 711aaf39-e4a9-49e9-a61f-02bda2fcb3a7, item manga_1
+2025-07-10 10:22:53,671 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 55139f8d-e81c-42e6-9622-3a4b0ef4f818, item anime_1
+2025-07-10 10:22:53,677 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 55139f8d-e81c-42e6-9622-3a4b0ef4f818, item anime_2
+2025-07-10 10:22:53,681 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 55139f8d-e81c-42e6-9622-3a4b0ef4f818, item manga_1
+2025-07-10 10:30:06,398 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 268f29f1-3ed8-4275-9230-a2773e759eb8, item anime_1
+2025-07-10 10:30:06,403 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 268f29f1-3ed8-4275-9230-a2773e759eb8, item anime_2
+2025-07-10 10:30:06,409 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 268f29f1-3ed8-4275-9230-a2773e759eb8, item manga_1
+2025-07-10 10:32:22,882 - tests_integration.test_supabase_client - INFO - Inserted new user item for user a96beb92-aa4b-461e-9ca6-57b30047ccc5, item anime_1
+2025-07-10 10:32:22,899 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 1a1175d1-a344-4ce9-a5c4-b6add35f389a, item anime_1
+2025-07-10 10:32:22,903 - tests_integration.test_supabase_client - INFO - Updated user item for user 1a1175d1-a344-4ce9-a5c4-b6add35f389a, item anime_1
+2025-07-10 10:32:22,914 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 6478f1b3-8c56-4a2d-9f86-370c3e2c23ac, item anime_1
+2025-07-10 10:32:22,927 - tests_integration.test_supabase_client - INFO - Inserted new user item for user ee4d7361-ba2f-4319-91ca-48d24238a2b2, item anime_1
+2025-07-10 10:32:22,930 - tests_integration.test_supabase_client - INFO - Inserted new user item for user ee4d7361-ba2f-4319-91ca-48d24238a2b2, item anime_2
+2025-07-10 10:32:22,933 - tests_integration.test_supabase_client - INFO - Inserted new user item for user ee4d7361-ba2f-4319-91ca-48d24238a2b2, item manga_1
+2025-07-10 10:32:22,989 - tests_integration.test_supabase_client - INFO - Inserted new user item for user a74fa536-65b4-44e5-ab69-6f85d5ee33b2, item anime_1
+2025-07-10 10:32:22,992 - tests_integration.test_supabase_client - INFO - Inserted new user item for user a74fa536-65b4-44e5-ab69-6f85d5ee33b2, item anime_2
+2025-07-10 10:32:22,995 - tests_integration.test_supabase_client - INFO - Inserted new user item for user a74fa536-65b4-44e5-ab69-6f85d5ee33b2, item manga_1
+2025-07-10 10:32:33,194 - tests_integration.test_supabase_client - INFO - Inserted new user item for user b49bdd2f-0842-45ea-9a76-f08195e54ce0, item anime_1
+2025-07-10 10:32:33,199 - tests_integration.test_supabase_client - INFO - Inserted new user item for user b49bdd2f-0842-45ea-9a76-f08195e54ce0, item anime_2
+2025-07-10 10:32:33,204 - tests_integration.test_supabase_client - INFO - Inserted new user item for user b49bdd2f-0842-45ea-9a76-f08195e54ce0, item manga_1
+2025-07-10 10:32:33,210 - tests_integration.test_supabase_client - INFO - Inserted new user item for user b49bdd2f-0842-45ea-9a76-f08195e54ce0, item anime_3
+2025-07-10 10:32:33,214 - tests_integration.test_supabase_client - INFO - Inserted new user item for user b49bdd2f-0842-45ea-9a76-f08195e54ce0, item manga_2
+2025-07-10 10:32:33,219 - tests_integration.test_supabase_client - INFO - Updated user item for user b49bdd2f-0842-45ea-9a76-f08195e54ce0, item anime_1
+2025-07-10 10:32:33,224 - tests_integration.test_supabase_client - INFO - Updated user item for user b49bdd2f-0842-45ea-9a76-f08195e54ce0, item anime_2
+2025-07-10 10:32:33,228 - tests_integration.test_supabase_client - INFO - Updated user item for user b49bdd2f-0842-45ea-9a76-f08195e54ce0, item manga_1
+2025-07-10 10:32:33,233 - tests_integration.test_supabase_client - INFO - Updated user item for user b49bdd2f-0842-45ea-9a76-f08195e54ce0, item anime_3
+2025-07-10 10:32:33,237 - tests_integration.test_supabase_client - INFO - Updated user item for user b49bdd2f-0842-45ea-9a76-f08195e54ce0, item manga_2
+2025-07-10 10:38:24,215 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 30101653-7a70-4a6b-97a0-d7b6375bfb39, item anime_1
+2025-07-10 10:38:24,221 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 30101653-7a70-4a6b-97a0-d7b6375bfb39, item anime_2
+2025-07-10 10:38:24,223 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 30101653-7a70-4a6b-97a0-d7b6375bfb39, item manga_1
+2025-07-10 10:42:22,626 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 03089bf1-4d36-4548-8bec-71222da8204b, item anime_1
+2025-07-10 10:42:22,631 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 03089bf1-4d36-4548-8bec-71222da8204b, item anime_2
+2025-07-10 10:42:22,636 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 03089bf1-4d36-4548-8bec-71222da8204b, item manga_1
+2025-07-10 10:42:36,597 - tests_integration.test_supabase_client - INFO - Inserted new user item for user b8f65f2d-1800-4aa5-8794-f5d187a8f9bd, item anime_1
+2025-07-10 10:42:36,609 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 3341129e-152d-4ff6-8a8e-83c02c1b4347, item anime_1
+2025-07-10 10:42:36,613 - tests_integration.test_supabase_client - INFO - Updated user item for user 3341129e-152d-4ff6-8a8e-83c02c1b4347, item anime_1
+2025-07-10 10:42:36,630 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 0ffeb190-2856-4357-8ae2-9098522c57a2, item anime_1
+2025-07-10 10:42:36,643 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 0baeeda7-cca2-4cd5-915b-8c5117a0bd5a, item anime_1
+2025-07-10 10:42:36,646 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 0baeeda7-cca2-4cd5-915b-8c5117a0bd5a, item anime_2
+2025-07-10 10:42:36,649 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 0baeeda7-cca2-4cd5-915b-8c5117a0bd5a, item manga_1
+2025-07-10 10:42:36,716 - tests_integration.test_supabase_client - INFO - Inserted new user item for user ef4ff502-6ca8-4797-8f1f-7f238727aeb6, item anime_1
+2025-07-10 10:42:36,719 - tests_integration.test_supabase_client - INFO - Inserted new user item for user ef4ff502-6ca8-4797-8f1f-7f238727aeb6, item anime_2
+2025-07-10 10:42:36,722 - tests_integration.test_supabase_client - INFO - Inserted new user item for user ef4ff502-6ca8-4797-8f1f-7f238727aeb6, item manga_1
+2025-07-10 10:42:45,126 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 8c53b050-2f9e-4307-80bd-e7351ec84b55, item anime_1
+2025-07-10 10:42:45,129 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 8c53b050-2f9e-4307-80bd-e7351ec84b55, item anime_2
+2025-07-10 10:42:45,138 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 8c53b050-2f9e-4307-80bd-e7351ec84b55, item manga_1
+2025-07-10 10:42:45,141 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 8c53b050-2f9e-4307-80bd-e7351ec84b55, item anime_3
+2025-07-10 10:42:45,144 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 8c53b050-2f9e-4307-80bd-e7351ec84b55, item manga_2
+2025-07-10 10:42:45,148 - tests_integration.test_supabase_client - INFO - Updated user item for user 8c53b050-2f9e-4307-80bd-e7351ec84b55, item anime_1
+2025-07-10 10:42:45,155 - tests_integration.test_supabase_client - INFO - Updated user item for user 8c53b050-2f9e-4307-80bd-e7351ec84b55, item anime_2
+2025-07-10 10:42:45,158 - tests_integration.test_supabase_client - INFO - Updated user item for user 8c53b050-2f9e-4307-80bd-e7351ec84b55, item manga_1
+2025-07-10 10:42:45,162 - tests_integration.test_supabase_client - INFO - Updated user item for user 8c53b050-2f9e-4307-80bd-e7351ec84b55, item anime_3
+2025-07-10 10:42:45,164 - tests_integration.test_supabase_client - INFO - Updated user item for user 8c53b050-2f9e-4307-80bd-e7351ec84b55, item manga_2
+2025-07-10 10:45:27,629 - tests_integration.test_supabase_client - INFO - Inserted new user item for user fc753eee-32c4-4ec2-b890-434b9f6711cd, item anime_1
+2025-07-10 10:45:27,636 - tests_integration.test_supabase_client - INFO - Inserted new user item for user fc753eee-32c4-4ec2-b890-434b9f6711cd, item anime_2
+2025-07-10 10:45:27,641 - tests_integration.test_supabase_client - INFO - Inserted new user item for user fc753eee-32c4-4ec2-b890-434b9f6711cd, item manga_1
+2025-07-10 10:46:58,964 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 393ea558-6cfb-49d1-9fc7-93dfb181c054, item anime_1
+2025-07-10 10:46:58,977 - tests_integration.test_supabase_client - INFO - Inserted new user item for user d5b68802-8e1a-4e5b-ada1-de460df94e35, item anime_1
+2025-07-10 10:46:58,981 - tests_integration.test_supabase_client - INFO - Updated user item for user d5b68802-8e1a-4e5b-ada1-de460df94e35, item anime_1
+2025-07-10 10:46:58,994 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 39e82675-e133-44c5-860c-6e0c7b0e7b18, item anime_1
+2025-07-10 10:46:59,006 - tests_integration.test_supabase_client - INFO - Inserted new user item for user fa7d90c9-aae2-4fdf-b5f7-18ef2b6841ac, item anime_1
+2025-07-10 10:46:59,009 - tests_integration.test_supabase_client - INFO - Inserted new user item for user fa7d90c9-aae2-4fdf-b5f7-18ef2b6841ac, item anime_2
+2025-07-10 10:46:59,011 - tests_integration.test_supabase_client - INFO - Inserted new user item for user fa7d90c9-aae2-4fdf-b5f7-18ef2b6841ac, item manga_1
+2025-07-10 10:46:59,064 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 95baa310-c548-4143-bcee-82847f4c7bd0, item anime_1
+2025-07-10 10:46:59,069 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 95baa310-c548-4143-bcee-82847f4c7bd0, item anime_2
+2025-07-10 10:46:59,072 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 95baa310-c548-4143-bcee-82847f4c7bd0, item manga_1
+2025-07-10 10:46:59,165 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 073978ab-03c9-4fbd-a56e-0fd9e4b726bd, item anime_1
+2025-07-10 10:46:59,170 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 073978ab-03c9-4fbd-a56e-0fd9e4b726bd, item anime_2
+2025-07-10 10:46:59,174 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 073978ab-03c9-4fbd-a56e-0fd9e4b726bd, item manga_1
+2025-07-10 10:46:59,179 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 073978ab-03c9-4fbd-a56e-0fd9e4b726bd, item anime_3
+2025-07-10 10:46:59,183 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 073978ab-03c9-4fbd-a56e-0fd9e4b726bd, item manga_2
+2025-07-10 10:46:59,188 - tests_integration.test_supabase_client - INFO - Updated user item for user 073978ab-03c9-4fbd-a56e-0fd9e4b726bd, item anime_1
+2025-07-10 10:46:59,191 - tests_integration.test_supabase_client - INFO - Updated user item for user 073978ab-03c9-4fbd-a56e-0fd9e4b726bd, item anime_2
+2025-07-10 10:46:59,196 - tests_integration.test_supabase_client - INFO - Updated user item for user 073978ab-03c9-4fbd-a56e-0fd9e4b726bd, item manga_1
+2025-07-10 10:46:59,199 - tests_integration.test_supabase_client - INFO - Updated user item for user 073978ab-03c9-4fbd-a56e-0fd9e4b726bd, item anime_3
+2025-07-10 10:46:59,203 - tests_integration.test_supabase_client - INFO - Updated user item for user 073978ab-03c9-4fbd-a56e-0fd9e4b726bd, item manga_2
+2025-07-10 10:46:59,846 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 1e0d6608-f4ac-49c5-9497-00e86ff44b41, item anime_1
+2025-07-10 10:46:59,864 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 36dbc76e-5e76-450b-b1d6-6596125128f5, item anime_1
+2025-07-10 10:46:59,868 - tests_integration.test_supabase_client - INFO - Updated user item for user 36dbc76e-5e76-450b-b1d6-6596125128f5, item anime_1
+2025-07-10 10:46:59,882 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 73583ac3-f4c2-40c5-bfef-0fcbab2e8a1d, item anime_1
+2025-07-10 10:46:59,907 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 1950681a-f1aa-45b4-a1c5-1545802e456c, item anime_1
+2025-07-10 10:46:59,911 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 1950681a-f1aa-45b4-a1c5-1545802e456c, item anime_2
+2025-07-10 10:46:59,914 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 1950681a-f1aa-45b4-a1c5-1545802e456c, item manga_1
+2025-07-10 10:46:59,976 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 7a023b0d-7a12-43c8-bcbd-76a65652efd9, item anime_1
+2025-07-10 10:46:59,979 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 7a023b0d-7a12-43c8-bcbd-76a65652efd9, item anime_2
+2025-07-10 10:46:59,982 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 7a023b0d-7a12-43c8-bcbd-76a65652efd9, item manga_1
+2025-07-10 10:47:00,049 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 65de1ab7-bc79-4f02-a0e9-8fe1ebc0bb9a, item anime_1
+2025-07-10 10:47:00,053 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 65de1ab7-bc79-4f02-a0e9-8fe1ebc0bb9a, item anime_2
+2025-07-10 10:47:00,056 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 65de1ab7-bc79-4f02-a0e9-8fe1ebc0bb9a, item manga_1
+2025-07-10 10:47:00,059 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 65de1ab7-bc79-4f02-a0e9-8fe1ebc0bb9a, item anime_3
+2025-07-10 10:47:00,063 - tests_integration.test_supabase_client - INFO - Inserted new user item for user 65de1ab7-bc79-4f02-a0e9-8fe1ebc0bb9a, item manga_2
+2025-07-10 10:47:00,066 - tests_integration.test_supabase_client - INFO - Updated user item for user 65de1ab7-bc79-4f02-a0e9-8fe1ebc0bb9a, item anime_1
+2025-07-10 10:47:00,069 - tests_integration.test_supabase_client - INFO - Updated user item for user 65de1ab7-bc79-4f02-a0e9-8fe1ebc0bb9a, item anime_2
+2025-07-10 10:47:00,072 - tests_integration.test_supabase_client - INFO - Updated user item for user 65de1ab7-bc79-4f02-a0e9-8fe1ebc0bb9a, item manga_1
+2025-07-10 10:47:00,075 - tests_integration.test_supabase_client - INFO - Updated user item for user 65de1ab7-bc79-4f02-a0e9-8fe1ebc0bb9a, item anime_3
+2025-07-10 10:47:00,079 - tests_integration.test_supabase_client - INFO - Updated user item for user 65de1ab7-bc79-4f02-a0e9-8fe1ebc0bb9a, item manga_2
+2025-07-10 10:49:44,502 - tests_integration.test_supabase_client - INFO - Inserted new user item for user d7616f4f-bf0a-44cf-81ba-956625e70b07, item anime_1
+2025-07-10 12:04:03,426 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2025 12:04:03] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-10 12:04:03,429 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2025 12:04:03] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-10 12:04:04,537 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2025 12:04:04] "GET /api/items HTTP/1.1" 200 -
+2025-07-10 12:04:04,540 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2025 12:04:04] "GET /api/items HTTP/1.1" 200 -
+2025-07-10 12:04:04,583 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2025 12:04:04] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-10 12:04:04,628 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2025 12:04:04] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-10 12:04:04,980 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2025 12:04:04] "GET /api/items HTTP/1.1" 200 -
+2025-07-10 12:04:05,240 - werkzeug - INFO - 127.0.0.1 - - [10/Jul/2025 12:04:05] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 10:34:22,676 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-12 10:34:22,676 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-12 10:34:31,817 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 10:34:31] "GET / HTTP/1.1" 200 -
+2025-07-12 10:37:29,797 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-12 10:37:29,798 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-12 10:39:23,162 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 10:39:23] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 10:39:23,166 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 10:39:23] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 10:39:23,411 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 10:39:23] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 10:39:23,412 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 10:39:23] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 10:41:22,700 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-12 10:41:22,701 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-12 13:36:37,675 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-12 13:36:37,676 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-12 13:36:59,659 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 13:36:59] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 13:36:59,669 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 13:36:59] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 13:36:59,973 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 13:36:59] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 13:36:59,978 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 13:36:59] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:04:12,082 - __main__ - INFO - Starting AniManga Recommender API with monitoring enabled
+2025-07-12 20:04:13,362 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-12 20:04:13,362 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-12 20:04:15,348 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:04:15] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:04:15,352 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:04:15] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:04:15,674 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:04:15] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:04:15,676 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:04:15] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:06:06,275 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:06:06] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:06:06,281 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:06:06] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:06:06,498 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:06:06] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:06:06,500 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:06:06] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:07:53,940 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:07:53] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:07:53,941 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:07:53] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:07:54,142 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:07:54] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:07:54,145 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:07:54] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:08:12,488 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:08:12] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:08:12,535 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:08:12] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-12 20:09:55,638 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:09:55] "GET /api/items?media_type=all HTTP/1.1" 200 -
+2025-07-12 20:09:55,673 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:09:55] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-12 20:10:17,722 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:10:17] "GET /api/items?media_type=all HTTP/1.1" 200 -
+2025-07-12 20:10:17,816 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:10:17] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-12 20:13:27,372 - __main__ - INFO - Starting AniManga Recommender API with monitoring enabled
+2025-07-12 20:13:28,630 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-12 20:13:28,630 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-12 20:13:31,544 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:31] "GET /api/items?media_type=all HTTP/1.1" 200 -
+2025-07-12 20:13:31,629 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:31] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-12 20:13:35,293 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:35] "GET /api/items?media_type=all HTTP/1.1" 200 -
+2025-07-12 20:13:35,321 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:35] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-12 20:13:41,132 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:41] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:13:41,161 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:41] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:13:41,341 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:41] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:13:41,366 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:41] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:13:44,305 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:44] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:13:44,306 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:44] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:13:44,487 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:44] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:13:44,490 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:13:44] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:42:24,143 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:24] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:42:24,148 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:24] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:42:39,152 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:39] "[33mGET /main.0f2f6cdda1fe41d1cf98.hot-update.json HTTP/1.1[0m" 404 -
+2025-07-12 20:42:39,617 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:39] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:42:39,619 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:39] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:42:39,763 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:39] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:42:39,764 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:39] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:42:40,092 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:40] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:42:40,094 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:40] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-12 20:42:40,417 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:40] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:42:40,418 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:42:40] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:44:41,865 - __main__ - INFO - Starting AniManga Recommender API with monitoring enabled
+2025-07-12 20:44:43,128 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-12 20:44:43,128 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-12 20:44:45,032 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:44:45] "[33mGET /api/debug HTTP/1.1[0m" 404 -
+2025-07-12 20:44:45,079 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:44:45] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-12 20:44:47,697 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:44:47] "[33mGET /api/debug HTTP/1.1[0m" 404 -
+2025-07-12 20:44:49,142 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:44:49] "[33mGET /api/debug HTTP/1.1[0m" 404 -
+2025-07-12 20:44:54,751 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:44:54] "[33mGET /api/debug HTTP/1.1[0m" 404 -
+2025-07-12 20:44:55,449 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:44:55] "[33mGET /api/debug HTTP/1.1[0m" 404 -
+2025-07-12 20:44:56,723 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:44:56] "[33mGET /api/debug HTTP/1.1[0m" 404 -
+2025-07-12 20:46:02,412 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:46:02] "GET / HTTP/1.1" 200 -
+2025-07-12 20:48:08,056 - __main__ - INFO - Starting AniManga Recommender API with monitoring enabled
+2025-07-12 20:48:09,319 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-12 20:48:09,319 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-12 20:48:14,341 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:48:14] "GET / HTTP/1.1" 200 -
+2025-07-12 20:48:14,927 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:48:14] "GET / HTTP/1.1" 200 -
+2025-07-12 20:48:28,869 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:48:28] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:48:28,899 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:48:28] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-12 20:48:41,699 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:48:41] "GET / HTTP/1.1" 200 -
+2025-07-12 20:48:43,711 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:48:43] "GET / HTTP/1.1" 200 -
+2025-07-12 20:48:47,263 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:48:47] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-12 20:52:59,458 - __main__ - INFO - Starting AniManga Recommender API with monitoring enabled
+2025-07-12 20:53:00,726 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-12 20:53:00,726 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-12 20:53:21,312 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:53:21] "GET / HTTP/1.1" 200 -
+2025-07-12 20:53:25,217 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:53:25] "[33mGET /api/debug HTTP/1.1[0m" 404 -
+2025-07-12 20:53:30,341 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:53:30] "GET /api/items HTTP/1.1" 200 -
+2025-07-12 20:53:30,378 - werkzeug - INFO - 127.0.0.1 - - [12/Jul/2025 20:53:30] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-14 13:39:34,617 - __main__ - INFO - Starting AniManga Recommender API with monitoring enabled
+2025-07-14 13:39:35,886 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.50.128:5000
+2025-07-14 13:39:35,886 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-14 13:40:43,590 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:40:43] "GET /api/items?year=2020 HTTP/1.1" 200 -
+2025-07-14 13:40:43,750 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:40:43] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-14 13:40:47,162 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:40:47] "GET /api/items?page=1 HTTP/1.1" 200 -
+2025-07-14 13:40:50,186 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:40:50] "GET /api/items HTTP/1.1" 200 -
+2025-07-14 13:40:50,187 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:40:50] "GET /api/items HTTP/1.1" 200 -
+2025-07-14 13:40:55,690 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:40:55] "GET /api/items HTTP/1.1" 200 -
+2025-07-14 13:40:55,715 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:40:55] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-14 13:40:59,694 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:40:59] "GET /api/items HTTP/1.1" 200 -
+2025-07-14 13:40:59,714 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:40:59] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-14 13:41:01,361 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:01] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-07-14 13:41:16,696 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:16] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-14 13:41:16,701 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:16] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-14 13:41:17,336 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:17] "GET /api/items HTTP/1.1" 200 -
+2025-07-14 13:41:17,526 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:17] "GET /api/items HTTP/1.1" 200 -
+2025-07-14 13:41:31,545 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:31] "GET /api/items/mal_manga_13 HTTP/1.1" 200 -
+2025-07-14 13:41:31,546 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:31] "GET /api/items/mal_manga_13 HTTP/1.1" 200 -
+2025-07-14 13:41:31,805 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:31] "GET /api/recommendations/mal_manga_13?n=10 HTTP/1.1" 200 -
+2025-07-14 13:41:31,806 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:31] "GET /api/recommendations/mal_manga_13?n=10 HTTP/1.1" 200 -
+2025-07-14 13:41:31,836 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:31] "OPTIONS /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:41:32,579 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:32] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:41:33,104 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:33] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:41:39,034 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:39] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-14 13:41:39,391 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:39] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-14 13:41:39,619 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:39] "GET /api/items HTTP/1.1" 200 -
+2025-07-14 13:41:39,997 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:39] "GET /api/items HTTP/1.1" 200 -
+2025-07-14 13:41:40,310 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:40] "GET /api/items/mal_anime_9253 HTTP/1.1" 200 -
+2025-07-14 13:41:40,312 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:40] "GET /api/items/mal_anime_9253 HTTP/1.1" 200 -
+2025-07-14 13:41:40,575 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:40] "GET /api/recommendations/mal_anime_9253?n=10 HTTP/1.1" 200 -
+2025-07-14 13:41:40,595 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:40] "GET /api/recommendations/mal_anime_9253?n=10 HTTP/1.1" 200 -
+2025-07-14 13:41:40,619 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:40] "OPTIONS /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:41:41,249 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:41] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:41:41,834 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:41] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:41:45,341 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:45] "OPTIONS /api/auth/user-items/mal_anime_9253 HTTP/1.1" 200 -
+2025-07-14 13:41:46,313 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:46] "POST /api/auth/user-items/mal_anime_9253 HTTP/1.1" 200 -
+2025-07-14 13:41:46,390 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:46] "OPTIONS /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:41:46,967 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:41:46] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:43:36,949 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:43:36] "OPTIONS /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:43:38,989 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:43:38] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:44:05,658 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:44:05] "[31m[1mGET /api/auth/user-items HTTP/1.1[0m" 401 -
+2025-07-14 13:45:03,304 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:45:03] "OPTIONS /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:45:04,121 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:45:04] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:45:58,936 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:45:58] "GET /api/items/mal_anime_9253 HTTP/1.1" 200 -
+2025-07-14 13:45:58,942 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:45:58] "GET /api/items/mal_anime_9253 HTTP/1.1" 200 -
+2025-07-14 13:45:59,387 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:45:59] "GET /api/recommendations/mal_anime_9253?n=10 HTTP/1.1" 200 -
+2025-07-14 13:45:59,521 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:45:59] "OPTIONS /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:45:59,548 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:45:59] "GET /api/recommendations/mal_anime_9253?n=10 HTTP/1.1" 200 -
+2025-07-14 13:46:00,143 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:00] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:46:00,679 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:00] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:46:01,367 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:01] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:46:01,903 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:01] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:46:02,695 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:02] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-14 13:46:02,934 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:02] "GET /api/distinct-values HTTP/1.1" 200 -
+2025-07-14 13:46:03,466 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:03] "GET /api/items HTTP/1.1" 200 -
+2025-07-14 13:46:03,826 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:03] "GET /api/items HTTP/1.1" 200 -
+2025-07-14 13:46:04,858 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:04] "GET /api/items/mal_anime_41467 HTTP/1.1" 200 -
+2025-07-14 13:46:04,861 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:04] "GET /api/items/mal_anime_41467 HTTP/1.1" 200 -
+2025-07-14 13:46:05,147 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:05] "GET /api/recommendations/mal_anime_41467?n=10 HTTP/1.1" 200 -
+2025-07-14 13:46:05,171 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:05] "GET /api/recommendations/mal_anime_41467?n=10 HTTP/1.1" 200 -
+2025-07-14 13:46:05,230 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:05] "OPTIONS /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:46:05,891 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:05] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:46:06,520 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:06] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:46:14,247 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:14] "OPTIONS /api/auth/user-items/mal_anime_41467 HTTP/1.1" 200 -
+2025-07-14 13:46:15,305 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:15] "POST /api/auth/user-items/mal_anime_41467 HTTP/1.1" 200 -
+2025-07-14 13:46:15,317 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:15] "OPTIONS /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:46:16,004 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:16] "GET /api/auth/user-items HTTP/1.1" 200 -
+2025-07-14 13:46:20,162 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:20] "OPTIONS /api/users/cho.michael13524/profile HTTP/1.1" 200 -
+2025-07-14 13:46:22,177 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:22] "GET /api/users/cho.michael13524/profile HTTP/1.1" 200 -
+2025-07-14 13:46:22,185 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:22] "OPTIONS /api/users/cho.michael13524/stats HTTP/1.1" 200 -
+2025-07-14 13:46:22,814 - utils.cache_helpers - INFO - Redis cache connected: localhost:6379
+2025-07-14 13:46:22,817 - utils.monitoring - WARNING - ALERT [WARNING] cache_hit_rate_low: Cache hit rate below 80%: 0.0%
+2025-07-14 13:46:22,845 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:22] "GET /api/users/cho.michael13524/profile HTTP/1.1" 200 -
+2025-07-14 13:46:24,940 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:24] "GET /api/users/cho.michael13524/stats HTTP/1.1" 200 -
+2025-07-14 13:46:24,948 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:24] "OPTIONS /api/users/cho.michael13524/lists HTTP/1.1" 200 -
+2025-07-14 13:46:25,654 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:25] "GET /api/users/cho.michael13524/stats HTTP/1.1" 200 -
+2025-07-14 13:46:25,976 - __main__ - INFO - Successfully fetched batch counts for 2 lists
+2025-07-14 13:46:25,979 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:25] "GET /api/users/cho.michael13524/lists HTTP/1.1" 200 -
+2025-07-14 13:46:25,987 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:25] "OPTIONS /api/users/cho.michael13524/activity?limit=20 HTTP/1.1" 200 -
+2025-07-14 13:46:27,002 - __main__ - INFO - Successfully fetched batch counts for 2 lists
+2025-07-14 13:46:27,004 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:27] "GET /api/users/cho.michael13524/lists HTTP/1.1" 200 -
+2025-07-14 13:46:27,570 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:27] "GET /api/users/cho.michael13524/activity?limit=20 HTTP/1.1" 200 -
+2025-07-14 13:46:29,055 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:29] "GET /api/users/cho.michael13524/activity?limit=20 HTTP/1.1" 200 -
+2025-07-14 13:46:32,764 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:32] "OPTIONS /api/auth/dashboard HTTP/1.1" 200 -
+2025-07-14 13:46:34,610 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:34] "GET /api/auth/dashboard HTTP/1.1" 200 -
+2025-07-14 13:46:34,657 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:34] "OPTIONS /api/auth/personalized-recommendations?refresh=true&t=1752518794649 HTTP/1.1" 200 -
+2025-07-14 13:46:34,663 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:34] "[33mOPTIONS /api/auth/users/me/analytics?start_date=2024-07-14T18:46:34.621Z&end_date=2025-07-14T18:46:34.621Z&granularity=month&include_dropped=true&minimum_rating=0 HTTP/1.1[0m" 404 -
+2025-07-14 13:46:34,664 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:34] "OPTIONS /api/auth/personalized-recommendations?refresh=true&t=1752518794650 HTTP/1.1" 200 -
+2025-07-14 13:46:34,671 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:34] "[33mOPTIONS /api/auth/users/me/analytics?start_date=2024-07-14T18:46:34.621Z&end_date=2025-07-14T18:46:34.621Z&granularity=month&include_dropped=true&minimum_rating=0 HTTP/1.1[0m" 404 -
+2025-07-14 13:46:34,672 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:34] "[33mOPTIONS /api/auth/users/me/analytics?start_date=2024-07-14T18:46:34.621Z&end_date=2025-07-14T18:46:34.621Z&granularity=month&include_dropped=true&minimum_rating=0 HTTP/1.1[0m" 404 -
+2025-07-14 13:46:36,527 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:36] "GET /api/auth/dashboard HTTP/1.1" 200 -
+2025-07-14 13:46:38,246 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:38] "GET /api/auth/personalized-recommendations?refresh=true&t=1752518794649 HTTP/1.1" 200 -
+2025-07-14 13:46:38,247 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:38] "GET /api/auth/personalized-recommendations?refresh=true&t=1752518794650 HTTP/1.1" 200 -
+2025-07-14 13:46:51,228 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:51] "OPTIONS /api/users/cho.michael13524/profile HTTP/1.1" 200 -
+2025-07-14 13:46:51,960 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:51] "GET /api/users/cho.michael13524/profile HTTP/1.1" 200 -
+2025-07-14 13:46:51,969 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:51] "OPTIONS /api/users/cho.michael13524/stats HTTP/1.1" 200 -
+2025-07-14 13:46:52,527 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:52] "GET /api/users/cho.michael13524/stats HTTP/1.1" 200 -
+2025-07-14 13:46:52,598 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:52] "GET /api/users/cho.michael13524/profile HTTP/1.1" 200 -
+2025-07-14 13:46:52,613 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:52] "OPTIONS /api/users/cho.michael13524/lists HTTP/1.1" 200 -
+2025-07-14 13:46:53,301 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:53] "GET /api/users/cho.michael13524/stats HTTP/1.1" 200 -
+2025-07-14 13:46:53,596 - __main__ - INFO - Successfully fetched batch counts for 2 lists
+2025-07-14 13:46:53,596 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:53] "GET /api/users/cho.michael13524/lists HTTP/1.1" 200 -
+2025-07-14 13:46:53,612 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:53] "OPTIONS /api/users/cho.michael13524/activity?limit=20 HTTP/1.1" 200 -
+2025-07-14 13:46:54,756 - __main__ - INFO - Successfully fetched batch counts for 2 lists
+2025-07-14 13:46:54,767 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:54] "GET /api/users/cho.michael13524/lists HTTP/1.1" 200 -
+2025-07-14 13:46:55,053 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:55] "GET /api/users/cho.michael13524/activity?limit=20 HTTP/1.1" 200 -
+2025-07-14 13:46:56,364 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 13:46:56] "GET /api/users/cho.michael13524/activity?limit=20 HTTP/1.1" 200 -

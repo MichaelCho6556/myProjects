@@ -60,6 +60,7 @@ import ErrorFallback from "../components/Error/ErrorFallback";
 import CollapsibleSection from "../components/CollapsibleSection";
 import EmptyState from "../components/EmptyState";
 import { ListAnalyticsDashboard } from "../components/analytics/ListAnalyticsDashboard";
+import CacheStatusIndicator from "../components/dashboard/CacheStatusIndicator";
 import "./DashboardPage.css";
 import { supabase } from "../lib/supabase";
 
@@ -391,8 +392,18 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
     <div className="dashboard-page">
       <div className="dashboard-container">
         <header className="dashboard-header">
-          <h1>Welcome back, {user.user_metadata?.display_name || "User"}!</h1>
-          <p>Here's your anime and manga activity overview</p>
+          <div className="dashboard-header-content">
+            <div>
+              <h1>Welcome back, {user.user_metadata?.display_name || "User"}!</h1>
+              <p>Here's your anime and manga activity overview</p>
+            </div>
+            <CacheStatusIndicator
+              cacheHit={dashboardData.cache_hit}
+              lastUpdated={dashboardData.last_updated}
+              updating={dashboardData.updating}
+              onRefresh={refreshDashboard}
+            />
+          </div>
         </header>
 
         <StatisticsCards userStats={dashboardData.user_stats} quickStats={dashboardData.quick_stats} />

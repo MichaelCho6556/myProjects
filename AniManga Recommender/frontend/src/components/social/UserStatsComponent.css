@@ -75,13 +75,157 @@
   margin-top: 0.125rem;
 }
 
-/* Color variations for different stat types */
-.stat-card:nth-child(1) .stat-value { color: #3b82f6; } /* Anime - Blue */
-.stat-card:nth-child(2) .stat-value { color: #10b981; } /* Manga - Green */
-.stat-card:nth-child(3) .stat-value { color: #8b5cf6; } /* Time - Purple */
-.stat-card:nth-child(4) .stat-value { color: #f59e0b; } /* Rating - Yellow */
-.stat-card:nth-child(5) .stat-value { color: #ef4444; } /* Completion - Red */
-.stat-card:nth-child(6) .stat-value { color: #f97316; } /* Streak - Orange */
+/* Progress Bar Styles */
+.stat-progress {
+  margin-top: 0.75rem;
+  width: 100%;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-quaternary, #f3f4f6);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent-color);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  text-align: center;
+}
+
+/* Skeleton Loading States */
+.stats-grid.loading .stat-card.skeleton {
+  background: var(--bg-tertiary);
+  pointer-events: none;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.skeleton-stat-value,
+.skeleton-stat-label,
+.skeleton-stat-sublabel {
+  background: var(--bg-quaternary, #e5e7eb);
+  border-radius: 4px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-stat-value {
+  width: 60%;
+  height: 1.5rem;
+  margin: 0 auto 0.5rem;
+}
+
+.skeleton-stat-label {
+  width: 80%;
+  height: 1rem;
+  margin: 0 auto 0.25rem;
+}
+
+.skeleton-stat-sublabel {
+  width: 50%;
+  height: 0.75rem;
+  margin: 0 auto;
+}
+
+/* Rating Distribution Chart */
+.rating-distribution {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.distribution-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 1rem 0;
+}
+
+.distribution-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.distribution-bar {
+  display: grid;
+  grid-template-columns: 2rem 1fr 3rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.bar-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.bar-container {
+  height: 20px;
+  background: var(--bg-quaternary, #f3f4f6);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 1s ease-out;
+  position: relative;
+}
+
+.bar-count {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-align: left;
+}
 
 /* Responsive adjustments */
 @media (max-width: 1024px) {

@@ -3,14 +3,17 @@
 
 import React, { useState, useCallback } from "react";
 import { useModerationReports } from "../../../hooks/useModeration";
+import { useModerationStats } from "../../../hooks/useModerationStats";
 import { ModerationReport, UpdateReportRequest, ModerationFilters } from "../../../types/moderation";
 import { ReportQueue } from "./ReportQueue";
 import { ReportDetail } from "./ReportDetail";
+import { ModerationAnalytics } from "./ModerationAnalytics";
 import Spinner from "../../Spinner";
 import "./ModerationDashboard.css";
 
 export const ModerationDashboard: React.FC = () => {
   const [selectedReport, setSelectedReport] = useState<ModerationReport | null>(null);
+  const [activeView, setActiveView] = useState<'reports' | 'analytics'>('reports');
   const [filters, setFilters] = useState<ModerationFilters>({
     status: "pending",
     sort: "newest",
@@ -18,6 +21,14 @@ export const ModerationDashboard: React.FC = () => {
 
   const { reports, loading, error, pagination, fetchReports, updateReport, refreshReports, loadMoreReports } =
     useModerationReports(filters);
+
+  const { 
+    stats, 
+    loading: statsLoading, 
+    error: statsError, 
+    updateTimeframe, 
+    updateGranularity 
+  } = useModerationStats();
 
   // Handle filter changes
   const handleFilterChange = useCallback(
@@ -87,7 +98,23 @@ export const ModerationDashboard: React.FC = () => {
   return (
     <div className="moderation-dashboard">
       <div className="dashboard-header">
-        <div className="header-controls">
+        <div className="view-tabs">
+          <button
+            className={`view-tab ${activeView === 'reports' ? 'active' : ''}`}
+            onClick={() => setActiveView('reports')}
+          >
+            📋 Reports
+          </button>
+          <button
+            className={`view-tab ${activeView === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveView('analytics')}
+          >
+            📊 Analytics
+          </button>
+        </div>
+
+        {activeView === 'reports' && (
+          <div className="header-controls">
           <div className="filter-section">
             <div className="filter-group">
               <label htmlFor="status-filter">Status:</label>
@@ -173,7 +200,8 @@ export const ModerationDashboard: React.FC = () => {
               {loading ? <Spinner size="small" /> : "🔄"} Refresh
             </button>
           </div>
-        </div>
+          </div>
+        )}
 
         {pagination && (
           <div className="dashboard-stats">
@@ -185,40 +213,70 @@ export const ModerationDashboard: React.FC = () => {
       </div>
 
       <div className="dashboard-content">
-        <div className="dashboard-panels">
-          {/* Left Panel - Report Queue */}
-          <div className="queue-panel">
-            <div className="panel-header">
-              <h3>Report Queue</h3>
-              {pagination && pagination.total_count > 0 && (
-                <span className="queue-count">{pagination.total_count} reports</span>
-              )}
+        {activeView === 'reports' ? (
+          <div className="dashboard-panels">
+            {/* Left Panel - Report Queue */}
+            <div className="queue-panel">
+              <div className="panel-header">
+                <h3>Report Queue</h3>
+                {pagination && pagination.total_count > 0 && (
+                  <span className="queue-count">{pagination.total_count} reports</span>
+                )}
+              </div>
+
+              <ReportQueue
+                reports={reports}
+                selectedReport={selectedReport}
+                onSelectReport={handleSelectReport}
+                loading={loading}
+                onLoadMore={loadMoreReports}
+                hasMore={pagination?.has_next || false}
+              />
             </div>
 
-            <ReportQueue
-              reports={reports}
-              selectedReport={selectedReport}
-              onSelectReport={handleSelectReport}
-              loading={loading}
-              onLoadMore={loadMoreReports}
-              hasMore={pagination?.has_next || false}
-            />
-          </div>
+            {/* Right Panel - Report Detail */}
+            <div className="detail-panel">
+              <div className="panel-header">
+                <h3>Report Details</h3>
+              </div>
 
-          {/* Right Panel - Report Detail */}
-          <div className="detail-panel">
-            <div className="panel-header">
-              <h3>Report Details</h3>
+              <ReportDetail
+                report={selectedReport}
+                onResolveReport={handleResolveReport}
+                onDismissReport={handleDismissReport}
+                loading={loading}
+              />
             </div>
-
-            <ReportDetail
-              report={selectedReport}
-              onResolveReport={handleResolveReport}
-              onDismissReport={handleDismissReport}
-              loading={loading}
-            />
           </div>
-        </div>
+        ) : (
+          /* Analytics View */
+          <div className="analytics-view">
+            {statsLoading ? (
+              <div className="analytics-loading">
+                <Spinner />
+                <p>Loading analytics...</p>
+              </div>
+            ) : statsError ? (
+              <div className="analytics-error">
+                <div className="error-content">
+                  <span className="error-icon">⚠️</span>
+                  <h3>Error Loading Analytics</h3>
+                  <p>{statsError}</p>
+                </div>
+              </div>
+            ) : stats ? (
+              <ModerationAnalytics
+                stats={stats}
+                onTimeframeChange={updateTimeframe}
+                onGranularityChange={updateGranularity}
+              />
+            ) : (
+              <div className="analytics-empty">
+                <p>No analytics data available</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

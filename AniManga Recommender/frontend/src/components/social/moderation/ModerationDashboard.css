@@ -286,3 +286,156 @@
     color: var(--text-secondary-dark, #cccccc);
   }
 }
+
+/* View Tabs */
+.view-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 16px;
+}
+
+.view-tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.view-tab:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.view-tab.active {
+  background: #3b82f6;
+  color: white;
+}
+
+.view-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -17px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #3b82f6;
+}
+
+/* Analytics View */
+.analytics-view {
+  padding: 0;
+  min-height: 400px;
+}
+
+.analytics-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  gap: 16px;
+}
+
+.analytics-loading p {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.analytics-error {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+  padding: 2rem;
+}
+
+.analytics-error .error-content {
+  text-align: center;
+  max-width: 400px;
+}
+
+.analytics-error .error-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.analytics-error h3 {
+  color: #374151;
+  margin-bottom: 0.5rem;
+  font-size: 18px;
+}
+
+.analytics-error p {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.analytics-empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* Responsive adjustments for analytics */
+@media (max-width: 768px) {
+  .view-tabs {
+    justify-content: center;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+
+  .view-tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .analytics-view {
+    padding: 0;
+  }
+}
+
+/* Dark mode for new elements */
+@media (prefers-color-scheme: dark) {
+  .view-tabs {
+    border-color: #404040;
+  }
+
+  .view-tab {
+    color: #cccccc;
+  }
+
+  .view-tab:hover {
+    background: #374151;
+    color: #ffffff;
+  }
+
+  .view-tab.active::after {
+    background: #3b82f6;
+  }
+
+  .analytics-loading p,
+  .analytics-empty {
+    color: #9ca3af;
+  }
+
+  .analytics-error h3 {
+    color: #ffffff;
+  }
+
+  .analytics-error p {
+    color: #cccccc;
+  }
+}

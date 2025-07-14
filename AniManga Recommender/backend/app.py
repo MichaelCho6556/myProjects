@@ -48,6 +48,23 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Any
 from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
 from utils.batchOperations import BatchOperationsManager
+from utils.cache_helpers import (
+    get_user_stats_from_cache,
+    set_user_stats_in_cache,
+    get_cache_status,
+    get_toxicity_analysis_from_cache,
+    set_toxicity_analysis_in_cache,
+    get_content_moderation_status_from_cache,
+    set_content_moderation_status_in_cache,
+    get_moderation_stats_from_cache,
+    set_moderation_stats_in_cache
+)
+from utils.monitoring import (
+    monitor_endpoint,
+    get_metrics_collector,
+    record_queue_length,
+    record_system_health
+)
 from middleware.privacy_middleware import (
     require_privacy_check, 
     filter_user_search_results,
@@ -286,7 +303,7 @@ try:
     
     if base_url and api_key and service_key:
         auth_client = SupabaseAuthClient(base_url, api_key, service_key)
-        print("✅ Supabase clients initialized successfully")
+        print("[SUCCESS] Supabase clients initialized successfully")
     else:
         print("[WARNING] Auth client not initialized: missing environment variables")
         auth_client = None
@@ -407,9 +424,9 @@ def load_data_and_tfidf_from_supabase() -> None:
         >>> load_data_and_tfidf_from_supabase()
         🚀 Starting data load from Supabase...
         📊 Loading items from Supabase...
-        ✅ Loaded DataFrame with 68598 items
+        [SUCCESS] Loaded DataFrame with 68598 items
         🤖 Creating TF-IDF matrix...
-        ✅ TF-IDF matrix created. Final data: 68598 items
+        [SUCCESS] TF-IDF matrix created. Final data: 68598 items
         
     Note:
         This function implements caching - if data is already loaded,
@@ -419,26 +436,26 @@ def load_data_and_tfidf_from_supabase() -> None:
     global df_processed, tfidf_vectorizer_global, tfidf_matrix_global, uid_to_idx, supabase_client
 
     if df_processed is not None and tfidf_matrix_global is not None:
-        print(f"🔄 Data already loaded: {len(df_processed)} items")
+        print(f"[INFO] Data already loaded: {len(df_processed)} items")
         return
 
     try:
-        print("🚀 Starting data load from Supabase...")
+        print("[INFO] Starting data load from Supabase...")
         
         # Use global Supabase client
         global supabase_client
         if supabase_client is None:
-            print("⚠️ Supabase client not initialized, creating new instance...")
+            print("[WARNING] Supabase client not initialized, creating new instance...")
             supabase_client = SupabaseClient()
         
         # Get data as DataFrame from Supabase
         print("📊 Loading items from Supabase...")
         df_processed = supabase_client.items_to_dataframe(include_relations=True)
         
-        print(f"✅ Loaded DataFrame with {len(df_processed)} items")
+        print(f"[SUCCESS] Loaded DataFrame with {len(df_processed)} items")
         
         if df_processed is None or len(df_processed) == 0:
-            print("❌ No data loaded!")
+            print("[ERROR] No data loaded!")
             df_processed = pd.DataFrame()
             tfidf_vectorizer_global = None
             tfidf_matrix_global = None
@@ -449,7 +466,7 @@ def load_data_and_tfidf_from_supabase() -> None:
         if 'combined_text_features' not in df_processed.columns:
             print("🔧 Creating combined text features...")
             df_processed = create_combined_text_features(df_processed)
-            print(f"✅ Text features created. DataFrame now: {df_processed.shape}")
+            print(f"[SUCCESS] Text features created. DataFrame now: {df_processed.shape}")
         
         # Fill NaN values in combined_text_features
         df_processed['combined_text_features'] = df_processed['combined_text_features'].fillna('')
@@ -465,16 +482,16 @@ def load_data_and_tfidf_from_supabase() -> None:
             if 'uid' in df_processed.columns:
                 uid_to_idx = pd.Series(df_processed.index, index=df_processed['uid'])
             else:
-                print("⚠️ Warning: 'uid' column not found, creating empty mapping")
+                print("[WARNING] Warning: 'uid' column not found, creating empty mapping")
                 uid_to_idx = pd.Series(dtype='int64')
-            print(f"✅ TF-IDF matrix created. Final data: {len(df_processed)} items")
+            print(f"[SUCCESS] TF-IDF matrix created. Final data: {len(df_processed)} items")
         else:
             tfidf_vectorizer_global = None
             tfidf_matrix_global = None
             uid_to_idx = pd.Series(dtype='int64')
             
     except Exception as e:
-        print(f"❌ Error in load_data_and_tfidf_from_supabase: {e}")
+        print(f"[ERROR] Error in load_data_and_tfidf_from_supabase: {e}")
         # Initialize empty globals to prevent further errors
         df_processed = pd.DataFrame()
         tfidf_vectorizer_global = None
@@ -804,6 +821,19 @@ def hello():
         return "Backend is initializing or no data available. Please check Supabase connection."
     return f"Hello from AniManga Recommender Backend! Loaded {len(df_processed)} items from Supabase."
 
+@app.route('/api/debug')
+def debug_data():
+    """Debug endpoint to check if data is loaded"""
+    global df_processed
+    if df_processed is None:
+        return jsonify({"status": "df_processed is None"})
+    return jsonify({
+        "status": "loaded",
+        "total_items": len(df_processed),
+        "columns": list(df_processed.columns) if not df_processed.empty else [],
+        "sample_items": df_processed.head(3).to_dict('records') if not df_processed.empty else []
+    })
+
 @app.route('/api/items')
 def get_items():
     """
@@ -894,9 +924,11 @@ def get_items():
         return jsonify({"error": "Dataset not available."}), 503
     
     if len(df_processed) == 0:
+        print(f"[ERROR] df_processed is empty! Type: {type(df_processed)}")
         return jsonify({
             "items": [], "page": 1, "per_page": 30,
-            "total_items": 0, "total_pages": 0, "sort_by": "score_desc"
+            "total_items": 0, "total_pages": 0, "sort_by": "score_desc",
+            "debug": "df_processed is empty"
         })
 
     page = request.args.get('page', 1, type=int)
@@ -916,7 +948,8 @@ def get_items():
     sort_by = request.args.get('sort_by', 'score_desc', type=str)
 
     data_subset = df_processed.copy()
-
+    print(f"[DEBUG] Initial data_subset size: {len(data_subset)}")
+    
     # Apply filters sequentially
     if search_query:
         data_subset = data_subset[data_subset['title'].fillna('').str.contains(search_query, case=False, na=False)]
@@ -1304,7 +1337,7 @@ def get_recommendations(item_uid):
             "recommendations": related_mapped  # Field name kept for API compatibility
         })
     except Exception as e:
-        print(f"❌ Related items error: {str(e)}")
+        print(f"[ERROR] Related items error: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Could not generate related items: {str(e)}"}), 500
@@ -1482,6 +1515,7 @@ def update_user_profile():
 
 @app.route('/api/auth/dashboard', methods=['GET'])
 @require_auth
+@monitor_endpoint("dashboard")
 def get_user_dashboard():
     """
     Retrieve comprehensive dashboard data for the authenticated user.
@@ -1588,14 +1622,36 @@ def get_user_dashboard():
         return jsonify({'error': 'User ID not found in token'}), 400
     
     try:
+        # Get user statistics with cache status
+        user_stats = get_user_statistics(user_id)
+        
+        # Check if stats came from cache
+        cache_hit = False
+        last_updated = None
+        updating = False
+        
+        if user_stats and 'cached_at' in user_stats:
+            cache_hit = True
+            last_updated = user_stats.get('last_updated')
+        elif user_stats and 'updated_at' in user_stats:
+            # Database cache
+            cache_hit = True
+            last_updated = user_stats.get('updated_at')
+        else:
+            # Fresh calculation - trigger background update
+            updating = True
+        
         dashboard_data = {
-            'user_stats': get_user_statistics(user_id),
+            'user_stats': user_stats,
             'recent_activity': get_recent_user_activity(user_id),
             'in_progress': get_user_items_by_status(user_id, 'watching'),
             'completed_recently': get_recently_completed(user_id),
             'plan_to_watch': get_user_items_by_status(user_id, 'plan_to_watch'),
             'on_hold': get_user_items_by_status(user_id, 'on_hold'),
-            'quick_stats': get_quick_stats(user_id)
+            'quick_stats': get_quick_stats(user_id),
+            'cache_hit': cache_hit,
+            'last_updated': last_updated,
+            'updating': updating
         }
         
         return jsonify(dashboard_data)
@@ -1742,7 +1798,7 @@ def get_user_items():
         })
         
     except Exception as e:
-        print(f"❌ Error in get_user_items: {e}")
+        print(f"[ERROR] Error in get_user_items: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/user-items/<item_uid>', methods=['POST', 'PUT'])
@@ -1845,7 +1901,7 @@ def update_user_item_status(item_uid):
         notes = data.get('notes', '')
         completion_date = data.get('completion_date')
         
-        # ✅ ENHANCED: Improved rating validation for decimals
+        # [SUCCESS] ENHANCED: Improved rating validation for decimals
         rating = data.get('rating')
         if rating is not None:
             try:
@@ -1881,11 +1937,11 @@ def update_user_item_status(item_uid):
             'notes': notes
         }
         
-        # ✅ ENHANCED: Only include rating if it's a valid decimal
+        # [SUCCESS] ENHANCED: Only include rating if it's a valid decimal
         if rating is not None and rating >= 0:
             status_data['rating'] = rating
         
-        # ✅ NEW: Add completion_date if provided
+        # [SUCCESS] NEW: Add completion_date if provided
         if completion_date:
             status_data['completion_date'] = completion_date
         
@@ -1893,7 +1949,7 @@ def update_user_item_status(item_uid):
         result = auth_client.update_user_item_status_comprehensive(user_id, item_uid, status_data)
         
         if result and result.get('success'):
-            # ✅ INVALIDATE ALL CACHES so next dashboard load will be fresh
+            # [SUCCESS] INVALIDATE ALL CACHES so next dashboard load will be fresh
             invalidate_all_user_caches(user_id)
             
             # Log multiple activity types based on what changed
@@ -1957,7 +2013,7 @@ def update_user_item_status(item_uid):
             return jsonify({'error': 'Failed to update item status'}), 400
             
     except Exception as e:
-        print(f"❌ Error in update_user_item_status: {e}")
+        print(f"[ERROR] Error in update_user_item_status: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -2500,7 +2556,7 @@ def cleanup_orphaned_user_items():
             
             if delete_response.status_code == 204:
                 removed_count += 1
-                print(f"✅ Removed orphaned item: {orphaned_item['item_uid']}")
+                print(f"[SUCCESS] Removed orphaned item: {orphaned_item['item_uid']}")
         
         # Invalidate all caches to force complete refresh
         invalidate_all_user_caches(user_id)
@@ -2541,17 +2597,17 @@ def get_user_statistics(user_id: str) -> dict:
             - completion_rate (float): Percentage of started items completed
             
     Caching Strategy:
-        1. Checks cache for existing data
-        2. Validates cache freshness (5-minute threshold)
-        3. Returns cached data if fresh
-        4. Calculates fresh data if cache is stale/missing
-        5. Updates cache with new calculations
-        6. Falls back to stale cache if calculation fails
-        7. Returns default values as final fallback
+        1. Checks Redis cache for existing data
+        2. Returns cached data if found (24-hour TTL)
+        3. Falls back to database cache if Redis miss
+        4. Calculates fresh data if all caches miss
+        5. Updates both Redis and database caches
+        6. Returns default values as final fallback
         
     Performance Impact:
-        - Fast: When cache is fresh (< 5 minutes old)
-        - Medium: When cache needs refresh
+        - Fast: When Redis cache hit (<10ms)
+        - Medium: When database cache hit
+        - Slower: When full calculation needed
         - Reliable: Multiple fallback layers prevent failures
         
     Example:
@@ -2561,22 +2617,39 @@ def get_user_statistics(user_id: str) -> dict:
         
     Note:
         This function is thread-safe and handles all error scenarios gracefully.
-        Cache invalidation occurs automatically based on timestamps. Logs detailed
-        cache status and fallback usage for debugging purposes.
+        Redis cache has 24-hour TTL. Database cache for longer persistence.
+        Logs detailed cache status and fallback usage for debugging purposes.
     """
     try:
-        # Try to get cached statistics first
+        # Try Redis cache first (fastest)
+        redis_stats = get_user_stats_from_cache(user_id)
+        if redis_stats:
+            print(f"[SUCCESS] Redis cache hit for user stats: {user_id}")
+            return redis_stats
+        
+        # Try database cache second
         cached_stats = get_cached_user_statistics(user_id)
         
         if cached_stats and is_cache_fresh(cached_stats):
+            # Update Redis cache for next time
+            set_user_stats_in_cache(user_id, cached_stats)
             return cached_stats
         
         # Calculate fresh statistics
         fresh_stats = calculate_user_statistics_realtime(user_id)
         
         if fresh_stats:
-            # Update cache with fresh data
-            update_user_statistics_cache(user_id, fresh_stats)
+            # Update both caches with fresh data
+            set_user_stats_in_cache(user_id, fresh_stats)  # Redis cache
+            update_user_statistics_cache(user_id, fresh_stats)  # Database cache
+            
+            # Trigger background task to keep stats updated
+            try:
+                from tasks.statistics_tasks import calculate_user_statistics_task
+                calculate_user_statistics_task.delay(user_id)
+            except ImportError:
+                pass  # Celery tasks not available in test environment
+            
             return fresh_stats
         
         # Fallback to cached data even if stale
@@ -2749,10 +2822,10 @@ def update_user_statistics_cache(user_id: str, stats: dict):
         )
         
         if response.status_code in [200, 201]:
-            print(f"✅ Statistics cache updated successfully")
+            print(f"[SUCCESS] Statistics cache updated successfully")
             return True
         else:
-            print(f"❌ Failed to update cache: {response.status_code} - {response.text}")
+            print(f"[ERROR] Failed to update cache: {response.status_code} - {response.text}")
             return False
             
     except Exception as e:
@@ -2892,20 +2965,20 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
             try:
                 redis_client.delete(cache_key)
                 success = True
-                print(f"✅ Redis recommendation cache cleared for user {user_id}")
+                print(f"[SUCCESS] Redis recommendation cache cleared for user {user_id}")
             except Exception as e:
-                print(f"⚠️ Failed to clear Redis cache: {e}")
+                print(f"[WARNING] Failed to clear Redis cache: {e}")
         
         # Clear in-memory cache
         if cache_key in _recommendation_cache:
             del _recommendation_cache[cache_key]
             success = True
-            print(f"✅ In-memory recommendation cache cleared for user {user_id}")
+            print(f"[SUCCESS] In-memory recommendation cache cleared for user {user_id}")
         
         return success
         
     except Exception as e:
-        print(f"❌ Error invalidating recommendation cache: {e}")
+        print(f"[ERROR] Error invalidating recommendation cache: {e}")
         return False
 
 def invalidate_all_user_caches(user_id: str) -> bool:
@@ -2928,13 +3001,13 @@ def invalidate_all_user_caches(user_id: str) -> bool:
         
         success = stats_success and recs_success
         if success:
-            print(f"✅ All caches invalidated successfully for user {user_id}")
+            print(f"[SUCCESS] All caches invalidated successfully for user {user_id}")
         else:
-            print(f"⚠️ Partial cache invalidation for user {user_id}")
+            print(f"[WARNING] Partial cache invalidation for user {user_id}")
             
         return success
     except Exception as e:
-        print(f"❌ Error invalidating all caches: {e}")
+        print(f"[ERROR] Error invalidating all caches: {e}")
         return False
 
 def get_default_user_statistics() -> dict:
@@ -3019,14 +3092,14 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
             )
             
             if response.status_code != 200:
-                print(f"❌ Failed to get user items: {response.status_code}")
+                print(f"[ERROR] Failed to get user items: {response.status_code}")
                 return get_default_user_statistics()
             
             user_items = response.json()
             print(f"📝 Found {len(user_items)} total user items")
         
         completed_items = [item for item in user_items if item['status'] == 'completed']
-        print(f"✅ Found {len(completed_items)} completed items")
+        print(f"[SUCCESS] Found {len(completed_items)} completed items")
         
         # Count anime vs manga in completed items
         anime_count = 0
@@ -3136,12 +3209,12 @@ def get_recent_user_activity(user_id: str, limit: int = 10) -> list:
                 activity['item'] = item_details
                 
             if activities:
-                print(f"✅ DEBUG: First enriched activity: {activities[0]}")
+                print(f"[SUCCESS] DEBUG: First enriched activity: {activities[0]}")
             
             return activities
         else:
-            print(f"❌ DEBUG: Failed to fetch from user_activity table: {response.status_code}")
-            print(f"❌ DEBUG: Response text: {response.text}")
+            print(f"[ERROR] DEBUG: Failed to fetch from user_activity table: {response.status_code}")
+            print(f"[ERROR] DEBUG: Response text: {response.text}")
         return []
     except Exception as e:
         print(f"Error getting recent activity: {e}")
@@ -3744,9 +3817,9 @@ def get_item_media_type(item_uid: str) -> str:
                 print(f"🔍 Item {item_uid}: media_type = {media_type} (cached)")
                 return media_type
             else:
-                print(f"⚠️ Item {item_uid} not found in df_processed")
+                print(f"[WARNING] Item {item_uid} not found in df_processed")
         else:
-            print(f"⚠️ df_processed is None or empty")
+            print(f"[WARNING] df_processed is None or empty")
         
         # Cache unknown results too
         _media_type_cache[item_uid] = 'unknown'
@@ -3849,9 +3922,9 @@ try:
     )
     # Test Redis connection
     redis_client.ping()
-    print("✅ Redis connected successfully for personalized recommendations")
+    print("[SUCCESS] Redis connected successfully for personalized recommendations")
 except Exception as e:
-    print(f"⚠️ Redis unavailable, using in-memory cache: {e}")
+    print(f"[WARNING] Redis unavailable, using in-memory cache: {e}")
     redis_client = None
 
 # In-memory cache fallback for recommendations
@@ -3904,10 +3977,10 @@ def get_personalized_recommendation_cache(user_id: str, content_type: str = 'all
                     else:
                         # Invalid cache data, remove it
                         redis_client.delete(cache_key)
-                        print(f"⚠️ Removed invalid cache data for key: {cache_key}")
+                        print(f"[WARNING] Removed invalid cache data for key: {cache_key}")
                         
             except Exception as redis_error:
-                print(f"⚠️ Redis cache error for {cache_key}: {redis_error}")
+                print(f"[WARNING] Redis cache error for {cache_key}: {redis_error}")
                 # Continue to in-memory fallback
         
         # Fall back to in-memory cache with the same key structure
@@ -3926,7 +3999,7 @@ def get_personalized_recommendation_cache(user_id: str, content_type: str = 'all
         return None
         
     except Exception as e:
-        print(f"❌ Error retrieving recommendation cache for {user_id}: {e}")
+        print(f"[ERROR] Error retrieving recommendation cache for {user_id}: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -4003,7 +4076,7 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
         
         # Validate input data before caching
         if not _is_valid_cache_input(recommendations):
-            print(f"⚠️ Invalid cache input for {cache_key}, skipping cache storage")
+            print(f"[WARNING] Invalid cache input for {cache_key}, skipping cache storage")
             return False
         
         # Ensure timestamp is set
@@ -4029,10 +4102,10 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
                 pipe.execute()
                 
                 success = True
-                print(f"✅ Cached recommendations in Redis: {cache_key}")
+                print(f"[SUCCESS] Cached recommendations in Redis: {cache_key}")
                 
             except Exception as redis_error:
-                print(f"⚠️ Redis caching failed for {cache_key}: {redis_error}")
+                print(f"[WARNING] Redis caching failed for {cache_key}: {redis_error}")
                 # Continue to fallback caching
         
         # Fallback caching: In-memory with manual TTL
@@ -4043,18 +4116,18 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
             
             _recommendation_cache[cache_key] = cache_data
             success = True
-            print(f"✅ Cached recommendations in memory: {cache_key}")
+            print(f"[SUCCESS] Cached recommendations in memory: {cache_key}")
             
             # Clean up old in-memory cache entries periodically
             _cleanup_stale_memory_cache()
             
         except Exception as memory_error:
-            print(f"❌ In-memory caching failed for {cache_key}: {memory_error}")
+            print(f"[ERROR] In-memory caching failed for {cache_key}: {memory_error}")
             
         return success
         
     except Exception as e:
-        print(f"❌ Error caching recommendations for {user_id}: {e}")
+        print(f"[ERROR] Error caching recommendations for {user_id}: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -4106,7 +4179,7 @@ def _cleanup_stale_memory_cache():
             print(f"🗑️ Cleaned up {len(stale_keys)} stale in-memory cache entries")
             
     except Exception as e:
-        print(f"⚠️ Error during memory cache cleanup: {e}")
+        print(f"[WARNING] Error during memory cache cleanup: {e}")
 
 def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: str, section: str) -> Optional[Dict[str, Any]]:
     """
@@ -4167,7 +4240,7 @@ def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: st
                             if item_media_type == content_type.lower():
                                 filtered_items.append(item)
                     except Exception as filter_error:
-                        print(f"⚠️ Error filtering item in section {section_name}: {filter_error}")
+                        print(f"[WARNING] Error filtering item in section {section_name}: {filter_error}")
                         continue
             
             if filtered_items:
@@ -4195,11 +4268,11 @@ def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: st
             'generated_at': datetime.now().isoformat()
         })
         
-        print(f"✅ Successfully filtered cache: {total_filtered_items} items for content_type: {content_type}")
+        print(f"[SUCCESS] Successfully filtered cache: {total_filtered_items} items for content_type: {content_type}")
         return filtered_response
         
     except Exception as e:
-        print(f"❌ Error filtering cached recommendations: {e}")
+        print(f"[ERROR] Error filtering cached recommendations: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -4572,10 +4645,10 @@ def _generate_content_based_recommendations(completed_items: List[Dict[str, Any]
                 if item_data:
                     recommendations.append(item_data)
                 else:
-                    print(f"⚠️ Failed to create recommendation item for idx {idx}")
+                    print(f"[WARNING] Failed to create recommendation item for idx {idx}")
                     
             except Exception as item_error:
-                print(f"❌ Error processing recommendation item at idx {idx}: {item_error}")
+                print(f"[ERROR] Error processing recommendation item at idx {idx}: {item_error}")
                 continue
         
         # Production monitoring logs
@@ -4643,7 +4716,7 @@ def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
                 print(f"🔍 Genre '{genre}' filter: {filtered_items}/{total_items} items (content_type: {content_type})")
                 
             except Exception as filter_error:
-                print(f"❌ Error filtering genre '{genre}': {filter_error}")
+                print(f"[ERROR] Error filtering genre '{genre}': {filter_error}")
                 continue
             
             if genre_items.empty:
@@ -4708,7 +4781,7 @@ def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
             print(f"🔍 Hidden gems filter: {len(hidden_gems)}/{len(base_df)} items (content_type: {content_type}, min_score: {min_score})")
             
         except Exception as filter_error:
-            print(f"❌ Error in hidden gems filtering: {filter_error}")
+            print(f"[ERROR] Error in hidden gems filtering: {filter_error}")
             return []
         
         if hidden_gems.empty:
@@ -5053,7 +5126,7 @@ def get_personalized_recommendations():
             print(f"🎯 Recommendation request: user={user_id}, limit={limit}, section={section}, content_type={content_type}, refresh={force_refresh}")
             
         except Exception as param_error:
-            print(f"❌ Parameter validation error: {param_error}")
+            print(f"[ERROR] Parameter validation error: {param_error}")
             return jsonify({'error': f'Parameter validation failed: {str(param_error)}'}), 400
         
         # Production-ready cache management with content type and section support
@@ -5065,7 +5138,7 @@ def get_personalized_recommendations():
             if cached_recommendations:
                 cache_hit = True
                 cached_recommendations['cache_info']['cache_hit'] = True
-                print(f"✅ Cache hit for user {user_id}, content_type: {content_type}, section: {section}")
+                print(f"[SUCCESS] Cache hit for user {user_id}, content_type: {content_type}, section: {section}")
                 return jsonify(cached_recommendations)
             
             # If no exact match and we're looking for 'all' content, try to find base cache
@@ -5094,7 +5167,7 @@ def get_personalized_recommendations():
             # Analyze user preferences with error handling
             user_preferences = analyze_user_preferences(user_id)
             if not user_preferences:
-                print(f"⚠️ Could not analyze preferences for user {user_id}, using defaults")
+                print(f"[WARNING] Could not analyze preferences for user {user_id}, using defaults")
                 user_preferences = _get_default_preferences()
             
             # Get user's dismissed items with error handling
@@ -5102,7 +5175,7 @@ def get_personalized_recommendations():
                 dismissed_items = get_user_dismissed_items(user_id)
                 print(f"🚫 Excluding {len(dismissed_items)} dismissed items")
             except Exception as dismissed_error:
-                print(f"⚠️ Error getting dismissed items: {dismissed_error}")
+                print(f"[WARNING] Error getting dismissed items: {dismissed_error}")
                 dismissed_items = set()
             
             # Generate recommendations with comprehensive error handling
@@ -5117,12 +5190,12 @@ def get_personalized_recommendations():
             # Check if we have sufficient recommendations
             total_recs = sum(len(recs) for recs in recommendations.values() if isinstance(recs, list))
             if total_recs == 0:
-                print(f"⚠️ No recommendations generated for user {user_id} with content_type {content_type}")
+                print(f"[WARNING] No recommendations generated for user {user_id} with content_type {content_type}")
             else:
-                print(f"✅ Generated {total_recs} total recommendations")
+                print(f"[SUCCESS] Generated {total_recs} total recommendations")
                 
         except Exception as generation_error:
-            print(f"❌ Error generating recommendations: {generation_error}")
+            print(f"[ERROR] Error generating recommendations: {generation_error}")
             import traceback
             traceback.print_exc()
             
@@ -5135,7 +5208,7 @@ def get_personalized_recommendations():
             
         # Calculate generation time for monitoring
         generation_time = (datetime.now() - start_time).total_seconds()
-        print(f"⏱️ Recommendation generation took {generation_time:.2f} seconds")
+        print(f"[TIMER] Recommendation generation took {generation_time:.2f} seconds")
         
         # Create user preferences summary for frontend
         user_prefs_summary = {
@@ -5162,14 +5235,14 @@ def get_personalized_recommendations():
         # Cache the results with production-ready cache management
         cache_success = set_personalized_recommendation_cache(user_id, response_data, content_type, section)
         if cache_success:
-            print(f"✅ Successfully cached recommendations for user {user_id}, content_type: {content_type}, section: {section}")
+            print(f"[SUCCESS] Successfully cached recommendations for user {user_id}, content_type: {content_type}, section: {section}")
         else:
-            print(f"⚠️ Failed to cache recommendations for user {user_id}, content_type: {content_type}, section: {section}")
+            print(f"[WARNING] Failed to cache recommendations for user {user_id}, content_type: {content_type}, section: {section}")
         
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"❌ Error generating personalized recommendations: {e}")
+        print(f"[ERROR] Error generating personalized recommendations: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to generate recommendations: {str(e)}'}), 500
@@ -5240,7 +5313,7 @@ def get_more_personalized_recommendations():
     except ValueError as e:
         return jsonify({'error': 'Invalid parameter format'}), 400
     except Exception as e:
-        print(f"❌ Error loading more personalized recommendations: {e}")
+        print(f"[ERROR] Error loading more personalized recommendations: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to load more recommendations: {str(e)}'}), 500
@@ -5448,7 +5521,7 @@ def submit_recommendation_feedback():
             invalidate_personalized_recommendation_cache(user_id)
             print(f"🗑️ Invalidated recommendation cache for user {user_id}")
         except Exception as e:
-            print(f"⚠️ Failed to invalidate cache: {e}")
+            print(f"[WARNING] Failed to invalidate cache: {e}")
             # Don't fail the request if cache invalidation fails
         
         # In a production system, you would:
@@ -5464,7 +5537,7 @@ def submit_recommendation_feedback():
         })
         
     except Exception as e:
-        print(f"❌ Error submitting recommendation feedback: {e}")
+        print(f"[ERROR] Error submitting recommendation feedback: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to submit feedback: {str(e)}'}), 500
@@ -5595,13 +5668,17 @@ def get_public_user_profile(username):
 @require_privacy_check(content_type='profile')
 def get_public_user_stats(username):
     """
-    Get user statistics by username with privacy filtering.
+    Get user statistics by username with privacy filtering and cache metadata.
     
     Path Parameters:
         username (str): Username to get stats for
         
     Returns:
-        JSON Response containing user statistics
+        JSON Response containing:
+            - stats: User statistics data
+            - cache_hit: Whether data was served from cache
+            - last_updated: Timestamp of last stats update
+            - updating: Whether stats are being refreshed in background
         
     HTTP Status Codes:
         200: Success - Statistics retrieved
@@ -5641,48 +5718,37 @@ def get_public_user_stats(username):
                 import supabase_client as sc_module
                 importlib.reload(sc_module)
                 supabase_client = sc_module.SupabaseClient()
-                print("✅ SupabaseClient reinitialized successfully")
+                print("[SUCCESS] SupabaseClient reinitialized successfully")
                 if not hasattr(supabase_client, 'get_user_stats'):
-                    print("❌ get_user_stats method still not found after reinitialization")
+                    print("[ERROR] get_user_stats method still not found after reinitialization")
                     print(f"Available methods: {[method for method in dir(supabase_client) if not method.startswith('_')]}")
                     return jsonify({'error': 'Database service temporarily unavailable'}), 503
             except Exception as reinit_error:
-                print(f"❌ Failed to reinitialize SupabaseClient: {reinit_error}")
+                print(f"[ERROR] Failed to reinitialize SupabaseClient: {reinit_error}")
                 return jsonify({'error': 'Database service temporarily unavailable'}), 503
             
-        # Try to call get_user_stats with fallback error handling
-        try:
-            stats = supabase_client.get_user_stats(user_id, viewer_id)
+        # Get user statistics with caching
+        stats = get_user_statistics(user_id)
+        
+        # Check cache metadata
+        cache_hit = False
+        last_updated = None
+        updating = False
+        
+        if stats and 'cached_at' in stats:
+            cache_hit = True
+            last_updated = stats.get('last_updated')
+        elif stats and 'updated_at' in stats:
+            # Database cache
+            cache_hit = True
+            last_updated = stats.get('updated_at')
+        else:
+            # Fresh calculation - trigger background update
+            updating = True
             
-            # If stats is None due to privacy settings, return empty stats instead of 404
-            if stats is None:
-                print(f"Stats privacy restricted for user {user_id}, returning empty stats")
-                stats = {
-                    'user_id': user_id,
-                    'total_anime_watched': 0,
-                    'total_manga_read': 0,
-                    'total_hours_watched': 0,
-                    'total_chapters_read': 0,
-                    'average_score': 0,
-                    'completion_rate': 0,
-                    'current_streak_days': 0,
-                    'longest_streak_days': 0,
-                    'favorite_genres': [],
-                    'status_counts': {
-                        'watching': 0,
-                        'completed': 0,
-                        'plan_to_watch': 0,
-                        'dropped': 0,
-                        'on_hold': 0,
-                    },
-                    'updated_at': '',
-                    'private': True  # Indicate that stats are private
-                }
-                
-        except AttributeError as attr_error:
-            print(f"AttributeError calling get_user_stats: {attr_error}")
-            print("Method not found, using fallback stats...")
-            # Return empty stats instead of failing
+        # If stats is None due to privacy settings, return empty stats
+        if stats is None:
+            print(f"Stats privacy restricted for user {user_id}, returning empty stats")
             stats = {
                 'user_id': user_id,
                 'total_anime_watched': 0,
@@ -5701,34 +5767,17 @@ def get_public_user_stats(username):
                     'dropped': 0,
                     'on_hold': 0,
                 },
-                'updated_at': ''
-            }
-        except Exception as e:
-            print(f"Error calling get_user_stats: {e}")
-            # Return empty stats instead of failing
-            stats = {
-                'user_id': user_id,
-                'total_anime_watched': 0,
-                'total_manga_read': 0,
-                'total_hours_watched': 0,
-                'total_chapters_read': 0,
-                'average_score': 0,
-                'completion_rate': 0,
-                'current_streak_days': 0,
-                'longest_streak_days': 0,
-                'favorite_genres': [],
-                'status_counts': {
-                    'watching': 0,
-                    'completed': 0,
-                    'plan_to_watch': 0,
-                    'dropped': 0,
-                    'on_hold': 0,
-                },
-                'updated_at': ''
+                'updated_at': '',
+                'private': True  # Indicate that stats are private
             }
         
-        # Always return stats, never 404
-        return jsonify(stats)
+        # Return stats with cache metadata
+        return jsonify({
+            'stats': stats,
+            'cache_hit': cache_hit,
+            'last_updated': last_updated,
+            'updating': updating
+        })
             
     except Exception as e:
         print(f"Error getting user stats: {e}")
@@ -5878,17 +5927,17 @@ def get_user_activity(username):
                 viewer_id = user_info.get('user_id') or user_info.get('sub')
                 print(f"👤 DEBUG: Viewer ID from auth: {viewer_id}")
             except:
-                print("⚠️ DEBUG: No valid auth token for viewer")
+                print("[WARNING] DEBUG: No valid auth token for viewer")
                 pass
         
         # First get user ID from username
         profile = auth_client.get_user_profile_by_username(username, viewer_id)
         if not profile:
-            print(f"❌ DEBUG: Profile not found for username: {username}")
+            print(f"[ERROR] DEBUG: Profile not found for username: {username}")
             return jsonify({'error': 'User not found or profile is private'}), 404
             
         user_id = profile['id']
-        print(f"✅ DEBUG: Resolved username '{username}' to user_id: {user_id}")
+        print(f"[SUCCESS] DEBUG: Resolved username '{username}' to user_id: {user_id}")
         
         # Get pagination parameters
         limit = min(int(request.args.get('limit', 20)), 50)
@@ -5924,7 +5973,7 @@ def get_user_activity(username):
         if activities:
             print(f"🎯 DEBUG: First activity: {activities[0]}")
         else:
-            print("⚠️ DEBUG: No activities returned from get_recent_user_activity")
+            print("[WARNING] DEBUG: No activities returned from get_recent_user_activity")
         
         # Filter activities based on offset for pagination
         if offset > 0 and offset < len(activities):
@@ -5932,7 +5981,7 @@ def get_user_activity(username):
             print(f"📄 DEBUG: After offset filtering, {len(activities)} activities remain")
         elif offset >= len(activities):
             activities = []
-            print(f"⚠️ DEBUG: Offset {offset} >= total activities {len(activities)}, returning empty")
+            print(f"[WARNING] DEBUG: Offset {offset} >= total activities {len(activities)}, returning empty")
         
         # Get total count from user_activity table for accurate pagination
         count_response = requests.get(
@@ -6449,7 +6498,7 @@ def setup_privacy_test_data():
         
         # JWT secret for test tokens (same as app config)
         jwt_secret = os.getenv('JWT_SECRET_KEY', 'test-jwt-secret-for-privacy-tests')
-        print(f"🔑 JWT secret configured: {jwt_secret[:15]}..." if jwt_secret else "❌ No JWT secret found")
+        print(f"🔑 JWT secret configured: {jwt_secret[:15]}..." if jwt_secret else "[ERROR] No JWT secret found")
         
         # Define test users with different privacy settings
         user_configs = {
@@ -6496,7 +6545,7 @@ def setup_privacy_test_data():
         # Create test users with real JWT tokens
         for user_type, config in user_configs.items():
             try:
-                print(f"⚙️ Processing user: {user_type}")
+                print(f"[CONFIG] Processing user: {user_type}")
                 
                 # Generate deterministic but unique user ID
                 user_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"privacy-test-{config['username']}"))
@@ -6530,10 +6579,10 @@ def setup_privacy_test_data():
                     'authToken': auth_token,
                     'privacy': config['privacy']
                 }
-                print(f"✅ Successfully created test user: {user_type}")
+                print(f"[SUCCESS] Successfully created test user: {user_type}")
                 
             except Exception as user_error:
-                print(f"❌ CRITICAL ERROR creating test user {user_type}: {user_error}")
+                print(f"[ERROR] CRITICAL ERROR creating test user {user_type}: {user_error}")
                 import traceback
                 traceback.print_exc()
                 
@@ -6554,7 +6603,7 @@ def setup_privacy_test_data():
         
         # Validate that we have users
         if not test_users:
-            print("⚠️ No users were created - adding emergency fallback users...")
+            print("[WARNING] No users were created - adding emergency fallback users...")
             test_users = {
                 'viewer': {
                     'id': 'emergency-viewer-id',
@@ -6729,6 +6778,195 @@ def generate_test_auth_token():
             'error': str(e)
         }), 500
 
+@app.route('/api/analytics/user/<user_id>/stats', methods=['GET'])
+def get_public_user_stats_by_id(user_id):
+    """
+    Get public statistics for a specific user with privacy controls.
+    
+    This endpoint provides cached user statistics while respecting privacy settings.
+    It's designed for high performance with Redis caching and automatic fallback.
+    
+    Path Parameters:
+        user_id (str): UUID of the user whose statistics to retrieve
+        
+    Query Parameters:
+        refresh (bool, optional): Force refresh of cached data (requires auth)
+        
+    Returns:
+        JSON Response containing:
+            - stats (dict): User statistics if accessible
+            - cache_hit (bool): Whether data came from cache
+            - last_updated (str): When stats were last calculated
+            - privacy_blocked (bool): True if privacy settings prevent access
+            
+    Privacy Rules:
+        - Public profiles: Full statistics accessible to anyone
+        - Friends only: Statistics only for friends/followers
+        - Private: No statistics available to others
+        
+    HTTP Status Codes:
+        200: Success - Statistics retrieved (may be empty due to privacy)
+        400: Bad Request - Invalid user ID format
+        404: Not Found - User does not exist
+        500: Server Error - Cache or calculation error
+        
+    Example Request:
+        GET /api/analytics/user/123e4567-e89b-12d3-a456-426614174000/stats
+        
+    Example Response (Public Profile):
+        {
+            "stats": {
+                "total_anime_watched": 150,
+                "total_manga_read": 75,
+                "average_score": 8.2,
+                "favorite_genres": ["Action", "Drama"],
+                "completion_rate": 0.85
+            },
+            "cache_hit": true,
+            "last_updated": "2024-01-15T10:30:00Z",
+            "privacy_blocked": false
+        }
+        
+    Example Response (Private Profile):
+        {
+            "stats": null,
+            "cache_hit": false,
+            "privacy_blocked": true,
+            "message": "This user's statistics are private"
+        }
+    """
+    try:
+        # Validate user_id format
+        if not user_id or len(user_id) != 36:
+            return jsonify({'error': 'Invalid user ID format'}), 400
+        
+        # Check if user exists
+        user_profile = auth_client.get_user_profile(user_id)
+        if not user_profile:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Check privacy settings
+        viewer_id = None
+        if 'Authorization' in request.headers:
+            # Extract viewer ID if authenticated
+            try:
+                g.current_user = auth_client.verify_token(request.headers['Authorization'].replace('Bearer ', ''))
+                viewer_id = g.current_user.get('user_id') or g.current_user.get('sub')
+            except:
+                pass
+        
+        # Check if viewer can access target's statistics
+        privacy_settings = privacy_enforcer.get_user_privacy_settings(user_id)
+        can_view = privacy_enforcer.can_view_user_content(
+            viewer_id=viewer_id,
+            target_user_id=user_id,
+            content_type='profile'
+        )
+        
+        if not can_view:
+            return jsonify({
+                'stats': None,
+                'cache_hit': False,
+                'privacy_blocked': True,
+                'message': "This user's statistics are private"
+            }), 200
+        
+        # Check if refresh is requested (only for authenticated users viewing their own profile)
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+        if force_refresh and viewer_id != user_id:
+            force_refresh = False  # Only allow self-refresh
+        
+        # Get statistics with cache
+        if force_refresh:
+            # Invalidate cache and recalculate
+            from utils.cache_helpers import invalidate_user_cache
+            invalidate_user_cache(user_id)
+            stats = calculate_user_statistics_realtime(user_id)
+            if stats:
+                set_user_stats_in_cache(user_id, stats)
+        else:
+            stats = get_user_statistics(user_id)
+        
+        # Determine cache status
+        cache_hit = False
+        last_updated = None
+        
+        if stats:
+            if 'cached_at' in stats:
+                cache_hit = True
+                last_updated = stats.get('last_updated')
+            elif 'updated_at' in stats:
+                cache_hit = True
+                last_updated = stats.get('updated_at')
+            
+            # Remove internal cache fields from response
+            public_stats = {k: v for k, v in stats.items() 
+                          if k not in ['cached_at', 'updated_at']}
+        else:
+            public_stats = None
+        
+        return jsonify({
+            'stats': public_stats,
+            'cache_hit': cache_hit,
+            'last_updated': last_updated,
+            'privacy_blocked': False,
+            'user': {
+                'id': user_profile.get('id'),
+                'username': user_profile.get('username'),
+                'avatar_url': user_profile.get('avatar_url')
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting public user stats: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to retrieve user statistics'}), 500
+
+@app.route('/api/cache/status', methods=['GET'])
+def get_cache_status_endpoint():
+    """
+    Get Redis cache status and statistics for monitoring.
+    
+    This endpoint provides cache health information for operational monitoring
+    and debugging. It shows connection status, memory usage, and hit rates.
+    
+    Returns:
+        JSON Response containing:
+            - connected (bool): Whether Redis is connected
+            - timestamp (str): Current server time
+            - used_memory_human (str): Human-readable memory usage
+            - connected_clients (int): Number of connected clients
+            - hit_rate (float): Cache hit rate percentage
+            - keyspace_hits (int): Total successful cache reads
+            - keyspace_misses (int): Total cache misses
+            
+    HTTP Status Codes:
+        200: Success - Cache status retrieved
+        500: Server Error - Unable to get cache status
+        
+    Example Response:
+        {
+            "connected": true,
+            "timestamp": "2024-01-15T10:30:00Z",
+            "used_memory_human": "12.5M",
+            "connected_clients": 5,
+            "hit_rate": 92.5,
+            "keyspace_hits": 185000,
+            "keyspace_misses": 15000
+        }
+    """
+    try:
+        status = get_cache_status()
+        return jsonify(status), 200
+    except Exception as e:
+        print(f"Error getting cache status: {e}")
+        return jsonify({
+            'connected': False,
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
 @app.route('/api/test/privacy/verify-enforcement', methods=['POST'])
 def verify_privacy_enforcement():
     """
@@ -6852,7 +7090,7 @@ def discover_lists():
             return jsonify({'error': 'Authentication client not available'}), 500
             
         if not hasattr(auth_client, 'discover_lists'):
-            print(f"❌ ERROR: auth_client ({type(auth_client)}) does not have discover_lists method")
+            print(f"[ERROR] ERROR: auth_client ({type(auth_client)}) does not have discover_lists method")
             return jsonify({'error': 'Lists discovery feature not available'}), 500
             
         result = auth_client.discover_lists(search=search, tags=tags, sort_by=sort_by, page=page, limit=limit)
@@ -6958,15 +7196,15 @@ def reorder_list_items(list_id):
         
         # Check if method exists and reload if necessary
         if not hasattr(supabase_client, 'reorder_list_items'):
-            print("⚠️ reorder_list_items method not found, attempting to reinitialize client...")
+            print("[WARNING] reorder_list_items method not found, attempting to reinitialize client...")
             try:
                 import importlib
                 import supabase_client as sc_module
                 importlib.reload(sc_module)
                 supabase_client = sc_module.SupabaseClient()
-                print("✅ SupabaseClient reinitialized successfully")
+                print("[SUCCESS] SupabaseClient reinitialized successfully")
             except Exception as e:
-                print(f"❌ Failed to reinitialize SupabaseClient: {e}")
+                print(f"[ERROR] Failed to reinitialize SupabaseClient: {e}")
                 return jsonify({'error': 'Method not available, please restart the server'}), 500
         
         success = supabase_client.reorder_list_items(list_id, user_id, items)
@@ -7165,9 +7403,9 @@ def search_users():
             print("Error: supabase_client is not ready or missing 'search_users' — reinitializing...")
             try:
                 supabase_client = SupabaseClient()
-                print("✅ Supabase client (with search_users) reinitialized successfully")
+                print("[SUCCESS] Supabase client (with search_users) reinitialized successfully")
             except Exception as init_error:
-                print(f"❌ Failed to reinitialize Supabase client: {init_error}")
+                print(f"[ERROR] Failed to reinitialize Supabase client: {init_error}")
                 return jsonify({
                     'error': 'Database service temporarily unavailable',
                     'users': [],
@@ -8007,6 +8245,75 @@ def delete_review(review_id):
         print(f"Error deleting review: {e}")
         return jsonify({'error': str(e)}), 500
 
+def enhance_comment_with_moderation_cache(comment: Dict[str, Any], viewer_id: Optional[str] = None, is_moderator: bool = False) -> Dict[str, Any]:
+    """
+    Enhance comment data with cached moderation information
+    
+    Args:
+        comment: Comment dictionary from database
+        viewer_id: ID of the viewing user
+        is_moderator: Whether the viewer is a moderator
+        
+    Returns:
+        Enhanced comment dictionary with cache metadata
+    """
+    comment_id = str(comment.get('id', ''))
+    
+    # Try to get moderation data from cache
+    cached_analysis = get_toxicity_analysis_from_cache(comment_id, 'comment')
+    cached_moderation = get_content_moderation_status_from_cache(comment_id, 'comment')
+    
+    # Add cache metadata
+    comment['cache_metadata'] = {
+        'analysis_cached': cached_analysis is not None,
+        'moderation_cached': cached_moderation is not None,
+        'last_analyzed': None,
+        'analysis_status': 'unknown'
+    }
+    
+    # Use cached data if available, otherwise use database data
+    if cached_analysis:
+        comment['toxicity_score'] = cached_analysis.get('toxicity_score', 0)
+        comment['is_toxic'] = cached_analysis.get('is_toxic', False)
+        comment['analysis_confidence'] = cached_analysis.get('confidence', 0.95)
+        comment['toxicity_categories'] = cached_analysis.get('categories', {})
+        comment['cache_metadata']['last_analyzed'] = cached_analysis.get('analyzed_at')
+        comment['cache_metadata']['analysis_status'] = cached_analysis.get('analysis_status', 'completed')
+        comment['cache_metadata']['cache_hit'] = True
+    else:
+        # Fallback to database values
+        comment['cache_metadata']['cache_hit'] = False
+        comment['analysis_confidence'] = 0.95  # Default confidence
+        comment['toxicity_categories'] = {}
+    
+    if cached_moderation:
+        comment['moderation_status'] = cached_moderation.get('moderation_status', 'clean')
+        comment['is_flagged'] = cached_moderation.get('is_flagged', False)
+        comment['flag_reason'] = cached_moderation.get('flag_reason')
+        comment['cache_metadata']['moderation_last_updated'] = cached_moderation.get('last_updated')
+    
+    # Apply privacy rules for toxicity scores
+    if comment.get('toxicity_score') is not None:
+        comment['moderation_status'] = comment.get('moderation_status', 'clean')
+        comment['is_flagged'] = comment.get('is_flagged', False)
+        
+        # Include detailed scores only for moderators or the comment author
+        if is_moderator or (viewer_id and viewer_id == comment.get('user_id')):
+            # Keep all moderation data for moderators and authors
+            pass
+        else:
+            # For regular users, only show warning if content is problematic
+            if comment.get('toxicity_score', 0) > 0.7:
+                comment['toxicity_warning'] = True
+                comment['toxicity_level'] = 'high' if comment.get('toxicity_score', 0) > 0.8 else 'medium'
+            
+            # Remove detailed scores for privacy
+            comment.pop('toxicity_score', None)
+            comment.pop('analysis_confidence', None)
+            comment.pop('toxicity_categories', None)
+    
+    return comment
+
 # =============================================================================
 # COMMENT SYSTEM API ENDPOINTS
 # =============================================================================
@@ -8243,6 +8550,28 @@ def get_comments(parent_type, parent_id):
             comment['reply_count'] = total_replies
             comment['has_more_replies'] = total_replies > len(comment['replies'])
             
+            # Include moderation data if available and user has permission
+            # Check if viewer is moderator or admin
+            viewer_id = None
+            is_moderator = False
+            if 'Authorization' in request.headers:
+                try:
+                    current_user = auth_client.verify_token(request.headers['Authorization'].replace('Bearer ', ''))
+                    viewer_id = current_user.get('user_id') or current_user.get('sub')
+                    # Check if user is moderator
+                    mod_check = supabase_client.table('user_roles').select('role').eq('user_id', viewer_id).execute()
+                    if mod_check.data:
+                        is_moderator = any(role['role'] in ['moderator', 'admin'] for role in mod_check.data)
+                except:
+                    pass
+            
+            # Enhance comment with cached moderation data
+            comment = enhance_comment_with_moderation_cache(comment, viewer_id, is_moderator)
+            
+            # Process replies similarly
+            for i, reply in enumerate(comment['replies']):
+                comment['replies'][i] = enhance_comment_with_moderation_cache(reply, viewer_id, is_moderator)
+            
             comments_with_replies.append(comment)
         
         # Get total count for pagination
@@ -8256,6 +8585,18 @@ def get_comments(parent_type, parent_id):
         total_count_result = total_count_query.execute()
         total_count = total_count_result.count or 0
         
+        # Calculate cache statistics
+        total_comments = len(comments_with_replies)
+        total_with_replies = sum(len(c.get('replies', [])) for c in comments_with_replies)
+        cache_hits = sum(1 for c in comments_with_replies if c.get('cache_metadata', {}).get('cache_hit', False))
+        cache_hits += sum(1 for c in comments_with_replies for r in c.get('replies', []) if r.get('cache_metadata', {}).get('cache_hit', False))
+        
+        cache_stats = {
+            'total_items': total_comments + total_with_replies,
+            'cache_hits': cache_hits,
+            'cache_hit_rate': round((cache_hits / (total_comments + total_with_replies)) * 100, 2) if (total_comments + total_with_replies) > 0 else 0
+        }
+        
         return jsonify({
             'comments': comments_with_replies,
             'pagination': {
@@ -8265,6 +8606,11 @@ def get_comments(parent_type, parent_id):
                 'total_pages': (total_count + limit - 1) // limit,
                 'has_next': page * limit < total_count,
                 'has_prev': page > 1
+            },
+            'cache_stats': cache_stats,
+            'response_metadata': {
+                'timestamp': datetime.utcnow().isoformat(),
+                'viewer_is_moderator': is_moderator
             }
         }), 200
         
@@ -9189,6 +9535,192 @@ def update_notification_preferences(user_id):
 # ================================
 # MODERATION ENDPOINTS
 # ================================
+
+@app.route('/api/moderation/stats', methods=['GET'])
+@require_auth
+@require_moderator
+def get_moderation_stats():
+    """
+    Get moderation statistics for the dashboard analytics.
+    
+    Query Parameters:
+        timeframe (string, optional): Time range ('24h', '7d', '30d', '90d') (default: '7d')
+        granularity (string, optional): Data granularity ('hour', 'day', 'week') (default: 'day')
+        
+    Returns:
+        200: Statistics retrieved successfully
+        403: Insufficient permissions
+        500: Server error
+    """
+    try:
+        # Get query parameters
+        timeframe = request.args.get('timeframe', '7d')
+        granularity = request.args.get('granularity', 'day')
+        
+        # Check cache first
+        cache_key = f"moderation_stats:global:{timeframe}:{granularity}"
+        cached_stats = get_moderation_stats_from_cache()
+        
+        if cached_stats and cached_stats.get('timeframe') == timeframe:
+            cached_stats['cache_hit'] = True
+            return jsonify(cached_stats), 200
+        
+        # Calculate time range
+        from datetime import datetime, timedelta
+        
+        time_deltas = {
+            '24h': timedelta(hours=24),
+            '7d': timedelta(days=7),
+            '30d': timedelta(days=30),
+            '90d': timedelta(days=90)
+        }
+        
+        if timeframe not in time_deltas:
+            return jsonify({'error': 'Invalid timeframe. Use: 24h, 7d, 30d, 90d'}), 400
+        
+        end_time = datetime.utcnow()
+        start_time = end_time - time_deltas[timeframe]
+        
+        # Get comment report statistics
+        comment_reports_query = (supabase_client.table('comment_reports')
+                               .select('status, created_at, priority, report_type')
+                               .gte('created_at', start_time.isoformat())
+                               .lte('created_at', end_time.isoformat()))
+        
+        comment_reports = comment_reports_query.execute()
+        
+        # Get review report statistics
+        review_reports_query = (supabase_client.table('review_reports')
+                              .select('status, created_at, priority, report_type')
+                              .gte('created_at', start_time.isoformat())
+                              .lte('created_at', end_time.isoformat()))
+        
+        review_reports = review_reports_query.execute()
+        
+        # Get toxicity analysis statistics
+        comments_with_toxicity = (supabase_client.table('comments')
+                                .select('toxicity_score, created_at, is_flagged, moderation_status')
+                                .gte('created_at', start_time.isoformat())
+                                .lte('created_at', end_time.isoformat())
+                                .not_.is_('toxicity_score', 'null'))
+        
+        toxicity_data = comments_with_toxicity.execute()
+        
+        # Process and aggregate data
+        stats = {
+            'timeframe': timeframe,
+            'granularity': granularity,
+            'start_time': start_time.isoformat(),
+            'end_time': end_time.isoformat(),
+            'cache_hit': False,
+            'summary': {
+                'total_reports': len(comment_reports.data or []) + len(review_reports.data or []),
+                'pending_reports': 0,
+                'resolved_reports': 0,
+                'dismissed_reports': 0,
+                'high_priority_reports': 0,
+                'total_content_analyzed': len(toxicity_data.data or []),
+                'high_toxicity_content': 0,
+                'auto_flagged_content': 0,
+                'manual_actions': 0
+            },
+            'trends': {
+                'reports_by_day': [],
+                'toxicity_by_day': [],
+                'resolution_times': [],
+                'content_categories': {
+                    'clean': 0,
+                    'low_toxicity': 0,
+                    'medium_toxicity': 0,
+                    'high_toxicity': 0
+                }
+            },
+            'top_issues': {
+                'most_reported_reasons': [],
+                'highest_toxicity_items': [],
+                'repeat_offenders': []
+            }
+        }
+        
+        # Process comment and review reports
+        all_reports = (comment_reports.data or []) + (review_reports.data or [])
+        for report in all_reports:
+            status = report.get('status', 'pending')
+            priority = report.get('priority', 'low')
+            
+            if status == 'pending':
+                stats['summary']['pending_reports'] += 1
+            elif status == 'resolved':
+                stats['summary']['resolved_reports'] += 1
+            elif status == 'dismissed':
+                stats['summary']['dismissed_reports'] += 1
+            
+            if priority == 'high':
+                stats['summary']['high_priority_reports'] += 1
+        
+        # Process toxicity data
+        for content in toxicity_data.data or []:
+            toxicity_score = content.get('toxicity_score', 0)
+            is_flagged = content.get('is_flagged', False)
+            
+            if toxicity_score > 0.8:
+                stats['summary']['high_toxicity_content'] += 1
+                stats['trends']['content_categories']['high_toxicity'] += 1
+            elif toxicity_score > 0.6:
+                stats['trends']['content_categories']['medium_toxicity'] += 1
+            elif toxicity_score > 0.3:
+                stats['trends']['content_categories']['low_toxicity'] += 1
+            else:
+                stats['trends']['content_categories']['clean'] += 1
+            
+            if is_flagged:
+                stats['summary']['auto_flagged_content'] += 1
+        
+        # Generate time-series data based on granularity
+        if granularity == 'day':
+            # Group data by day
+            from collections import defaultdict
+            reports_by_day = defaultdict(int)
+            toxicity_by_day = defaultdict(list)
+            
+            for report in all_reports:
+                try:
+                    report_date = datetime.fromisoformat(report['created_at'].replace('Z', '+00:00')).date()
+                    reports_by_day[report_date.isoformat()] += 1
+                except:
+                    continue
+            
+            for content in toxicity_data.data or []:
+                try:
+                    content_date = datetime.fromisoformat(content['created_at'].replace('Z', '+00:00')).date()
+                    toxicity_by_day[content_date.isoformat()].append(content.get('toxicity_score', 0))
+                except:
+                    continue
+            
+            # Convert to sorted lists
+            stats['trends']['reports_by_day'] = [
+                {'date': date, 'count': count} 
+                for date, count in sorted(reports_by_day.items())
+            ]
+            
+            stats['trends']['toxicity_by_day'] = [
+                {
+                    'date': date, 
+                    'avg_toxicity': sum(scores) / len(scores) if scores else 0,
+                    'max_toxicity': max(scores) if scores else 0,
+                    'count': len(scores)
+                }
+                for date, scores in sorted(toxicity_by_day.items())
+            ]
+        
+        # Cache the results
+        set_moderation_stats_in_cache(stats)
+        
+        return jsonify(stats), 200
+        
+    except Exception as e:
+        print(f"Error fetching moderation stats: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/moderation/reports', methods=['GET'])
 @require_auth
@@ -10798,5 +11330,162 @@ def _generate_list_recommendations(items: list, user_id: str) -> list:
         {'type': 'completion_boost', 'count': 2, 'description': 'Items to help complete your watchlist'}
     ]
 
+# Monitoring and health check endpoints
+@app.route('/api/admin/metrics', methods=['GET'])
+def get_system_metrics():
+    """
+    Get system metrics for monitoring dashboard.
+    
+    Returns real-time metrics including:
+    - Cache hit rates
+    - API response times
+    - Error rates
+    - System health
+    
+    Admin only endpoint for production monitoring.
+    """
+    try:
+        # Check if admin access (in production, add proper admin auth)
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or 'admin' not in auth_header.lower():
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        collector = get_metrics_collector()
+        
+        # Update system health metrics
+        record_system_health()
+        
+        # Get current metrics and summary
+        current_metrics = collector.get_current_metrics()
+        summary = collector.get_metric_summary(minutes=15)
+        
+        # Calculate additional derived metrics
+        derived_metrics = {}
+        
+        # Calculate error rate
+        total_requests = summary.get('api_requests_total', {}).get('latest', 0)
+        error_requests = summary.get('api_requests_error', {}).get('latest', 0)
+        if total_requests > 0:
+            derived_metrics['error_rate'] = error_requests / total_requests
+            collector.set_gauge('error_rate', derived_metrics['error_rate'])
+        
+        # Calculate average response time
+        response_times = summary.get('api_response_time', {})
+        if response_times.get('avg'):
+            derived_metrics['avg_response_time'] = response_times['avg']
+            collector.set_gauge('avg_response_time', derived_metrics['avg_response_time'])
+        
+        # Get cache status
+        cache_status = get_cache_status()
+        
+        return jsonify({
+            'timestamp': datetime.utcnow().isoformat(),
+            'metrics': current_metrics,
+            'summary': summary,
+            'derived_metrics': derived_metrics,
+            'cache_status': cache_status,
+            'alerts': [
+                {
+                    'name': alert.name,
+                    'level': alert.level.value,
+                    'enabled': alert.enabled,
+                    'last_triggered': alert.last_triggered.isoformat() if alert.last_triggered else None
+                }
+                for alert in collector.alerts.values()
+            ]
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting system metrics: {e}")
+        return jsonify({'error': 'Failed to retrieve metrics'}), 500
+
+@app.route('/api/admin/metrics/export', methods=['GET'])
+def export_metrics():
+    """
+    Export metrics in various formats for external monitoring systems.
+    
+    Supports formats:
+    - json (default)
+    - prometheus
+    
+    Admin only endpoint.
+    """
+    try:
+        # Check admin access
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or 'admin' not in auth_header.lower():
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        format_type = request.args.get('format', 'json').lower()
+        collector = get_metrics_collector()
+        
+        if format_type == 'prometheus':
+            exported_data = collector.export_metrics('prometheus')
+            return exported_data, 200, {'Content-Type': 'text/plain; version=0.0.4'}
+        else:
+            exported_data = collector.export_metrics('json')
+            return exported_data, 200, {'Content-Type': 'application/json'}
+            
+    except Exception as e:
+        logger.error(f"Error exporting metrics: {e}")
+        return jsonify({'error': 'Failed to export metrics'}), 500
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """
+    Health check endpoint for load balancers and monitoring systems.
+    
+    Returns system health status and basic metrics.
+    Public endpoint with basic health information.
+    """
+    try:
+        # Record system health
+        record_system_health()
+        
+        # Get cache status
+        cache_status = get_cache_status()
+        
+        # Basic health checks
+        health_status = {
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'version': '1.0.0',
+            'cache_connected': cache_status.get('connected', False),
+            'uptime_seconds': time.time() - app.start_time if hasattr(app, 'start_time') else 0
+        }
+        
+        # Check for critical issues
+        collector = get_metrics_collector()
+        current_metrics = collector.get_current_metrics()
+        
+        # Check cache hit rate
+        cache_hit_rate = current_metrics.get('cache_hit_rate', {}).get('value')
+        if cache_hit_rate is not None and cache_hit_rate < 0.5:
+            health_status['warnings'] = health_status.get('warnings', [])
+            health_status['warnings'].append('Low cache hit rate')
+        
+        # Check error rate
+        error_rate = current_metrics.get('error_rate', {}).get('value')
+        if error_rate is not None and error_rate > 0.1:
+            health_status['status'] = 'degraded'
+            health_status['warnings'] = health_status.get('warnings', [])
+            health_status['warnings'].append('High error rate')
+        
+        return jsonify(health_status)
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return jsonify({
+            'status': 'unhealthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'error': str(e)
+        }), 500
+
 if __name__ == '__main__':
+    # Record app start time for uptime calculation
+    app.start_time = time.time()
+    
+    # Initialize monitoring
+    logger.info("Starting AniManga Recommender API with monitoring enabled")
+    
     app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False)
