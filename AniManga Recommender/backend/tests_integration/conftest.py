@@ -171,7 +171,7 @@ def redis_client():
 @pytest.fixture(scope="session")
 def celery_app():
     """Create a real Celery app for testing."""
-    from celery_app import celery_app as real_celery_app
+    from celery_app import app as real_celery_app
     
     # Configure for testing
     real_celery_app.conf.update(
@@ -220,29 +220,6 @@ def app(load_test_items, supabase_client, auth_client):
         
         # Set df_processed to test data for health check to work
         app_module.df_processed = load_test_items
-        
-        # Initialize recommendation engine components for tests
-        if load_test_items is not None and len(load_test_items) > 0:
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            import pandas as pd
-            
-            # Create combined text features if not exists
-            if 'combined_text_features' not in load_test_items.columns:
-                load_test_items['combined_text_features'] = (
-                    load_test_items['title'].fillna('') + ' ' +
-                    load_test_items['synopsis'].fillna('') + ' ' +
-                    load_test_items['genres'].apply(lambda x: ' '.join(x) if isinstance(x, list) else '').fillna('')
-                )
-            
-            # Initialize TF-IDF vectorizer and matrix
-            app_module.tfidf_vectorizer_global = TfidfVectorizer(stop_words='english', max_features=5000)
-            app_module.tfidf_matrix_global = app_module.tfidf_vectorizer_global.fit_transform(
-                load_test_items['combined_text_features']
-            )
-            
-            # Create UID to index mapping
-            load_test_items.reset_index(drop=True, inplace=True)
-            app_module.uid_to_idx = pd.Series(load_test_items.index, index=load_test_items['uid'])
         
         # Replace the real Supabase clients with test ones
         app_module.supabase_client = supabase_client

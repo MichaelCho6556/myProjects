@@ -3092,7 +3092,7 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
             )
             
             if response.status_code != 200:
-                print(f"[ERROR] Failed to get user items: {response.status_code}")
+                print(f"❌ Failed to get user items: {response.status_code}")
                 return get_default_user_statistics()
             
             user_items = response.json()
