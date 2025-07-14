@@ -46,18 +46,38 @@ def make_celery():
         'recommendation_worker',
         broker=broker_url,
         backend=result_backend,
-        include=['tasks.recommendation_tasks', 'tasks.scheduling_tasks']
+        include=[
+            'tasks.recommendation_tasks', 
+            'tasks.scheduling_tasks',
+            'tasks.content_moderation_tasks',
+            'tasks.statistics_tasks',
+            'tasks.ml_pipeline_tasks'
+        ]
     )
     
     # Celery configuration
     celery.conf.update(
         # Task routing configuration
         task_routes={
+            # Recommendation tasks
             'tasks.recommendation_tasks.precompute_user_recommendations': {'queue': 'recommendations'},
             'tasks.recommendation_tasks.batch_precompute_recommendations': {'queue': 'recommendations'},
             'tasks.recommendation_tasks.warm_user_cache': {'queue': 'cache_warming'},
+            'tasks.recommendation_tasks.calculate_popular_lists': {'queue': 'recommendations'},
+            # Scheduling tasks
             'tasks.scheduling_tasks.schedule_recommendation_updates': {'queue': 'scheduling'},
             'tasks.scheduling_tasks.cleanup_stale_caches': {'queue': 'maintenance'},
+            'tasks.scheduling_tasks.monitor_task_performance': {'queue': 'monitoring'},
+            # Content moderation tasks
+            'tasks.content_moderation_tasks.analyze_content_toxicity_task': {'queue': 'moderation'},
+            'tasks.content_moderation_tasks.batch_content_moderation': {'queue': 'moderation'},
+            # Statistics tasks
+            'tasks.statistics_tasks.calculate_user_statistics_task': {'queue': 'analytics'},
+            'tasks.statistics_tasks.update_all_user_statistics': {'queue': 'analytics'},
+            'tasks.statistics_tasks.calculate_platform_statistics': {'queue': 'analytics'},
+            # ML pipeline tasks
+            'tasks.ml_pipeline_tasks.preprocess_recommendation_data': {'queue': 'ml_pipeline'},
+            'tasks.ml_pipeline_tasks.warm_recommendation_cache_all_users': {'queue': 'cache_warming'},
         },
         
         # Task execution configuration
@@ -99,6 +119,7 @@ def make_celery():
         
         # Beat scheduling (for periodic tasks)
         beat_schedule={
+            # Original scheduling tasks
             'schedule-recommendation-updates': {
                 'task': 'tasks.scheduling_tasks.schedule_recommendation_updates',
                 'schedule': timedelta(hours=2),  # Every 2 hours
@@ -113,6 +134,34 @@ def make_celery():
                 'task': 'tasks.scheduling_tasks.monitor_task_performance',
                 'schedule': timedelta(minutes=15),  # Every 15 minutes
                 'options': {'queue': 'monitoring'}
+            },
+            # Statistics updates
+            'daily-statistics-update': {
+                'task': 'tasks.statistics_tasks.update_all_user_statistics',
+                'schedule': timedelta(hours=24),  # Daily at midnight
+                'options': {'queue': 'analytics'}
+            },
+            'platform-statistics': {
+                'task': 'tasks.statistics_tasks.calculate_platform_statistics',
+                'schedule': timedelta(hours=1),  # Every hour
+                'options': {'queue': 'analytics'}
+            },
+            # ML pipeline updates
+            'preprocess-recommendation-data': {
+                'task': 'tasks.ml_pipeline_tasks.preprocess_recommendation_data',
+                'schedule': timedelta(hours=24),  # Daily
+                'options': {'queue': 'ml_pipeline'}
+            },
+            'warm-all-user-caches': {
+                'task': 'tasks.ml_pipeline_tasks.warm_recommendation_cache_all_users',
+                'schedule': timedelta(hours=4),  # Every 4 hours
+                'options': {'queue': 'cache_warming'}
+            },
+            # Popular content calculation
+            'calculate-popular-lists': {
+                'task': 'tasks.recommendation_tasks.calculate_popular_lists',
+                'schedule': timedelta(hours=12),  # Twice daily
+                'options': {'queue': 'recommendations'}
             }
         },
         beat_scheduler='celery.beat:PersistentScheduler',

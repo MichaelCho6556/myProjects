@@ -28,6 +28,25 @@ export interface Comment {
   replies?: Comment[];
   reply_count?: number;
   has_more_replies?: boolean;
+  // Moderation fields
+  is_flagged?: boolean;
+  moderation_status?: 'clean' | 'pending' | 'removed' | 'approved';
+  toxicity_score?: number;
+  toxicity_warning?: boolean;
+  toxicity_level?: 'low' | 'medium' | 'high';
+  analysis_confidence?: number;
+  toxicity_categories?: Record<string, boolean>;
+  flag_reason?: string;
+  
+  // Cache metadata
+  cache_metadata?: {
+    analysis_cached: boolean;
+    moderation_cached: boolean;
+    last_analyzed: string | null;
+    analysis_status: 'unknown' | 'pending' | 'analyzing' | 'completed' | 'failed';
+    cache_hit: boolean;
+    moderation_last_updated?: string;
+  };
 }
 
 export interface CreateCommentRequest {

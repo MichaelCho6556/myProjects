@@ -61,7 +61,11 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
   const loadUserItem = useCallback(async () => {
     try {
       setLoading(true);
-      const userItems = await getUserItems();
+      const response = await getUserItems();
+      
+      // Handle the new API response format that includes items array
+      const userItems = response.items || response;
+      
       const existingItem = userItems.find((ui: any) => ui.item_uid === item.uid);
 
       if (existingItem) {

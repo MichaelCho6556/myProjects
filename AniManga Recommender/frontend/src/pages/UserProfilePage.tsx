@@ -10,6 +10,7 @@ import LoadingBanner from "../components/Loading/LoadingBanner";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import { useAuth } from "../context/AuthContext";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
+import CacheStatusIndicator from "../components/dashboard/CacheStatusIndicator";
 import "./UserProfilePage.css";
 
 export const UserProfilePage: React.FC = () => {
@@ -27,6 +28,10 @@ export const UserProfilePage: React.FC = () => {
     error, 
     listsError,
     activitiesError,
+    statsCacheHit,
+    statsLastUpdated,
+    statsUpdating,
+    refetch,
     followUser 
   } = useUserProfile(username || "");
 
@@ -360,9 +365,19 @@ export const UserProfilePage: React.FC = () => {
                   <div className="section-title">
                     <h2>Statistics</h2>
                   </div>
+                  <CacheStatusIndicator
+                    cacheHit={statsCacheHit}
+                    lastUpdated={statsLastUpdated}
+                    updating={statsUpdating}
+                    onRefresh={refetch}
+                  />
                 </div>
                 <div className="section-content">
-                  <UserStatsComponent stats={stats} />
+                  <UserStatsComponent 
+                    stats={stats} 
+                    isLoading={statsUpdating}
+                    showAnimations={!statsCacheHit}
+                  />
                 </div>
               </section>
             )}

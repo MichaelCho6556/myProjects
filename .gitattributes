@@ -1,1 +1,2 @@
 AniManga[[:space:]]Recommender/backend/data/*.csv filter=lfs diff=lfs merge=lfs -text
+AniManga[[:space:]]Recommender/backend/data/manga.csv filter=lfs diff=lfs merge=lfs -text

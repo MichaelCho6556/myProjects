@@ -24,6 +24,8 @@ data/anime.csv
 data/manga.csv
 data/combined_media.csv
 
+backend/app.log
+
 # Environment variables
 .env
 
@@ -56,7 +58,10 @@ apm_artifacts/
 
 CLAUDE.md
 clauderules.md
+CLAUDE_DOCUMENTATION.md
 
 .mcp.json
+
+
 
 .env
