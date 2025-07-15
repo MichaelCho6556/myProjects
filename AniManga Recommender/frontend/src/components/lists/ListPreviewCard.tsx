@@ -9,12 +9,14 @@ interface ListPreviewCardProps {
   list: CustomList;
   onToggleFollow: () => void;
   onTagClick: (tag: string) => void;
+  isAuthenticated?: boolean;
 }
 
 export const ListPreviewCard: React.FC<ListPreviewCardProps> = ({
   list,
   onToggleFollow,
-  onTagClick
+  onTagClick,
+  isAuthenticated = true
 }) => {
   const [isFollowing, setIsFollowing] = useState(list.isFollowing || false);
   const [isLoading, setIsLoading] = useState(false);
@@ -55,26 +57,38 @@ export const ListPreviewCard: React.FC<ListPreviewCardProps> = ({
             </h3>
             
             {/* Follow Button */}
-            <button
-              onClick={handleFollowClick}
-              disabled={isLoading}
-              className={`flex-shrink-0 px-3 py-1 text-sm font-medium rounded-full transition-colors
-                ${isFollowing 
-                  ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {isLoading ? (
-                <svg className="animate-spin h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-              ) : isFollowing ? (
-                'Following'
-              ) : (
-                'Follow'
-              )}
-            </button>
+            {isAuthenticated ? (
+              <button
+                onClick={handleFollowClick}
+                disabled={isLoading}
+                className={`flex-shrink-0 px-3 py-1 text-sm font-medium rounded-full transition-colors
+                  ${isFollowing 
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isLoading ? (
+                  <svg className="animate-spin h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                ) : isFollowing ? (
+                  'Following'
+                ) : (
+                  'Follow'
+                )}
+              </button>
+            ) : (
+              <Link
+                to="/auth/login"
+                className="flex-shrink-0 px-3 py-1 text-sm font-medium rounded-full 
+                          bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 
+                          hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Sign in to follow
+              </Link>
+            )}
           </div>
 
           {/* Description */}
@@ -124,9 +138,7 @@ export const ListPreviewCard: React.FC<ListPreviewCardProps> = ({
             <div className="flex items-center gap-4">
               {/* Item Count */}
               <div className="flex items-center gap-1">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
+                <span className="text-sm">📝</span>
                 <span>{list.itemCount || 0} items</span>
               </div>
 

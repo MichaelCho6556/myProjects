@@ -3724,7 +3724,7 @@ class SupabaseAuthClient:
             return None
     
     def discover_lists(self, search: str = None, tags: List[str] = None, 
-                    sort_by: str = 'updated_at', page: int = 1, limit: int = 20) -> dict:
+                    sort_by: str = 'updated_at', page: int = 1, limit: int = 20, user_id: str = None) -> dict:
         """
         Discover public custom lists with search and filtering.
         
@@ -3742,15 +3742,18 @@ class SupabaseAuthClient:
             offset = (page - 1) * limit
             
             # Build query parameters
+            # Map sort_by to actual database columns
+            db_sort_by = sort_by
+            if sort_by in ['popularity', 'followers_count', 'item_count']:
+                # These will be sorted in Python after fetching data
+                db_sort_by = 'updated_at'
+            
             params = {
-                'is_public': 'eq.true',
-                'select': '''
-                    *,
-                    user_profiles!custom_lists_user_id_fkey(username, display_name, avatar_url)
-                ''',
+                'privacy': 'eq.public',
+                'select': '*',
                 'limit': limit,
                 'offset': offset,
-                'order': f'{sort_by}.desc'
+                'order': f'{db_sort_by}.desc'
             }
             
             # Add search filter
@@ -3764,12 +3767,17 @@ class SupabaseAuthClient:
             )
             
             if response.status_code != 200:
+                print(f"[DISCOVER_LISTS] Error: {response.status_code}")
+                print(f"[DISCOVER_LISTS] Response: {response.text}")
+                print(f"[DISCOVER_LISTS] URL: {response.url}")
                 return {'lists': [], 'total': 0, 'page': page, 'limit': limit}
             
             lists = response.json()
+            print(f"[DISCOVER_LISTS] Success: Found {len(lists)} lists")
+            print(f"[DISCOVER_LISTS] First few lists: {lists[:2] if lists else 'None'}")
             
             # Get total count for pagination
-            count_params = {'is_public': 'eq.true', 'select': 'count'}
+            count_params = {'privacy': 'eq.public', 'select': 'count'}
             if search:
                 count_params['or'] = f'title.ilike.%{search}%,description.ilike.%{search}%'
                 
@@ -3783,27 +3791,145 @@ class SupabaseAuthClient:
             if count_response.status_code == 200:
                 total = int(count_response.headers.get('Content-Range', '0').split('/')[-1])
             
+            # Get tags for all lists in a single query to avoid N+1
+            list_tags_map = {}
+            if lists:
+                list_ids = [list_item["id"] for list_item in lists]
+                
+                # Make a single query to get all tag associations for these lists
+                list_tags_response = requests.get(
+                    f"{self.base_url}/rest/v1/list_tag_associations",
+                    headers=self.headers,
+                    params={
+                        'list_id': f'in.({",".join(map(str, list_ids))})',
+                        'select': 'list_id,list_tags!inner(name)'
+                    }
+                )
+                
+                # Build a map of list_id -> tag_names for efficient access
+                if list_tags_response.status_code == 200:
+                    tag_associations = list_tags_response.json()
+                    for assoc in tag_associations:
+                        list_id = assoc['list_id']
+                        tag_name = assoc['list_tags']['name']
+                        if list_id not in list_tags_map:
+                            list_tags_map[list_id] = []
+                        list_tags_map[list_id].append(tag_name)
+            
             # Filter by tags if specified
             if tags and lists:
-                # This is simplified - in production, use a proper join query
+                # Filter lists that have any of the requested tags
                 filtered_lists = []
                 for list_item in lists:
-                    list_tags_response = requests.get(
-                        f"{self.base_url}/rest/v1/list_tag_associations",
-                        headers=self.headers,
-                        params={
-                            'list_id': f'eq.{list_item["id"]}',
-                            'select': 'list_tags!inner(name)'
-                        }
-                    )
-                    
-                    if list_tags_response.status_code == 200:
-                        list_tag_names = [tag['list_tags']['name'] for tag in list_tags_response.json()]
-                        if any(tag in list_tag_names for tag in tags):
-                            filtered_lists.append(list_item)
+                    list_id = list_item["id"]
+                    list_tag_names = list_tags_map.get(list_id, [])
+                    if any(tag in list_tag_names for tag in tags):
+                        filtered_lists.append(list_item)
                 
                 lists = filtered_lists
                 total = len(lists)  # Approximate for tag filtering
+            
+            # Get item counts for all lists in a single query
+            list_item_counts = {}
+            if lists:
+                item_count_response = requests.get(
+                    f"{self.base_url}/rest/v1/custom_list_items",
+                    headers={**self.headers, 'Prefer': 'count=exact'},
+                    params={
+                        'list_id': f'in.({",".join(map(str, list_ids))})',
+                        'select': 'list_id'
+                    }
+                )
+                
+                if item_count_response.status_code == 200:
+                    # Parse the count from each list
+                    items_data = item_count_response.json()
+                    for item in items_data:
+                        list_id = item['list_id']
+                        if list_id not in list_item_counts:
+                            list_item_counts[list_id] = 0
+                        list_item_counts[list_id] += 1
+            
+            # Get follower counts for all lists in a single query
+            list_follower_counts = {}
+            if lists:
+                follower_count_response = requests.get(
+                    f"{self.base_url}/rest/v1/list_followers",
+                    headers={**self.headers, 'Prefer': 'count=exact'},
+                    params={
+                        'list_id': f'in.({",".join(map(str, list_ids))})',
+                        'select': 'list_id'
+                    }
+                )
+                
+                if follower_count_response.status_code == 200:
+                    # Parse the count from each list
+                    followers_data = follower_count_response.json()
+                    for follower in followers_data:
+                        list_id = follower['list_id']
+                        if list_id not in list_follower_counts:
+                            list_follower_counts[list_id] = 0
+                        list_follower_counts[list_id] += 1
+            
+            # Get follow status for authenticated user if user_id is provided
+            user_following_lists = set()
+            if user_id and lists:
+                following_response = requests.get(
+                    f"{self.base_url}/rest/v1/list_followers",
+                    headers=self.headers,
+                    params={
+                        'follower_id': f'eq.{user_id}',
+                        'list_id': f'in.({",".join(map(str, list_ids))})',
+                        'select': 'list_id'
+                    }
+                )
+                
+                if following_response.status_code == 200:
+                    following_data = following_response.json()
+                    user_following_lists = set(follow['list_id'] for follow in following_data)
+            
+            # Get user profiles for all lists
+            user_profiles_map = {}
+            if lists:
+                user_ids = list(set(lst['user_id'] for lst in lists))
+                user_profiles_response = requests.get(
+                    f"{self.base_url}/rest/v1/user_profiles",
+                    headers=self.headers,
+                    params={
+                        'id': f'in.({",".join(user_ids)})',
+                        'select': 'id,username,display_name,avatar_url'
+                    }
+                )
+                
+                if user_profiles_response.status_code == 200:
+                    profiles = user_profiles_response.json()
+                    user_profiles_map = {profile['id']: profile for profile in profiles}
+                    print(f"[DISCOVER_LISTS] Fetched {len(profiles)} user profiles")
+            
+            # Add tags, item counts, follower counts, and follow status to each list
+            for list_item in lists:
+                list_id = list_item['id']
+                list_item['tags'] = list_tags_map.get(list_id, [])
+                list_item['item_count'] = list_item_counts.get(list_id, 0)
+                list_item['followers_count'] = list_follower_counts.get(list_id, 0)
+                list_item['is_following'] = list_id in user_following_lists
+                
+                # Add user profile info
+                user_profile = user_profiles_map.get(list_item['user_id'], {})
+                list_item['user_profiles'] = {
+                    'username': user_profile.get('username', 'Unknown'),
+                    'display_name': user_profile.get('display_name'),
+                    'avatar_url': user_profile.get('avatar_url')
+                }
+            
+            # Sort lists by the requested criteria (client-side sorting after DB query)
+            if sort_by == 'followers_count':
+                lists.sort(key=lambda x: x['followers_count'], reverse=True)
+            elif sort_by == 'item_count':
+                lists.sort(key=lambda x: x['item_count'], reverse=True)
+            elif sort_by == 'popularity':
+                # Popularity = combination of followers and recent activity
+                lists.sort(key=lambda x: (x['followers_count'] * 2 + x['item_count']), reverse=True)
             
             return {
                 'lists': lists,

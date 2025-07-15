@@ -383,3 +383,63 @@ def rate_limit_privacy_operations(user_id: str, operation: str = 'update') -> bo
     except Exception as e:
         logger.error(f"Rate limiting error: {e}")
         return True  # Allow on error to avoid blocking legitimate users
+
+
+# Simple in-memory rate limiting cache
+_rate_limit_cache = {}
+
+def rate_limit(requests_per_minute: int = 60, per_ip: bool = True):
+    """
+    Decorator to add rate limiting to API endpoints.
+    
+    Args:
+        requests_per_minute: Maximum number of requests per minute
+        per_ip: Whether to rate limit per IP address (True) or per user (False)
+    """
+    def decorator(f: Callable) -> Callable:
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                import time
+                
+                # Get identifier (IP or user ID)
+                if per_ip:
+                    identifier = request.remote_addr or 'unknown'
+                else:
+                    identifier = 'anonymous'
+                    if hasattr(g, 'current_user') and g.current_user:
+                        identifier = g.current_user.get('user_id') or g.current_user.get('sub') or 'anonymous'
+                
+                # Create cache key
+                cache_key = f"rate_limit_{f.__name__}_{identifier}"
+                current_time = time.time()
+                
+                # Clean up old entries (older than 1 minute)
+                if cache_key in _rate_limit_cache:
+                    _rate_limit_cache[cache_key] = [
+                        timestamp for timestamp in _rate_limit_cache[cache_key]
+                        if current_time - timestamp < 60
+                    ]
+                else:
+                    _rate_limit_cache[cache_key] = []
+                
+                # Check if rate limit exceeded
+                if len(_rate_limit_cache[cache_key]) >= requests_per_minute:
+                    return jsonify({
+                        'error': 'Rate limit exceeded',
+                        'message': f'Maximum {requests_per_minute} requests per minute allowed'
+                    }), 429
+                
+                # Add current request to cache
+                _rate_limit_cache[cache_key].append(current_time)
+                
+                # Call the original function
+                return f(*args, **kwargs)
+                
+            except Exception as e:
+                logger.error(f"Error in rate limiting: {e}")
+                # If rate limiting fails, allow the request to proceed
+                return f(*args, **kwargs)
+        
+        return decorated_function
+    return decorator

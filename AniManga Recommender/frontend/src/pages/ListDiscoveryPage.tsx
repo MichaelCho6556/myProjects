@@ -24,16 +24,16 @@ interface DiscoveryFilters {
 const mapSortOption = (sortOption: SortOption): string => {
   switch (sortOption) {
     case 'recent': return 'updated_at';
-    case 'popular': return 'updated_at'; // Backend doesn't have popularity metric yet
-    case 'followers': return 'updated_at'; // Backend doesn't have follower count yet
-    case 'items': return 'updated_at'; // Backend doesn't have item count yet
+    case 'popular': return 'popularity';
+    case 'followers': return 'followers_count';
+    case 'items': return 'item_count';
     default: return 'updated_at';
   }
 };
 
 export const ListDiscoveryPage: React.FC = () => {
   const { user } = useAuth();
-  const { get } = useAuthenticatedApi();
+  const { get, post } = useAuthenticatedApi();
   const [searchParams, setSearchParams] = useSearchParams();
   
   const [lists, setLists] = useState<CustomList[]>([]);
@@ -84,8 +84,6 @@ export const ListDiscoveryPage: React.FC = () => {
   }, [filters.search, filters.sortBy, filters.tags]);
 
   const fetchLists = useCallback(async (isFirstPage = false) => {
-    if (!user) return;
-
     const currentPage = isFirstPage ? 1 : page;
     
     try {
@@ -105,8 +103,19 @@ export const ListDiscoveryPage: React.FC = () => {
       if (filters.search) params.set('search', filters.search);
       if (filters.tags.length > 0) params.set('tags', filters.tags.join(','));
 
-      const response = await get(`/api/lists/discover?${params.toString()}`);
-      const result = response.data;
+      // Use authenticated API if user is logged in, otherwise use public fetch
+      let result;
+      if (user) {
+        const response = await get(`/api/lists/discover?${params.toString()}`);
+        result = response;
+      } else {
+        const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+        const response = await fetch(`${API_BASE_URL}/api/lists/discover?${params.toString()}`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        result = await response.json();
+      }
       const rawLists = result.lists || [];
       
       // Transform backend response to frontend format
@@ -115,14 +124,14 @@ export const ListDiscoveryPage: React.FC = () => {
         title: rawList.title,
         description: rawList.description || '',
         privacy: rawList.is_public ? 'Public' : 'Private',
-        tags: [], // Would need to be fetched separately or included in response
+        tags: rawList.tags || [],
         createdAt: rawList.created_at,
         updatedAt: rawList.updated_at,
         userId: rawList.user_id,
         username: rawList.user_profiles?.username || '',
-        itemCount: 0, // Would need to be calculated by backend
-        followersCount: 0, // Would need to be calculated by backend
-        isFollowing: false,
+        itemCount: rawList.item_count || 0,
+        followersCount: rawList.followers_count || 0,
+        isFollowing: rawList.is_following || false,
         items: []
       }));
       
@@ -149,10 +158,8 @@ export const ListDiscoveryPage: React.FC = () => {
 
   // Initial load
   useEffect(() => {
-    if (user) {
-      fetchLists(true);
-    }
-  }, [user]);
+    fetchLists(true);
+  }, []);
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
@@ -192,24 +199,42 @@ export const ListDiscoveryPage: React.FC = () => {
   };
 
   const handleFollowList = async (listId: string) => {
-    // Implement follow functionality
-    console.log('Follow list:', listId);
+    if (!user) {
+      console.error('User must be logged in to follow lists');
+      return;
+    }
+
+    try {
+      const response = await post(`/api/auth/lists/${listId}/follow`);
+      
+      // Update the list in the local state to reflect the new follow status
+      setLists(prevLists => 
+        prevLists.map(list => 
+          list.id === listId 
+            ? { 
+                ...list, 
+                isFollowing: response.is_following,
+                followersCount: response.followers_count 
+              }
+            : list
+        )
+      );
+    } catch (error: any) {
+      console.error('Failed to toggle follow status:', error);
+      // You could add a toast notification here for better UX
+      setError(error.response?.data?.message || 'Failed to update follow status. Please try again.');
+    }
   };
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            Please Sign In
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            You need to be signed in to discover community lists.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const handleRetry = () => {
+    setError(null);
+    setPage(1);
+    setLists([]);
+    setHasMore(true);
+    fetchLists(true);
+  };
+
+  // Note: This page is now publicly accessible, but some features require authentication
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -319,7 +344,11 @@ export const ListDiscoveryPage: React.FC = () => {
         {/* Error State */}
         {error && !isLoading && (
           <div className="mb-8">
-            <ErrorFallback error={new Error(error)} />
+            <ErrorFallback 
+              error={new Error(error)} 
+              onRetry={handleRetry}
+              showDetails={false}
+            />
           </div>
         )}
 
@@ -332,10 +361,8 @@ export const ListDiscoveryPage: React.FC = () => {
               <>
                 {lists.length === 0 ? (
                   <div className="text-center py-12">
-                    <div className="mx-auto w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
+                    <div className="mx-auto w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                      <span className="text-2xl text-gray-400">🔍</span>
                     </div>
                     <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                       No Lists Found
@@ -362,6 +389,7 @@ export const ListDiscoveryPage: React.FC = () => {
                           list={list} 
                           onTagClick={handleTagAdd}
                           onToggleFollow={() => handleFollowList(list.id)}
+                          isAuthenticated={!!user}
                         />
                       ))}
                     </div>

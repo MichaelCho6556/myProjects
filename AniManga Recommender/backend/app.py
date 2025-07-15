@@ -70,7 +70,8 @@ from middleware.privacy_middleware import (
     filter_user_search_results,
     check_list_access_permission,
     enforce_activity_privacy,
-    privacy_enforcer
+    privacy_enforcer,
+    rate_limit
 )
 
 load_dotenv()
@@ -7036,6 +7037,7 @@ def verify_privacy_enforcement():
 # =============================================================================
 
 @app.route('/api/lists/discover', methods=['GET'])
+@rate_limit(requests_per_minute=30, per_ip=True)  # Allow 30 requests per minute per IP
 def discover_lists():
     """
     Discover public custom lists with search and filtering.
@@ -7079,7 +7081,7 @@ def discover_lists():
         if page < 1:
             return jsonify({'error': 'Page must be greater than 0'}), 400
         
-        valid_sort_fields = ['updated_at', 'created_at', 'title']
+        valid_sort_fields = ['updated_at', 'created_at', 'title', 'popularity', 'followers_count', 'item_count']
         if sort_by not in valid_sort_fields:
             return jsonify({
                 'error': f'Invalid sort_by. Must be one of: {", ".join(valid_sort_fields)}'
@@ -7093,7 +7095,12 @@ def discover_lists():
             print(f"[ERROR] ERROR: auth_client ({type(auth_client)}) does not have discover_lists method")
             return jsonify({'error': 'Lists discovery feature not available'}), 500
             
-        result = auth_client.discover_lists(search=search, tags=tags, sort_by=sort_by, page=page, limit=limit)
+        # Get user_id from auth context if available
+        user_id = None
+        if hasattr(g, 'current_user') and g.current_user:
+            user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        
+        result = auth_client.discover_lists(search=search, tags=tags, sort_by=sort_by, page=page, limit=limit, user_id=user_id)
         
         return jsonify(result)
         
@@ -11398,6 +11405,126 @@ def get_system_metrics():
     except Exception as e:
         logger.error(f"Error getting system metrics: {e}")
         return jsonify({'error': 'Failed to retrieve metrics'}), 500
+
+@app.route('/api/auth/lists/<int:list_id>/follow', methods=['POST'])
+@require_auth
+def follow_list(list_id):
+    """
+    Follow or unfollow a custom list.
+    
+    Authentication: Required
+    
+    Path Parameters:
+        list_id (int): ID of the list to follow/unfollow
+        
+    Returns:
+        JSON Response containing:
+            - is_following (bool): Whether the user is now following the list
+            - followers_count (int): Updated follower count
+            
+    HTTP Status Codes:
+        200: Success - Follow status toggled
+        400: Bad Request - Invalid list ID
+        401: Unauthorized - Invalid authentication
+        404: Not Found - List not found
+        500: Server Error - Database error
+    """
+    try:
+        global supabase_client
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        # Check if list exists and is public
+        list_response = requests.get(
+            f"{supabase_client.base_url}/rest/v1/custom_lists",
+            headers=supabase_client.headers,
+            params={
+                'id': f'eq.{list_id}',
+                'select': 'id,is_public,user_id'
+            }
+        )
+        
+        if list_response.status_code != 200 or not list_response.json():
+            return jsonify({'error': 'List not found'}), 404
+        
+        list_data = list_response.json()[0]
+        
+        # Don't allow following your own list
+        if list_data['user_id'] == user_id:
+            return jsonify({'error': 'Cannot follow your own list'}), 400
+        
+        # Check if already following
+        follow_response = requests.get(
+            f"{supabase_client.base_url}/rest/v1/list_followers",
+            headers=supabase_client.headers,
+            params={
+                'list_id': f'eq.{list_id}',
+                'follower_id': f'eq.{user_id}'
+            }
+        )
+        
+        is_following = follow_response.status_code == 200 and len(follow_response.json()) > 0
+        
+        if is_following:
+            # Unfollow: Delete the follow relationship
+            delete_response = requests.delete(
+                f"{supabase_client.base_url}/rest/v1/list_followers",
+                headers=supabase_client.headers,
+                params={
+                    'list_id': f'eq.{list_id}',
+                    'follower_id': f'eq.{user_id}'
+                }
+            )
+            
+            if delete_response.status_code not in [200, 204]:
+                return jsonify({'error': 'Failed to unfollow list'}), 500
+            
+            new_following_status = False
+        else:
+            # Follow: Create the follow relationship
+            follow_data = {
+                'list_id': str(list_id),
+                'follower_id': user_id
+            }
+            
+            create_response = requests.post(
+                f"{supabase_client.base_url}/rest/v1/list_followers",
+                headers=supabase_client.headers,
+                json=follow_data
+            )
+            
+            if create_response.status_code not in [200, 201]:
+                return jsonify({'error': 'Failed to follow list'}), 500
+            
+            new_following_status = True
+        
+        # Get updated followers count
+        count_response = requests.get(
+            f"{supabase_client.base_url}/rest/v1/list_followers",
+            headers={**supabase_client.headers, 'Prefer': 'count=exact'},
+            params={
+                'list_id': f'eq.{list_id}',
+                'select': 'id'
+            }
+        )
+        
+        followers_count = 0
+        if count_response.status_code == 200:
+            content_range = count_response.headers.get('Content-Range', '0')
+            if '/' in content_range:
+                total_str = content_range.split('/')[-1]
+                if total_str and total_str != '*':
+                    followers_count = int(total_str)
+        
+        return jsonify({
+            'is_following': new_following_status,
+            'followers_count': followers_count
+        }), 200
+        
+    except Exception as e:
+        print(f"Error toggling list follow: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/metrics/export', methods=['GET'])
 def export_metrics():

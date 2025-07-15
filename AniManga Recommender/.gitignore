@@ -62,6 +62,10 @@ CLAUDE_DOCUMENTATION.md
 
 .mcp.json
 
+backend/tests_integration/SETUP.md
+
+backend/app.log
+
 
 
 .env
