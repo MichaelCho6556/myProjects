@@ -554,3 +554,8 @@ LINE 2: ...uid, status, progress, updated_at, rating, notes, start_date...
 2025-07-14 19:40:43,480 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 19:40:43] "GET /api/lists/discover?page=1&limit=12&sort_by=updated_at HTTP/1.1" 200 -
 2025-07-14 19:40:43,875 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 19:40:43] "GET /api/lists/discover?page=1&limit=12&sort_by=updated_at HTTP/1.1" 200 -
 2025-07-14 19:40:44,123 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 19:40:44] "GET /api/auth/lists/my-lists HTTP/1.1" 200 -
+2025-07-14 19:44:31,176 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 19:44:31] "OPTIONS /api/lists/discover?page=1&limit=12&sort_by=updated_at HTTP/1.1" 200 -
+2025-07-14 19:44:31,761 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 19:44:31] "GET /api/lists/discover?page=1&limit=12&sort_by=updated_at HTTP/1.1" 200 -
+2025-07-14 19:44:34,646 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 19:44:34] "GET /api/lists/discover?page=1&limit=12&sort_by=updated_at HTTP/1.1" 200 -
+2025-07-14 19:44:35,021 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 19:44:35] "GET /api/lists/discover?page=1&limit=12&sort_by=updated_at HTTP/1.1" 200 -
+2025-07-14 19:44:35,424 - werkzeug - INFO - 127.0.0.1 - - [14/Jul/2025 19:44:35] "GET /api/lists/discover?page=1&limit=12&sort_by=updated_at HTTP/1.1" 200 -

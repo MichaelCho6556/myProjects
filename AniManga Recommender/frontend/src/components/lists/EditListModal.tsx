@@ -67,7 +67,8 @@ export const EditListModal: React.FC<EditListModalProps> = ({ list, isOpen, onCl
     try {
       const updateData: Partial<CustomList> = {
         title: formData.title.trim(),
-        privacy: formData.privacy,
+        privacy: formData.privacy === "Public" ? "public" : 
+                 formData.privacy === "Friends Only" ? "friends_only" : "private",
         tags: tags,
       };
 
