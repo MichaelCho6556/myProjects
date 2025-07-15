@@ -10,7 +10,7 @@ import { TagInputComponent } from "./TagInputComponent";
 interface CreateCustomListFormData {
   title: string;
   description: string;
-  privacy: "Public" | "Private" | "Friends Only";
+  privacy: "Public" | "Private" | "Friends Only"; // Form still uses display names
 }
 
 interface CreateCustomListModalProps {
@@ -53,7 +53,8 @@ export const CreateCustomListModal: React.FC<CreateCustomListModalProps> = ({
       const listData = {
         title: data.title,
         description: data.description,
-        is_public: data.privacy === "Public",
+        privacy: data.privacy === "Public" ? "public" : 
+                 data.privacy === "Friends Only" ? "friends_only" : "private",
         is_collaborative: false, // Default to false for now
         tags: tags,
       };
@@ -68,7 +69,7 @@ export const CreateCustomListModal: React.FC<CreateCustomListModalProps> = ({
           id: created.id.toString(),
           title: created.title,
           description: created.description || "",
-          privacy: created.is_public ? "Public" : "Private",
+          privacy: created.privacy || "private",
           tags: tags,
           createdAt: created.created_at ?? new Date().toISOString(),
           updatedAt: created.updated_at ?? new Date().toISOString(),

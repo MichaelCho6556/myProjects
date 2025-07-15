@@ -114,7 +114,7 @@ export const ListDiscoveryPage: React.FC = () => {
         id: rawList.id.toString(),
         title: rawList.title,
         description: rawList.description || '',
-        privacy: rawList.is_public ? 'Public' : 'Private',
+        privacy: rawList.privacy || 'private',
         tags: [], // Would need to be fetched separately or included in response
         createdAt: rawList.created_at,
         updatedAt: rawList.updated_at,

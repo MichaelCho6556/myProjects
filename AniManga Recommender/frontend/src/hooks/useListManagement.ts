@@ -35,7 +35,7 @@ export function useListManagement() {
     async (listData: {
       title: string;
       description?: string;
-      privacy: "Public" | "Private" | "Friends Only";
+      privacy: "Public" | "Private" | "Friends Only"; // Form uses display names
       tags: string[];
     }) => {
       try {
@@ -61,7 +61,7 @@ export function useListManagement() {
       updates: {
         title?: string;
         description?: string;
-        privacy?: "Public" | "Private" | "Friends Only";
+        privacy?: "Public" | "Private" | "Friends Only"; // Form uses display names
         tags?: string[];
       }
     ) => {
