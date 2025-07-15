@@ -115,6 +115,33 @@ CREATE TABLE IF NOT EXISTS user_follows (
     FOREIGN KEY (following_id) REFERENCES user_profiles(id) ON DELETE CASCADE
 );
 
+-- Create list_followers table
+CREATE TABLE IF NOT EXISTS list_followers (
+    follower_id VARCHAR(255) NOT NULL,
+    list_id VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (follower_id, list_id),
+    FOREIGN KEY (follower_id) REFERENCES user_profiles(id) ON DELETE CASCADE,
+    FOREIGN KEY (list_id) REFERENCES custom_lists(id) ON DELETE CASCADE
+);
+
+-- Create list_tags table
+CREATE TABLE IF NOT EXISTS list_tags (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Create list_tag_associations table
+CREATE TABLE IF NOT EXISTS list_tag_associations (
+    list_id VARCHAR(255) NOT NULL,
+    tag_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    PRIMARY KEY (list_id, tag_id),
+    FOREIGN KEY (list_id) REFERENCES custom_lists(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES list_tags(id) ON DELETE CASCADE
+);
+
 -- Create user_privacy_settings table
 CREATE TABLE IF NOT EXISTS user_privacy_settings (
     user_id VARCHAR(255) PRIMARY KEY,
@@ -189,5 +216,10 @@ CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_type, parent_i
 CREATE INDEX IF NOT EXISTS idx_reviews_item_uid ON reviews(item_uid);
 CREATE INDEX IF NOT EXISTS idx_user_follows_follower ON user_follows(follower_id);
 CREATE INDEX IF NOT EXISTS idx_user_follows_following ON user_follows(following_id);
+CREATE INDEX IF NOT EXISTS idx_list_followers_follower ON list_followers(follower_id);
+CREATE INDEX IF NOT EXISTS idx_list_followers_list ON list_followers(list_id);
+CREATE INDEX IF NOT EXISTS idx_list_tags_name ON list_tags(name);
+CREATE INDEX IF NOT EXISTS idx_list_tag_associations_list ON list_tag_associations(list_id);
+CREATE INDEX IF NOT EXISTS idx_list_tag_associations_tag ON list_tag_associations(tag_id);
 CREATE INDEX IF NOT EXISTS idx_user_activity_user ON user_activity(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_activity_created ON user_activity(created_at DESC);

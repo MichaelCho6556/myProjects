@@ -18,7 +18,8 @@
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
       "mcp__zen__precommit",
-      "mcp__zen__planner"
+      "mcp__zen__planner",
+      "Bash(sed:*)"
     ],
     "deny": []
   },
