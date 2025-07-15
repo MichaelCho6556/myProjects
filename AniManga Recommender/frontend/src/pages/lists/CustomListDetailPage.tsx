@@ -666,14 +666,15 @@ export const CustomListDetailPage: React.FC = () => {
                 </div>
                 <span
                   className={`privacy-badge ${
-                    list.privacy === "Public"
+                    list.privacy === "public"
                       ? "public"
-                      : list.privacy === "Friends Only"
+                      : list.privacy === "friends_only"
                       ? "friends-only"
                       : "private"
                   }`}
                 >
-                  {list.privacy}
+                  {list.privacy === 'public' ? 'PUBLIC' : 
+                   list.privacy === 'friends_only' ? 'FRIENDS ONLY' : 'PRIVATE'}
                 </span>
                 <div className="list-meta-item">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -156,13 +156,14 @@ export const ListPreviewCard: React.FC<ListPreviewCardProps> = ({
             {/* Privacy Badge */}
             <div className="flex items-center gap-2">
               <span className={`px-2 py-1 rounded text-xs font-medium ${
-                list.privacy === 'Public' 
+                list.privacy === 'public' 
                   ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
-                  : list.privacy === 'Friends Only'
+                  : list.privacy === 'friends_only'
                   ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
                   : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
               }`}>
-                {list.privacy}
+                {list.privacy === 'public' ? 'PUBLIC' : 
+                 list.privacy === 'friends_only' ? 'FRIENDS ONLY' : 'PRIVATE'}
               </span>
             </div>
           </div>

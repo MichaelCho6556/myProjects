@@ -234,9 +234,9 @@ export const MyCustomListsPage: React.FC = () => {
 
   const filteredLists = lists.filter((list) => {
     if (selectedFilter === "all") return true;
-    if (selectedFilter === "public") return list.privacy === "Public";
-    if (selectedFilter === "private") return list.privacy === "Private";
-    if (selectedFilter === "friends") return list.privacy === "Friends Only";
+    if (selectedFilter === "public") return list.privacy === "public";
+    if (selectedFilter === "private") return list.privacy === "private";
+    if (selectedFilter === "friends") return list.privacy === "friends_only";
     return true;
   });
 
@@ -847,27 +847,27 @@ export const MyCustomListsPage: React.FC = () => {
                                 fontSize: "0.8rem",
                                 fontWeight: "600",
                                 background:
-                                  list.privacy === "Public"
+                                  list.privacy === "public"
                                     ? "rgba(34, 197, 94, 0.1)"
-                                    : list.privacy === "Friends Only"
+                                    : list.privacy === "friends_only"
                                     ? "rgba(59, 130, 246, 0.1)"
                                     : "rgba(107, 114, 128, 0.1)",
                                 color:
-                                  list.privacy === "Public"
+                                  list.privacy === "public"
                                     ? "#059669"
-                                    : list.privacy === "Friends Only"
+                                    : list.privacy === "friends_only"
                                     ? "#2563eb"
                                     : "#6b7280",
                                 border: "1px solid",
                                 borderColor:
-                                  list.privacy === "Public"
+                                  list.privacy === "public"
                                     ? "rgba(34, 197, 94, 0.2)"
-                                    : list.privacy === "Friends Only"
+                                    : list.privacy === "friends_only"
                                     ? "rgba(59, 130, 246, 0.2)"
                                     : "rgba(107, 114, 128, 0.2)",
                               }}
                             >
-                              {list.privacy === "Public" ? (
+                              {list.privacy === "public" ? (
                                 <svg
                                   style={{ width: "12px", height: "12px" }}
                                   fill="none"
@@ -881,7 +881,7 @@ export const MyCustomListsPage: React.FC = () => {
                                     d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                                   />
                                 </svg>
-                              ) : list.privacy === "Friends Only" ? (
+                              ) : list.privacy === "friends_only" ? (
                                 <svg
                                   style={{ width: "12px", height: "12px" }}
                                   fill="none"

@@ -43,7 +43,7 @@ export interface CustomList {
   id: string;
   title: string;
   description?: string;
-  privacy: "Public" | "Private" | "Friends Only";
+  privacy: "public" | "private" | "friends_only";
   tags: string[];
   createdAt: string;
   updatedAt: string;
@@ -62,11 +62,13 @@ export interface PublicList {
   title: string;
   description?: string;
   itemCount: number;
-  isPublic: boolean;
+  privacy: "public" | "private" | "friends_only";
   isCollaborative: boolean;
   createdAt: string;
   updatedAt: string;
   url: string;
+  isViewerFriend?: boolean;
+  isOwnProfile?: boolean;
 }
 
 export interface ListItem {
