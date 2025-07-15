@@ -5840,12 +5840,12 @@ def get_public_user_lists(username):
             lists_data = auth_client.get_user_lists(user_id)
         else:
             # Always fetch public lists for other users
-            public_lists = auth_client.get_user_lists(user_id, is_public=True)
+            public_lists = auth_client.get_user_lists(user_id, privacy='public')
             lists_data.extend(public_lists)
             
-            # If user is a friend and list visibility is friends-only, fetch friends-only lists
-            if is_friend and privacy_settings and privacy_settings.get('list_visibility') == 'friends_only':
-                friends_only_lists = auth_client.get_user_lists(user_id, is_public=False)
+            # If user is a friend, also fetch friends-only lists
+            if is_friend:
+                friends_only_lists = auth_client.get_user_lists(user_id, privacy='friends_only')
                 lists_data.extend(friends_only_lists)
         
         # Remove duplicates based on list id
@@ -6228,7 +6228,7 @@ def create_custom_list():
         - title (str): List title (required)
         - description (str, optional): List description
         - tags (List[str], optional): List of tag names
-        - is_public (bool, optional): Whether list is public (default: true)
+        - privacy (str, optional): Privacy level - 'public', 'friends_only', or 'private' (default: 'private')
         - is_collaborative (bool, optional): Whether list allows collaboration (default: false)
         
     Returns:
@@ -10322,7 +10322,9 @@ def get_custom_list_details_route(list_id):
         if not result:
             return jsonify({'error': 'List not found'}), 404
 
-        if result['userId'] != user_id and result['privacy'] != 'Public':
+        # Check list access using privacy middleware
+        from middleware.privacy_middleware import check_list_access
+        if not check_list_access(result, user_id):
             return jsonify({'error': 'Forbidden'}), 403
 
         return jsonify(result), 200

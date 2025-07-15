@@ -17,7 +17,8 @@ export const EditListModal: React.FC<EditListModalProps> = ({ list, isOpen, onCl
   const [formData, setFormData] = useState({
     title: list.title,
     description: list.description || "",
-    privacy: list.privacy || "Public",
+    privacy: list.privacy === "public" ? "Public" : 
+             list.privacy === "friends_only" ? "Friends Only" : "Private",
   });
   const [tags, setTags] = useState<string[]>(list.tags || []);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -28,7 +29,8 @@ export const EditListModal: React.FC<EditListModalProps> = ({ list, isOpen, onCl
       setFormData({
         title: list.title,
         description: list.description || "",
-        privacy: list.privacy || "Public",
+        privacy: list.privacy === "public" ? "Public" : 
+                 list.privacy === "friends_only" ? "Friends Only" : "Private",
       });
       setTags(list.tags || []);
       setErrors({});

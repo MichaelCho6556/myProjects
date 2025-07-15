@@ -1749,7 +1749,7 @@ class SupabaseClient:
                     'userId': user_id,
                     'title': list_item['title'],
                     'description': list_item.get('description'),
-                    'privacy': 'Public' if list_item.get('is_public', True) else 'Private',
+                    'privacy': list_item.get('privacy', 'private'),
                     'itemCount': list_item.get('item_count', 0),
                     'followersCount': list_item.get('followers_count', 0),
                     'tags': tags if isinstance(tags, list) else [],
@@ -1806,7 +1806,7 @@ class SupabaseClient:
                 params={
                     'user_id': f'eq.{user_id}',
                     'select': '''
-                        id, title, description, slug, is_public, is_collaborative,
+                        id, title, description, slug, privacy, is_collaborative,
                         created_at, updated_at
                     ''',
                     'order': 'updated_at.desc',
@@ -1846,8 +1846,8 @@ class SupabaseClient:
                     print(f"Error fetching tags for list {list_item['id']}: {e}")
                     tags = []
                 
-                # Map is_public to privacy for frontend compatibility
-                privacy = 'Public' if list_item.get('is_public', True) else 'Private'
+                # Get privacy value directly from database
+                privacy = list_item.get('privacy', 'private')
                 
                 # Calculate actual item count from custom_list_items table
                 item_count = 0
@@ -1989,7 +1989,7 @@ class SupabaseClient:
                 'title': list_data.get('title'),
                 'description': list_data.get('description'),
                 'slug': slug,
-                'is_public': list_data.get('is_public', True),
+                'privacy': list_data.get('privacy', 'private'),
                 'is_collaborative': list_data.get('is_collaborative', False)
             }
             
@@ -2007,7 +2007,10 @@ class SupabaseClient:
             print(f"Create list response: Status {response.status_code}, Headers: {dict(response.headers)}")
             
             if response.status_code != 201:
-                print(f"Failed to create list. Status: {response.status_code}, Response: {response.text}")
+                error_msg = f"Failed to create list. Status: {response.status_code}, Response: {response.text}"
+                print(error_msg)
+                import logging
+                logging.error(error_msg)
                 return None
                 
             if not response.text.strip():
@@ -2047,8 +2050,8 @@ class SupabaseClient:
             if 'description' in update_data:
                 update_record['description'] = update_data['description']
             if 'privacy' in update_data:
-                # Convert frontend privacy to database field
-                update_record['is_public'] = update_data['privacy'] == 'Public'
+                # Use privacy field directly (expecting 'public', 'friends_only', or 'private')
+                update_record['privacy'] = update_data['privacy']
             if 'is_collaborative' in update_data:
                 update_record['is_collaborative'] = update_data['is_collaborative']
                 
@@ -2208,7 +2211,7 @@ class SupabaseClient:
                 params={
                     'id': f'eq.{list_id}',
                     'select': '''
-                        id, title, description, is_public, is_collaborative, user_id,
+                        id, title, description, privacy, is_collaborative, user_id,
                         created_at, updated_at
                     ''',
                     'limit': 1
@@ -2268,7 +2271,7 @@ class SupabaseClient:
                 'id': raw['id'],
                 'title': raw['title'],
                 'description': raw.get('description'),
-                'privacy': 'Public' if raw.get('is_public', True) else 'Private',
+                'privacy': raw.get('privacy', 'private'),
                 'itemCount': item_count,
                 'followersCount': 0,  # TODO: Calculate followers count from list_followers table
                 'tags': tags,
@@ -2549,7 +2552,7 @@ class SupabaseClient:
                 params={
                     'id': f'eq.{list_id}',
                     'user_id': f'eq.{user_id}',
-                    'select': 'id, title, description, is_public, is_collaborative, user_id, created_at, updated_at',
+                    'select': 'id, title, description, privacy, is_collaborative, user_id, created_at, updated_at',
                     'limit': 1
                 }
             )
@@ -2727,9 +2730,14 @@ class SupabaseClient:
             return {}
             
         try:
+            import logging
+            logger = logging.getLogger(__name__)
+            
             # Build query to get counts for all lists in one request
-            # Using 'in' operator to filter by multiple list IDs
-            list_ids_str = ','.join(f'"{lid}"' for lid in list_ids)
+            # Remove quotes around list IDs since they are integers
+            list_ids_str = ','.join(str(lid) for lid in list_ids)
+            
+            logger.info(f"Fetching batch counts for list IDs: {list_ids_str}")
             
             response = self._make_request(
                 'GET',
@@ -2740,27 +2748,34 @@ class SupabaseClient:
                 }
             )
             
+            logger.info(f"Batch count query response status: {response.status_code}")
+            
             if response.status_code == 200:
                 items = response.json()
+                logger.info(f"Retrieved {len(items)} list items for counting")
                 
                 # Count items per list
                 counts = {}
                 for list_id in list_ids:
-                    counts[list_id] = 0
+                    counts[str(list_id)] = 0
                     
                 for item in items:
-                    list_id = item.get('list_id')
+                    list_id = str(item.get('list_id'))
                     if list_id in counts:
                         counts[list_id] += 1
                         
+                logger.info(f"Final counts: {counts}")
                 return counts
             else:
-                logger.error(f"Error fetching batch list counts: HTTP {response.status_code}")
-                return {list_id: 0 for list_id in list_ids}
+                error_text = response.text if hasattr(response, 'text') else 'No response text'
+                logger.error(f"Error fetching batch list counts: HTTP {response.status_code}, Response: {error_text}")
+                return {str(list_id): 0 for list_id in list_ids}
                 
         except Exception as e:
-            logger.error(f"Error in batch list count query: {e}")
-            return {list_id: 0 for list_id in list_ids}
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in batch list count query: {e}", exc_info=True)
+            return {str(list_id): 0 for list_id in list_ids}
 
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
@@ -3743,7 +3758,7 @@ class SupabaseAuthClient:
             
             # Build query parameters
             params = {
-                'is_public': 'eq.true',
+                'privacy': 'eq.public',
                 'select': '''
                     *,
                     user_profiles!custom_lists_user_id_fkey(username, display_name, avatar_url)
@@ -3769,7 +3784,7 @@ class SupabaseAuthClient:
             lists = response.json()
             
             # Get total count for pagination
-            count_params = {'is_public': 'eq.true', 'select': 'count'}
+            count_params = {'privacy': 'eq.public', 'select': 'count'}
             if search:
                 count_params['or'] = f'title.ilike.%{search}%,description.ilike.%{search}%'
                 
@@ -4689,7 +4704,7 @@ class SupabaseAuthClient:
         supabase_client = SupabaseClient()
         return supabase_client.get_list_item_counts_batch(list_ids)
 
-    def get_user_lists(self, user_id: str, is_public: bool = None, include_collaborative: bool = True) -> List[Dict]:
+    def get_user_lists(self, user_id: str, privacy: str = None, include_collaborative: bool = True) -> List[Dict]:
         """
         Get user's custom lists with optional filtering.
         
@@ -4698,7 +4713,7 @@ class SupabaseAuthClient:
         
         Args:
             user_id (str): User ID to get lists for
-            is_public (bool, optional): Filter by public/private status
+            privacy (str, optional): Filter by privacy level ('public', 'friends_only', 'private')
             include_collaborative (bool): Include collaborative lists
             
         Returns:
@@ -4707,12 +4722,12 @@ class SupabaseAuthClient:
         try:
             params = {
                 'user_id': f'eq.{user_id}',
-                'select': 'id,title,description,created_at,updated_at,is_public,is_collaborative',
+                'select': 'id,title,description,created_at,updated_at,privacy,is_collaborative',
                 'order': 'updated_at.desc'
             }
             
-            if is_public is not None:
-                params['is_public'] = f'eq.{str(is_public).lower()}'
+            if privacy is not None:
+                params['privacy'] = f'eq.{privacy}'
             
             if not include_collaborative:
                 params['is_collaborative'] = 'eq.false'

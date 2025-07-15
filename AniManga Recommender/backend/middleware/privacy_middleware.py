@@ -316,6 +316,46 @@ def are_users_friends(user1_id: str, user2_id: str) -> bool:
         logger.error(f"Error checking friendship between {user1_id} and {user2_id}: {e}")
         return False
 
+def check_list_access(list_data: Dict, requesting_user_id: str = None) -> bool:
+    """
+    Check if a user can access a custom list based on its privacy setting.
+    
+    Args:
+        list_data: Dictionary containing list info including 'privacy' and 'user_id'
+        requesting_user_id: ID of user requesting access (None for anonymous)
+        
+    Returns:
+        True if user can access the list, False otherwise
+    """
+    try:
+        privacy = list_data.get('privacy', 'private')
+        list_owner_id = list_data.get('user_id') or list_data.get('userId')
+        
+        # Public lists are accessible to everyone
+        if privacy == 'public':
+            return True
+            
+        # Owner can always access their own lists
+        if requesting_user_id and list_owner_id == requesting_user_id:
+            return True
+            
+        # Private lists are only accessible to owner
+        if privacy == 'private':
+            return False
+            
+        # Friends-only lists require mutual following
+        if privacy == 'friends_only':
+            if not requesting_user_id:
+                return False
+            return are_users_friends(requesting_user_id, list_owner_id)
+            
+        # Default to private behavior for unknown privacy levels
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error checking list access: {e}")
+        return False
+
 def sanitize_privacy_settings(settings: Dict) -> Dict:
     """
     Sanitize and validate privacy settings input.
