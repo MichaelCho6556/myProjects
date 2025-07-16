@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import { ToastProvider } from "./components/Feedback/ToastProvider";
 import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
@@ -26,9 +27,10 @@ import "./App.css";
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <AuthProvider>
-          <Router>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <Router>
             <div className="App">
               <NetworkStatus position="top" />
               <Navbar />
@@ -48,9 +50,10 @@ const App: React.FC = () => {
                 <Route path="/discover/lists" element={<ListDiscoveryPage />} />
               </Routes>
             </div>
-          </Router>
-        </AuthProvider>
-      </ToastProvider>
+            </Router>
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 };

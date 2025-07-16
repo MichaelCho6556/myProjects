@@ -7081,7 +7081,7 @@ def discover_lists():
         if page < 1:
             return jsonify({'error': 'Page must be greater than 0'}), 400
         
-        valid_sort_fields = ['updated_at', 'created_at', 'title', 'popularity', 'followers_count', 'item_count']
+        valid_sort_fields = ['updated_at', 'created_at', 'title', 'popularity', 'followers_count', 'item_count', 'quality_score']
         if sort_by not in valid_sort_fields:
             return jsonify({
                 'error': f'Invalid sort_by. Must be one of: {", ".join(valid_sort_fields)}'
@@ -11609,6 +11609,33 @@ def health_check():
             'timestamp': datetime.utcnow().isoformat(),
             'error': str(e)
         }), 500
+
+@app.route('/lists/<int:list_id>')
+def serve_list_detail(list_id):
+    """
+    Serve the frontend app for list detail pages.
+    
+    This route handles frontend navigation to /lists/{id} by serving the React app.
+    The React router will then handle the client-side routing.
+    """
+    # In a production environment, this would serve the built React app
+    # For development, we'll redirect to the frontend development server
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>List Detail - AniManga Recommender</title>
+        <script>
+            // Redirect to the frontend development server
+            window.location.href = 'http://localhost:3000/lists/{list_id}';
+        </script>
+    </head>
+    <body>
+        <p>Redirecting to list detail page...</p>
+        <p>If you are not redirected automatically, <a href="http://localhost:3000/lists/{list_id}">click here</a>.</p>
+    </body>
+    </html>
+    '''
 
 if __name__ == '__main__':
     # Record app start time for uptime calculation
