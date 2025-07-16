@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { useCurrentUserProfile } from "../hooks/useUserProfile";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
+import { logger } from "../utils/logger";
 import "./PrivacySettingsPage.css";
 
 interface PrivacySettings {
@@ -62,8 +63,13 @@ const PrivacySettingsPage: React.FC = () => {
           show_recently_watched: data.show_recently_watched !== false,
         });
       }
-    } catch (error) {
-      console.error("Failed to load privacy settings:", error);
+    } catch (error: any) {
+      logger.error("Failed to load privacy settings", {
+        error: error?.message || "Unknown error",
+        context: "PrivacySettingsPage",
+        operation: "loadPrivacySettings",
+        userId: profile?.id
+      });
       setSaveMessage({
         type: "error",
         message: "Failed to load privacy settings. Please try again.",

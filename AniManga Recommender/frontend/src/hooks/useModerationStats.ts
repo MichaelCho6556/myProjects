@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthenticatedApi } from './useAuthenticatedApi';
+import { logger } from '../utils/logger';
 
 export interface ModerationStats {
   timeframe: string;
@@ -87,10 +88,16 @@ export const useModerationStats = (
       
       const data = await response.json();
       setStats(data);
-    } catch (err) {
+    } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setError(errorMessage);
-      console.error('Error fetching moderation stats:', err);
+      logger.error("Error fetching moderation stats", {
+        error: err?.message || "Unknown error",
+        context: "useModerationStats",
+        operation: "fetchModerationStats",
+        timeframe: timeframe,
+        granularity: granularity
+      });
     } finally {
       setLoading(false);
     }

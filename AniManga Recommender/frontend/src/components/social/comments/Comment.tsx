@@ -6,6 +6,7 @@ import { CommentItemProps, ReactionType } from "../../../types/comments";
 import { CommentForm } from "./CommentForm";
 import { CommentReactionsComponent } from "./CommentReactionsComponent";
 import { useAuth } from "../../../context/AuthContext";
+import { logger } from "../../../utils/logger";
 import "./Comment.css";
 
 export const Comment: React.FC<CommentItemProps> = ({
@@ -117,8 +118,14 @@ export const Comment: React.FC<CommentItemProps> = ({
       if (onDelete) {
         await onDelete(comment.id);
       }
-    } catch (error) {
-      console.error("Error deleting comment:", error);
+    } catch (error: any) {
+      logger.error("Error deleting comment", {
+        error: error?.message || "Unknown error",
+        context: "Comment",
+        operation: "handleDelete",
+        commentId: comment.id,
+        userId: currentUserId
+      });
     } finally {
       setIsDeleting(false);
     }

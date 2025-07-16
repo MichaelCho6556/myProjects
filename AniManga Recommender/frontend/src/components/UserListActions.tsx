@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
 import { AnimeItem } from "../types";
+import { logger } from "../utils/logger";
 import "./UserListActions.css";
 
 interface UserListActionsProps {
@@ -80,7 +81,13 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
         setRatingInput("");
       }
     } catch (err: any) {
-      console.error("Failed to load user item:", err);
+      logger.error("Failed to load user item", {
+        error: err?.message || "Unknown error",
+        context: "UserListActions",
+        operation: "loadUserItem",
+        userId: user?.id,
+        itemUid: item.uid
+      });
       setError("Failed to load your list status");
     } finally {
       setLoading(false);
@@ -147,7 +154,14 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
         throw new Error("Update failed - no success confirmation received");
       }
     } catch (err: any) {
-      console.error("Status update error:", err);
+      logger.error("Status update error", {
+        error: err?.message || "Unknown error",
+        context: "UserListActions",
+        operation: "updateStatus",
+        userId: user?.id,
+        itemUid: item.uid,
+        newStatus: statusToUpdate
+      });
       setError(err.message || "Failed to update status");
     } finally {
       setLoading(false);

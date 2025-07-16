@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import { ListAnalyticsData, AnalyticsTimeRange } from "../../types/analytics";
 import { format } from "date-fns";
+import { logger } from "../../utils/logger";
 import "./AnalyticsExportButton.css";
 
 interface AnalyticsExportButtonProps {
@@ -252,8 +253,13 @@ export const AnalyticsExportButton: React.FC<AnalyticsExportButtonProps> = ({
           await exportAsPDF();
           break;
       }
-    } catch (error) {
-      console.error("Export failed:", error);
+    } catch (error: any) {
+      logger.error("Export failed", {
+        error: error?.message || "Unknown error",
+        context: "AnalyticsExportButton",
+        operation: "handleExport",
+        exportFormat: exportFormat
+      });
       alert("Export failed. Please try again.");
     } finally {
       setIsExporting(false);

@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from "react";
 import ErrorFallback from "./ErrorFallback";
+import { logger } from "../../utils/logger";
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -92,9 +93,15 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     // Log to console in development
     if (process.env.NODE_ENV === "development") {
       console.group(`🚨 Error Boundary Triggered: ${errorId}`);
-      console.error("Error:", error);
-      console.error("Error Info:", errorInfo);
-      console.error("Full Context:", errorContext);
+      logger.error("Error boundary caught error", {
+        error: error?.message || "Unknown error",
+        context: "ErrorBoundary",
+        operation: "componentDidCatch",
+        errorId: errorId,
+        retryCount: this.state.retryCount,
+        errorInfo: errorInfo?.componentStack || "No component stack",
+        errorContext: errorContext
+      });
       console.groupEnd();
     }
 

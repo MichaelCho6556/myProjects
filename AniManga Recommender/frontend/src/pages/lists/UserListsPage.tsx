@@ -5,6 +5,7 @@ import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { UserItem } from "../../types";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 import { sanitizeSearchInput } from "../../utils/security"; // ✅ NEW: Import search sanitization
+import { logger } from "../../utils/logger";
 import Spinner from "../../components/Spinner";
 import "./UserListsPage.css";
 
@@ -347,7 +348,14 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
           await fetchListData();
         }
       } catch (error: any) {
-        console.error("Error updating item status:", error);
+        logger.error("Error updating item status", {
+          error: error?.message || "Unknown error",
+          context: "UserListsPage",
+          operation: "updateItemStatus",
+          userId: user?.id,
+          itemUid: itemUid,
+          newStatus: newStatus
+        });
       }
     },
     [fetchListData, makeAuthenticatedRequest]
@@ -398,7 +406,14 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
           await fetchListData();
         }
       } catch (error: any) {
-        console.error("Error updating items in bulk:", error);
+        logger.error("Error updating items in bulk", {
+          error: error?.message || "Unknown error",
+          context: "UserListsPage",
+          operation: "updateItemsInBulk",
+          userId: user?.id,
+          itemCount: selectedItems.length,
+          newStatus: newStatus
+        });
       } finally {
         setIsUpdatingBulk(false);
       }
@@ -428,7 +443,13 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
         await fetchListData();
       }
     } catch (error: any) {
-      console.error("Error removing items in bulk:", error);
+      logger.error("Error removing items in bulk", {
+        error: error?.message || "Unknown error",
+        context: "UserListsPage",
+        operation: "removeItemsInBulk",
+        userId: user?.id,
+        itemCount: selectedItems.length
+      });
     } finally {
       setIsUpdatingBulk(false);
     }

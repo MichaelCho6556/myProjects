@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { logger } from "../../utils/logger";
 
 interface QuickActionsProps {
   onRefresh: () => void;
@@ -12,9 +13,13 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onRefresh }) => {
     setIsRefreshing(true);
     try {
       await onRefresh();
-    } catch (error) {
+    } catch (error: any) {
       // Handle errors gracefully - just log them but don't crash
-      console.error("Refresh failed:", error);
+      logger.error("Refresh failed", {
+        error: error?.message || "Unknown error",
+        context: "QuickActions",
+        operation: "handleRefresh"
+      });
     } finally {
       setTimeout(() => setIsRefreshing(false), 1000); // Visual feedback
     }

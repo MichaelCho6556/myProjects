@@ -3,6 +3,7 @@
 
 import React, { useState } from "react";
 import { CommentModerationProps, CommentReportReason } from "../../../types/comments";
+import { logger } from "../../../utils/logger";
 import "./CommentModerationTools.css";
 
 interface ReportModalProps {
@@ -176,8 +177,13 @@ export const CommentModerationTools: React.FC<CommentModerationProps> = ({
     try {
       await onReport();
       // In a real implementation, this would call the report API with the provided data
-    } catch (error) {
-      console.error("Error reporting comment:", error);
+    } catch (error: any) {
+      logger.error("Error reporting comment", {
+        error: error?.message || "Unknown error",
+        context: "CommentModerationTools",
+        operation: "handleReport",
+        reason: selectedReason
+      });
     } finally {
       setIsReporting(false);
     }

@@ -3,6 +3,7 @@
 
 import React, { useState } from "react";
 import { UpdateReportRequest, ReportDetailProps } from "../../../types/moderation";
+import { logger } from "../../../utils/logger";
 import Spinner from "../../Spinner";
 import "./ReportDetail.css";
 
@@ -57,8 +58,14 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({ report, onResolveRep
       setShowConfirmModal(false);
       setPendingAction(null);
       setActionNotes("");
-    } catch (error) {
-      console.error("Error performing action:", error);
+    } catch (error: any) {
+      logger.error("Error performing action", {
+        error: error?.message || "Unknown error",
+        context: "ReportDetail",
+        operation: "handleConfirmAction",
+        reportId: report.id,
+        action: pendingAction?.action
+      });
     } finally {
       setActionLoading(false);
     }

@@ -2,6 +2,7 @@
 // ABOUTME: Displays cache hit rates, API response times, error rates, and system health with alerts
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { logger } from '../../utils/logger';
 import './MonitoringDashboard.css';
 
 // Types for monitoring data
@@ -75,8 +76,12 @@ export const MonitoringDashboard: React.FC<MonitoringDashboardProps> = ({
       setIsConnected(true);
       setLastUpdate(new Date());
       setError(null);
-    } catch (err) {
-      console.error('Failed to fetch metrics:', err);
+    } catch (err: any) {
+      logger.error("Failed to fetch metrics", {
+        error: err?.message || "Unknown error",
+        context: "MonitoringDashboard",
+        operation: "fetchMetrics"
+      });
       setError(err instanceof Error ? err.message : 'Failed to fetch metrics');
       setIsConnected(false);
     } finally {

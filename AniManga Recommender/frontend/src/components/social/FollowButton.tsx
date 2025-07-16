@@ -2,6 +2,7 @@
 // ABOUTME: Handles follow relationships between users with optimistic updates and error handling
 
 import React, { useState } from 'react';
+import { logger } from '../../utils/logger';
 
 interface FollowButtonProps {
   isFollowing: boolean;
@@ -48,7 +49,12 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
       
       const errorMessage = error instanceof Error ? error.message : 'Failed to update follow status';
       setError(errorMessage);
-      console.error('Failed to toggle follow:', error);
+      logger.error('Failed to toggle follow', {
+        error: error?.message || 'Unknown error',
+        context: 'FollowButton',
+        operation: 'handleToggleFollow',
+        isFollowing: isFollowing
+      });
     } finally {
       setIsLoading(false);
     }

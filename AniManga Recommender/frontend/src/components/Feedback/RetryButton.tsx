@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { useToast } from "./ToastProvider";
 import { retryOperation, formatRetryMessage, getRetryDelay, RetryConfig } from "../../utils/errorHandler";
+import { logger } from "../../utils/logger";
 import "./RetryButton.css";
 
 interface RetryButtonProps {
@@ -79,7 +80,13 @@ const RetryButton: React.FC<RetryButtonProps> = ({
         });
       }
     } catch (error) {
-      console.error("Retry operation failed:", error);
+      logger.error("Retry operation failed", {
+        error: error?.message || "Unknown error",
+        context: "RetryButton",
+        operation: "handleRetry",
+        maxRetries: retryConfig?.maxRetries || 3,
+        retryAttempts: retryAttempts
+      });
     } finally {
       setIsRetrying(false);
       setRetryAttempt(0);

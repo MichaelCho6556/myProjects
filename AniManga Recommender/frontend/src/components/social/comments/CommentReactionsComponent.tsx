@@ -3,6 +3,7 @@
 
 import React, { useState } from 'react';
 import { CommentReactionsProps, ReactionType } from '../../../types/comments';
+import { logger } from '../../../utils/logger';
 import './CommentReactionsComponent.css';
 
 interface ReactionConfig {
@@ -37,8 +38,13 @@ export const CommentReactionsComponent: React.FC<CommentReactionsProps> = ({
     setIsReacting(true);
     try {
       await onReact(reactionType);
-    } catch (error) {
-      console.error('Error reacting to comment:', error);
+    } catch (error: any) {
+      logger.error("Error reacting to comment", {
+        error: error?.message || "Unknown error",
+        context: "CommentReactionsComponent",
+        operation: "handleReaction",
+        reactionType: reactionType
+      });
     } finally {
       setIsReacting(false);
     }

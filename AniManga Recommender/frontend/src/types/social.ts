@@ -54,6 +54,7 @@ export interface CustomList {
   itemCount: number;
   followersCount: number;
   isFollowing?: boolean;
+  isCollaborative?: boolean;
   items?: ListItem[];
 }
 

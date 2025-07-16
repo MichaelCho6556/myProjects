@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
 import { useToastActions } from "../components/Feedback/ToastProvider";
+import { logger } from "../utils/logger";
 import {
   BatchOperationsContextType,
   BatchOperationType,
@@ -143,7 +144,14 @@ export const BatchOperationsProvider: React.FC<BatchOperationsProviderProps> = (
 
         return result;
       } catch (error: any) {
-        console.error("Batch operation failed:", error);
+        logger.error("Batch operation failed", {
+          error: error?.message || "Unknown error",
+          context: "BatchOperationsProvider",
+          operation: "executeBatchOperation",
+          operationType: type,
+          selectedItemsCount: selectedItems.size,
+          listId: listId
+        });
 
         const result: BatchOperationResult = {
           success: false,

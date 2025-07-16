@@ -13,6 +13,7 @@ import {
   DragStartEvent,
   DragOverlay,
 } from "@dnd-kit/core";
+import { logger } from "../../utils/logger";
 import {
   arrayMove,
   SortableContext,
@@ -120,7 +121,13 @@ const SortableListInner: React.FC<SortableListProps> = ({
         // Call the reorder function (which should handle API call and optimistic updates)
         await onReorder(updatedItems);
       } catch (error) {
-        console.error("Failed to reorder items:", error);
+        logger.error("Failed to reorder items", {
+          error: error?.message || "Unknown error",
+          context: "SortableList",
+          operation: "handleDragEnd",
+          fromIndex: oldIndex,
+          toIndex: newIndex
+        });
         // The parent component should handle error states and reverting
       }
     }

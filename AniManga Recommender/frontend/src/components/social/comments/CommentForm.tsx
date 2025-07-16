@@ -4,6 +4,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { CommentFormProps, MentionUser, CreateCommentRequest } from "../../../types/comments";
 import { useMentions } from "../../../hooks/useComments";
+import { logger } from "../../../utils/logger";
 import "./CommentForm.css";
 
 export const CommentForm: React.FC<CommentFormProps> = ({
@@ -57,7 +58,12 @@ export const CommentForm: React.FC<CommentFormProps> = ({
         setMentionSuggestions(users);
         setSelectedMentionIndex(0);
       } catch (error) {
-        console.error("Error searching mentions:", error);
+        logger.error("Error searching mentions", {
+          error: error?.message || "Unknown error",
+          context: "CommentForm",
+          operation: "searchMentions",
+          query: query
+        });
         setMentionSuggestions([]);
       }
     },
@@ -170,7 +176,14 @@ export const CommentForm: React.FC<CommentFormProps> = ({
       setContainsSpoilers(false);
       setMentions([]);
     } catch (error) {
-      console.error("Error creating comment:", error);
+      logger.error("Error creating comment", {
+        error: error?.message || "Unknown error",
+        context: "CommentForm",
+        operation: "handleSubmit",
+        parentType: parentType,
+        parentId: parentId,
+        parentCommentId: parentCommentId
+      });
     } finally {
       setIsSubmitting(false);
     }

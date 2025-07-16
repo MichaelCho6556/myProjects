@@ -18,6 +18,7 @@ import RecommendationsSkeleton from "../Loading/RecommendationsSkeleton";
 import EmptyState from "../EmptyState";
 import VirtualGrid from "../VirtualGrid";
 import RecommendationCard from "./RecommendationCard";
+import { logger } from "../../utils/logger";
 
 /**
  * PersonalizedRecommendations component that fetches and displays recommendations
@@ -91,7 +92,13 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
       setHasMore(newHasMore);
       setPage(newPage);
     } catch (err: any) {
-      console.error("❌ Error fetching recommendations:", err);
+      logger.error("Error fetching recommendations", {
+        error: err?.message || "Unknown error",
+        context: "PersonalizedRecommendations",
+        operation: "fetchRecommendations",
+        userId: user?.id,
+        contentTypeFilter: contentTypeFilter
+      });
       setError(err.message || "Failed to load recommendations");
     } finally {
       setLoading(false);
@@ -141,8 +148,14 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
       } else {
         setHasMore((prev) => ({ ...prev, [sectionType]: false }));
       }
-    } catch (err) {
-      console.error(`❌ Error loading more items for ${sectionType}:`, err);
+    } catch (err: any) {
+      logger.error("Error loading more items", {
+        error: err?.message || "Unknown error",
+        context: "PersonalizedRecommendations",
+        operation: "loadMoreItems",
+        userId: user?.id,
+        sectionType: sectionType
+      });
     } finally {
       setLoadingMore((prev) => ({ ...prev, [sectionType]: false }));
     }
@@ -279,7 +292,14 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
         // Show success message
         console.log(`✅ Marked ${itemUid} as not interested`);
       } catch (err: any) {
-        console.error("❌ Error submitting feedback:", err);
+        logger.error("Error submitting feedback", {
+          error: err?.message || "Unknown error",
+          context: "PersonalizedRecommendations",
+          operation: "handleNotInterested",
+          userId: user?.id,
+          itemUid: itemUid,
+          sectionType: sectionType
+        });
       }
     },
     [makeAuthenticatedRequest]
@@ -356,7 +376,16 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           fetchRecommendations();
         }, 800); // Increased delay to ensure backend processing
       } catch (err: any) {
-        console.error(`❌ Error adding ${itemTitle} to list:`, err);
+        logger.error("Error adding item to list", {
+          error: err?.message || "Unknown error",
+          context: "PersonalizedRecommendations",
+          operation: "handleQuickAdd",
+          userId: user?.id,
+          itemUid: itemUid,
+          itemTitle: itemTitle,
+          status: status,
+          sectionType: sectionType
+        });
         // Show error notification to user (you can enhance this with a toast system)
         alert(`Failed to add "${itemTitle}" to your list. Please try again.`);
       } finally {
@@ -436,7 +465,15 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           });
         }, 2000);
       } catch (err: any) {
-        console.error("❌ Error adding completed item:", err);
+        logger.error("Error adding completed item", {
+          error: err?.message || "Unknown error",
+          context: "PersonalizedRecommendations",
+          operation: "handleCompletedWithRating",
+          userId: user?.id,
+          itemUid: itemUid,
+          rating: rating,
+          sectionType: sectionType
+        });
         alert(`Failed to add "${showRatingModal.itemTitle}" to your completed list. Please try again.`);
       }
     },

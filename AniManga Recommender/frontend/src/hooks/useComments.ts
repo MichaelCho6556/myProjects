@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuthenticatedApi } from "./useAuthenticatedApi";
+import { logger } from "../utils/logger";
 import {
   Comment,
   CommentSortOption,
@@ -80,7 +81,13 @@ export function useComments(
 
         setPagination(response.pagination);
       } catch (err: any) {
-        console.error("Error fetching comments:", err);
+        logger.error("Error fetching comments", {
+          error: err?.message || "Unknown error",
+          context: "useComments",
+          operation: "fetchComments",
+          parentType: parentType,
+          parentId: parentId
+        });
         setError(err.response?.data?.error || "Failed to fetch comments");
       } finally {
         setLoading(false);
@@ -122,7 +129,13 @@ export function useComments(
         }
         return null;
       } catch (err: any) {
-        console.error("Error creating comment:", err);
+        logger.error("Error creating comment", {
+          error: err?.message || "Unknown error",
+          context: "useComments",
+          operation: "createComment",
+          parentType: parentType,
+          parentId: parentId
+        });
         setError(err.response?.data?.error || "Failed to create comment");
         return null;
       }
@@ -158,7 +171,12 @@ export function useComments(
         }
         return null;
       } catch (err: any) {
-        console.error("Error updating comment:", err);
+        logger.error("Error updating comment", {
+          error: err?.message || "Unknown error",
+          context: "useComments",
+          operation: "updateComment",
+          commentId: commentId
+        });
         setError(err.response?.data?.error || "Failed to update comment");
         return null;
       }
@@ -195,7 +213,12 @@ export function useComments(
         setComments((prev) => updateCommentInList(prev));
         return true;
       } catch (err: any) {
-        console.error("Error deleting comment:", err);
+        logger.error("Error deleting comment", {
+          error: err?.message || "Unknown error",
+          context: "useComments",
+          operation: "deleteComment",
+          commentId: commentId
+        });
         setError(err.response?.data?.error || "Failed to delete comment");
         return false;
       }
@@ -233,7 +256,13 @@ export function useComments(
         setComments((prev) => updateCommentInList(prev));
         return true;
       } catch (err: any) {
-        console.error("Error reacting to comment:", err);
+        logger.error("Error reacting to comment", {
+          error: err?.message || "Unknown error",
+          context: "useComments",
+          operation: "reactToComment",
+          commentId: commentId,
+          reactionType: reactionType
+        });
         setError(err.response?.data?.error || "Failed to react to comment");
         return false;
       }
@@ -248,7 +277,12 @@ export function useComments(
         await api.post(`/api/comments/${commentId}/report`, data);
         return true;
       } catch (err: any) {
-        console.error("Error reporting comment:", err);
+        logger.error("Error reporting comment", {
+          error: err?.message || "Unknown error",
+          context: "useComments",
+          operation: "reportComment",
+          commentId: commentId
+        });
         setError(err.response?.data?.error || "Failed to report comment");
         return false;
       }
@@ -284,7 +318,12 @@ export function useComments(
 
         return response.replies;
       } catch (err: any) {
-        console.error("Error loading more replies:", err);
+        logger.error("Error loading more replies", {
+          error: err?.message || "Unknown error",
+          context: "useComments",
+          operation: "loadMoreReplies",
+          commentId: commentId
+        });
         setError(err.response?.data?.error || "Failed to load more replies");
         return [];
       }
@@ -347,7 +386,12 @@ export function useMentions(): UseMentionsResult {
         const response = await api.get(`/api/users/search?${params}`);
         return response.users || [];
       } catch (err: any) {
-        console.error("Error searching users:", err);
+        logger.error("Error searching users", {
+          error: err?.message || "Unknown error",
+          context: "useComments",
+          operation: "searchUsers",
+          query: query
+        });
         setError(err.response?.data?.error || "Failed to search users");
         return [];
       } finally {

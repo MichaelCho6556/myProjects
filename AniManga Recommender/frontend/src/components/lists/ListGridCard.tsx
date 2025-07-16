@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { CustomList } from '../../types/social';
 import { formatRelativeTime, generateAvatarColor } from '../../utils/helpers';
 import { EyeIcon, HeartIcon, UsersIcon, MoreVerticalIcon } from '../common/Icons';
+import { logger } from '../../utils/logger';
 
 interface ListGridCardProps {
   list: CustomList;
@@ -40,7 +41,12 @@ export const ListGridCard: React.FC<ListGridCardProps> = memo(({
       setIsFollowing(newFollowingState);
       setFollowersCount(prev => newFollowingState ? prev + 1 : Math.max(0, prev - 1));
     } catch (error) {
-      // TODO: Replace with proper error logging service (e.g., Sentry)
+      logger.error('Failed to toggle follow state in ListGridCard', {
+        listId: list.id,
+        listTitle: list.title,
+        isFollowing,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }, error instanceof Error ? error : undefined);
       setFollowersCount(list.followersCount || 0);
     } finally {
       setIsLoading(false);
@@ -153,7 +159,7 @@ export const ListGridCard: React.FC<ListGridCardProps> = memo(({
           )}
 
           {/* Collaborative Indicator */}
-          {(list as any).isCollaborative && (
+          {list.isCollaborative && (
             <div className="absolute bottom-3 left-3">
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full text-xs font-medium">
                 <UsersIcon className="w-3 h-3" />

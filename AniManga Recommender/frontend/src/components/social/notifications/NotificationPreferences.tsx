@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { NotificationPreferencesProps, NotificationPreferences } from '../../../types/reputation';
 import { useNotificationPreferences } from '../../../hooks/useReputation';
+import { logger } from '../../../utils/logger';
 import './NotificationPreferences.css';
 
 export const NotificationPreferencesComponent: React.FC<NotificationPreferencesProps> = ({
@@ -59,8 +60,13 @@ export const NotificationPreferencesComponent: React.FC<NotificationPreferencesP
       } else {
         setSaveError('Failed to save preferences. Please try again.');
       }
-    } catch (err) {
-      console.error('Error saving preferences:', err);
+    } catch (err: any) {
+      logger.error("Error saving preferences", {
+        error: err?.message || "Unknown error",
+        context: "NotificationPreferencesComponent",
+        operation: "handleSave",
+        userId: userId
+      });
       setSaveError('An error occurred while saving preferences.');
     } finally {
       setSaving(false);

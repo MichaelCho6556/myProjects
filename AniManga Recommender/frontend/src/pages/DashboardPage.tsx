@@ -63,6 +63,7 @@ import { ListAnalyticsDashboard } from "../components/analytics/ListAnalyticsDas
 import CacheStatusIndicator from "../components/dashboard/CacheStatusIndicator";
 import "./DashboardPage.css";
 import { supabase } from "../lib/supabase";
+import { logger } from "../utils/logger";
 
 /**
  * Dashboard page component interface.
@@ -148,7 +149,12 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
       } = await supabase.auth.getSession();
 
       if (sessionError || !session) {
-        console.error("No valid session found:", sessionError);
+        logger.error("No valid session found", {
+          error: sessionError?.message || "Session not found",
+          context: "DashboardPage",
+          operation: "fetchDashboardData",
+          userId: user?.id
+        });
         setError("Authentication required. Please sign in again.");
         return;
       }
@@ -169,7 +175,13 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
         setError("Invalid dashboard data format received");
       }
     } catch (error: any) {
-      console.error("❌ Error fetching dashboard data:", error);
+      logger.error("Error fetching dashboard data", {
+        error: error?.message || "Unknown error",
+        context: "DashboardPage",
+        operation: "fetchDashboardData",
+        userId: user?.id,
+        errorCode: error?.code || error?.response?.status
+      });
       setError(`Failed to load dashboard: ${error.message || "Unknown error"}`);
     } finally {
       setLoading(false);
@@ -317,7 +329,14 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
 
       await fetchDashboardData();
     } catch (err: any) {
-      console.error("Status update error:", err);
+      logger.error("Status update error", {
+        error: err?.message || "Unknown error",
+        context: "DashboardPage",
+        operation: "handleStatusUpdate",
+        userId: user?.id,
+        itemUid: itemUid,
+        newStatus: newStatus
+      });
       setError("Failed to update item status");
     }
   };
