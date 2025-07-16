@@ -601,9 +601,9 @@ describe('Security Utils - Enhanced Test Suite', () => {
 
     it('should protect sensitive data in storage', () => {
       const sensitiveData = {
-        apiKey: 'secret-api-key-123',
-        userToken: 'jwt-token-here',
-        personalInfo: { ssn: '123-45-6789', creditCard: '4111-1111-1111-1111' }
+        apiKey: 'example-api-key',
+        userToken: 'example-jwt-token',
+        personalInfo: { ssn: '000-00-0000', creditCard: '0000-0000-0000-0000' }
       };
 
       secureStorage.setItem('sensitiveData', JSON.stringify(sensitiveData));
@@ -611,9 +611,9 @@ describe('Security Utils - Enhanced Test Suite', () => {
       // Check that raw storage contains encrypted data
       const rawStored = localStorage.getItem('sensitiveData');
       expect(rawStored).toBeDefined();
-      expect(rawStored).not.toContain('secret-api-key-123');
-      expect(rawStored).not.toContain('jwt-token-here');
-      expect(rawStored).not.toContain('123-45-6789');
+      expect(rawStored).not.toContain('example-api-key');
+      expect(rawStored).not.toContain('example-jwt-token');
+      expect(rawStored).not.toContain('000-00-0000');
       
       // But decrypted data should be correct
       const retrieved = secureStorage.getItem('sensitiveData');
