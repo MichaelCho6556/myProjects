@@ -20,6 +20,7 @@ import React, { useState, useCallback, memo, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { RecommendationFeedback } from "../../types";
 import LazyImage from "../LazyImage";
+import { logger } from "../../utils/logger";
 
 interface RecommendationCardProps {
   item: any;
@@ -161,7 +162,13 @@ const RecommendationCard: React.FC<RecommendationCardProps> = memo(({
           });
         }
       } catch (err: any) {
-        console.error("Error marking as not interested:", err);
+        logger.error("Error marking as not interested", {
+          error: err?.message || "Unknown error",
+          context: "RecommendationCard",
+          operation: "handleNotInterested",
+          itemUid: itemData.itemUid,
+          sectionType: sectionType
+        });
         setError("Failed to process feedback");
       } finally {
         setIsProcessing(false);
@@ -186,7 +193,14 @@ const RecommendationCard: React.FC<RecommendationCardProps> = memo(({
           await onAddToList(itemData.itemUid, status, sectionType);
         }
       } catch (err: any) {
-        console.error("Error adding to list:", err);
+        logger.error("Error adding to list", {
+          error: err?.message || "Unknown error",
+          context: "RecommendationCard",
+          operation: "handleAddToList",
+          itemUid: itemData.itemUid,
+          status: status,
+          sectionType: sectionType
+        });
         setError("Failed to add to list");
       } finally {
         setIsProcessing(false);
@@ -207,9 +221,15 @@ const RecommendationCard: React.FC<RecommendationCardProps> = memo(({
           section_type: sectionType as any,
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       // Don't block navigation on feedback failure
-      console.warn("Failed to track click feedback:", err);
+      logger.error("Failed to track click feedback", {
+        error: err?.message || "Unknown error",
+        context: "RecommendationCard",
+        operation: "handleCardClick",
+        itemUid: itemData.itemUid,
+        sectionType: sectionType
+      });
     }
   }, [itemData.itemUid, sectionType, onFeedback]);
 

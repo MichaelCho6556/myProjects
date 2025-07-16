@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { CustomList } from "../../types/social";
 import { TagInputComponent } from "./TagInputComponent";
+import { logger } from "../../utils/logger";
 
 interface CreateCustomListFormData {
   title: string;
@@ -92,7 +93,13 @@ export const CreateCustomListModal: React.FC<CreateCustomListModalProps> = ({
         }
       }
     } catch (error: any) {
-      console.error("Failed to create list:", error);
+      logger.error("Failed to create list", {
+        error: error?.message || "Unknown error",
+        context: "CreateCustomListModal",
+        operation: "onSubmit",
+        listTitle: listData.title,
+        errorCode: error?.response?.status
+      });
       setApiError(error?.response?.data?.message || "Failed to create list");
     } finally {
       setIsLoading(false);

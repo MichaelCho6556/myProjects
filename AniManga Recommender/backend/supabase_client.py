@@ -30,6 +30,8 @@ License: MIT
 import os
 import requests
 import pandas as pd
+import numpy as np
+import json
 from typing import Dict, List, Optional, Any, Union, Tuple
 from dotenv import load_dotenv
 import time
@@ -3733,6 +3735,38 @@ class SupabaseAuthClient:
             print(f"Error updating privacy settings: {e}")
             return None
     
+    def calculate_update_frequency(self, list_id: int, days: int = 30) -> float:
+        """Calculate how frequently a list is updated (updates per day)."""
+        try:
+            from datetime import datetime, timezone, timedelta
+            thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            
+            # Count updates in custom_list_items table
+            response = self.supabase.table('custom_list_items').select(
+                'updated_at', count='exact'
+            ).eq('list_id', list_id).gte('updated_at', thirty_days_ago).execute()
+            
+            if response.data:
+                count = len(response.data)
+                return count / days  # Updates per day
+            return 0.0
+        except Exception as e:
+            logger.error(f"Error calculating update frequency for list {list_id}: {e}")
+            return 0.0
+    
+    def _update_preview_images_cache(self, list_id: int, preview_images: List[str]) -> bool:
+        """Update the preview_images cache in the database."""
+        try:
+            import json
+            response = self.supabase.table('custom_lists').update({
+                'preview_images': json.dumps(preview_images)
+            }).eq('id', list_id).execute()
+            
+            return len(response.data) > 0
+        except Exception as e:
+            logger.error(f"Error updating preview images cache for list {list_id}: {e}")
+            return False
+
     def discover_lists(self, search: str = None, tags: List[str] = None, 
                     sort_by: str = 'updated_at', page: int = 1, limit: int = 20, user_id: str = None) -> dict:
         """
@@ -3768,6 +3802,11 @@ class SupabaseAuthClient:
                 'offset': offset,
                 'order': f'{db_sort_by}.desc'
             }
+            
+            # For quality_score sorting, use pre-calculated database values
+            if sort_by == 'quality_score':
+                params['order'] = 'quality_score.desc'
+                db_sort_by = 'quality_score'
             
             # Add search filter
             if search:
@@ -3914,6 +3953,24 @@ class SupabaseAuthClient:
                     profiles = user_profiles_response.json()
                     user_profiles_map = {profile['id']: profile for profile in profiles}
             
+            # Get user reputation data for all list owners in a single batch query
+            user_reputation_map = {}
+            if lists:
+                user_reputation_response = requests.get(
+                    f"{self.base_url}/rest/v1/user_reputation",
+                    headers=self.headers,
+                    params={
+                        'user_id': f'in.({",".join(user_ids)})',
+                        'select': 'user_id,reputation_score,reputation_title'
+                    }
+                )
+                
+                if user_reputation_response.status_code == 200:
+                    reputation_data = user_reputation_response.json()
+                    user_reputation_map = {
+                        rep['user_id']: rep['reputation_score'] for rep in reputation_data
+                    }
+            
             # Get content types and preview images for all lists in efficient batch queries
             list_content_types = {}
             list_preview_images = {}
@@ -3989,28 +4046,60 @@ class SupabaseAuthClient:
                 else:
                     list_item['content_type'] = 'mixed'
                 
-                # Add preview images
-                list_item['preview_images'] = list_preview_images.get(list_id, [])
+                # Add preview images - use database value if available, otherwise use calculated
+                if list_item.get('preview_images'):
+                    # Use pre-calculated preview images from database
+                    try:
+                        list_item['preview_images'] = json.loads(list_item['preview_images']) if isinstance(list_item['preview_images'], str) else list_item['preview_images']
+                    except:
+                        list_item['preview_images'] = list_preview_images.get(list_id, [])
+                else:
+                    # Fallback to calculated preview images
+                    preview_images = list_preview_images.get(list_id, [])
+                    list_item['preview_images'] = preview_images
+                    
+                    # Store in database for next time
+                    if preview_images and not list_item.get('preview_images'):
+                        self._update_preview_images_cache(list_id, preview_images)
                 
-                # Calculate quality score using production-ready algorithm
-                # Formula: (description_bonus) + (item_count_score) + (followers_score) + (recency_score)
-                description_bonus = 10 if list_item.get('description') else 0
-                item_count_score = min(list_item['item_count'], 20)  # Cap at 20 to prevent dominance
-                followers_score = min(list_item['followers_count'] * 2, 50)  # Cap at 50
-                
-                # Recency score based on days since last updated
-                try:
-                    from datetime import datetime, timezone
-                    if list_item.get('updated_at'):
-                        updated_at = datetime.fromisoformat(list_item['updated_at'].replace('Z', '+00:00'))
-                        days_since_update = (datetime.now(timezone.utc) - updated_at).days
-                        recency_score = max(0, 20 - days_since_update)  # 20 points for today, decreasing
-                    else:
-                        recency_score = 0
-                except:
-                    recency_score = 0
-                
-                list_item['quality_score'] = description_bonus + item_count_score + followers_score + recency_score
+                # Use pre-calculated quality score from database if available, otherwise calculate
+                if list_item.get('quality_score') is not None:
+                    # Use pre-calculated quality score from database for better performance
+                    list_item['quality_score'] = list_item['quality_score']
+                else:
+                    # Fallback: Calculate quality score using production-ready weighted algorithm
+                    # Formula: (follower_count * 0.3) + (item_count * 0.2) + (update_frequency * 0.3) + (user_reputation * 0.2)
+                    
+                    # Normalize follower_count using logarithmic scaling to prevent dominance
+                    follower_count_normalized = min(1.0, np.log10(list_item['followers_count'] + 1) / 4.0)  # Scale to 0-1
+                    
+                    # Normalize item_count using logarithmic scaling
+                    item_count_normalized = min(1.0, np.log10(list_item['item_count'] + 1) / 2.0)  # Scale to 0-1
+                    
+                    # Calculate update_frequency using actual item updates in the list
+                    try:
+                        list_id = list_item['id']
+                        update_frequency = self.calculate_update_frequency(list_id, days=30)
+                        # Normalize to 0-1 scale (assuming max of 1 update per day)
+                        update_frequency = min(1.0, update_frequency)
+                    except:
+                        update_frequency = 0.0
+                    
+                    # Get user reputation and normalize to 0-1 scale
+                    user_reputation_raw = user_reputation_map.get(list_item['user_id'], 0)
+                    # Normalize reputation score (assuming reputation typically ranges 0-100)
+                    user_reputation_normalized = min(1.0, max(0.0, user_reputation_raw / 100.0))
+                    
+                    # Calculate weighted quality score
+                    quality_score = (
+                        (follower_count_normalized * 0.3) +
+                        (item_count_normalized * 0.2) +
+                        (update_frequency * 0.3) +
+                        (user_reputation_normalized * 0.2)
+                    )
+                    
+                    # Scale to 0-100 for better readability
+                    list_item['quality_score'] = round(quality_score * 100, 2)
                 
                 # Add is_collaborative flag (already in database schema)
                 list_item['is_collaborative'] = list_item.get('is_collaborative', False)

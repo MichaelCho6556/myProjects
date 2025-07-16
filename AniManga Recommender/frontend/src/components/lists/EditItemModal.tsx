@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { ListItem } from "../../types/social";
+import { logger } from "../../utils/logger";
 import "./EditItemModal.css";
 
 interface EditItemModalProps {
@@ -110,7 +111,13 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
       await onSave(item.id, updatedData);
       onClose();
     } catch (error) {
-      console.error("Failed to save item:", error);
+      logger.error("Failed to save item", {
+        error: error?.message || "Unknown error",
+        context: "EditItemModal",
+        operation: "handleSave",
+        itemId: item?.id,
+        itemUid: item?.item_uid
+      });
     } finally {
       setIsSaving(false);
     }

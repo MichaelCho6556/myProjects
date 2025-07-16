@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { logger } from '../utils/logger';
 
 interface Notification {
   id: number;
@@ -72,8 +73,13 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
         setNotifications(data.notifications || []);
         setUnreadCount(data.unread_count || 0);
       }
-    } catch (error) {
-      console.error('Failed to fetch initial notifications:', error);
+    } catch (error: any) {
+      logger.error("Failed to fetch initial notifications", {
+        error: error?.message || "Unknown error",
+        context: "useRealTimeNotifications",
+        operation: "fetchInitialNotifications",
+        userId: user?.id
+      });
     }
   }, [user]);
 
@@ -137,17 +143,32 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
               break;
               
             case 'error':
-              console.error('Notification stream error:', data.message);
+              logger.error("Notification stream error", {
+                error: data.message || "Connection error",
+                context: "useRealTimeNotifications",
+                operation: "handleNotificationEvent",
+                userId: user?.id
+              });
               setError(data.message || 'Connection error');
               break;
           }
-        } catch (parseError) {
-          console.error('Failed to parse notification event:', parseError);
+        } catch (parseError: any) {
+          logger.error("Failed to parse notification event", {
+            error: parseError?.message || "Unknown error",
+            context: "useRealTimeNotifications",
+            operation: "parseNotificationEvent",
+            userId: user?.id
+          });
         }
       };
 
-      eventSource.onerror = (error) => {
-        console.error('EventSource error:', error);
+      eventSource.onerror = (error: any) => {
+        logger.error("EventSource error", {
+          error: error?.message || "EventSource connection error",
+          context: "useRealTimeNotifications",
+          operation: "eventSourceError",
+          userId: user?.id
+        });
         setIsConnected(false);
         setError('Connection lost');
         
@@ -164,15 +185,25 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
             connectToNotificationStream();
           }, delay);
         } else {
-          console.error('Max reconnection attempts reached. Manual refresh required.');
+          logger.error("Max reconnection attempts reached. Manual refresh required.", {
+            context: "useRealTimeNotifications",
+            operation: "maxReconnectionAttemptsReached",
+            userId: user?.id,
+            attempts: reconnectAttempts
+          });
           setError('Connection failed. Please refresh the page.');
         }
       };
 
       eventSourceRef.current = eventSource;
       
-    } catch (error) {
-      console.error('Failed to establish notification stream:', error);
+    } catch (error: any) {
+      logger.error("Failed to establish notification stream", {
+        error: error?.message || "Unknown error",
+        context: "useRealTimeNotifications",
+        operation: "connectToNotificationStream",
+        userId: user?.id
+      });
       setError('Failed to connect to notification service');
     }
   }, [user]);
@@ -213,8 +244,14 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
       }
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+    } catch (error: any) {
+      logger.error("Failed to mark notification as read", {
+        error: error?.message || "Unknown error",
+        context: "useRealTimeNotifications",
+        operation: "markAsRead",
+        userId: user?.id,
+        notificationId: notificationId
+      });
     }
   }, []);
 
@@ -237,8 +274,13 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
         );
         setUnreadCount(0);
       }
-    } catch (error) {
-      console.error('Failed to mark all notifications as read:', error);
+    } catch (error: any) {
+      logger.error("Failed to mark all notifications as read", {
+        error: error?.message || "Unknown error",
+        context: "useRealTimeNotifications",
+        operation: "markAllAsRead",
+        userId: user?.id
+      });
     }
   }, []);
 

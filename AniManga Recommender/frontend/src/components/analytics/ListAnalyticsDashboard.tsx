@@ -10,6 +10,7 @@ import { StatusBreakdownChart } from "./StatusBreakdownChart";
 import { AnalyticsTimeRangePicker } from "./AnalyticsTimeRangePicker";
 import { AnalyticsExportButton } from "./AnalyticsExportButton";
 import { subDays, subMonths, subYears, startOfDay, endOfDay } from "date-fns";
+import { logger } from "../../utils/logger";
 import "./ListAnalyticsDashboard.css";
 
 interface ListAnalyticsDashboardProps {
@@ -65,7 +66,13 @@ export const ListAnalyticsDashboard: React.FC<ListAnalyticsDashboardProps> = ({
 
         setAnalyticsData(response.data);
       } catch (err: any) {
-        console.error("Failed to fetch analytics:", err);
+        logger.error("Failed to fetch analytics", {
+          error: err?.message || "Unknown error",
+          context: "ListAnalyticsDashboard",
+          operation: "fetchAnalytics",
+          listId: listId,
+          userId: userId
+        });
         setError(err.response?.data?.message || "Failed to load analytics data");
       } finally {
         setIsLoading(false);

@@ -12,6 +12,7 @@ import { ContextMenu, ContextMenuItem, ContextMenuAction } from "../common/Conte
 import { useContextMenu } from "../../hooks/useContextMenu";
 import { useToastActions } from "../Feedback/ToastProvider";
 import { useBatchOperations } from "../../context/BatchOperationsProvider";
+import { logger } from "../../utils/logger";
 import "./SortableListItem.css";
 
 interface SortableListItemProps {
@@ -84,7 +85,12 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
           rewatchCount: personalData.rewatchCount || item.rewatchCount,
         };
       } catch (error) {
-        console.error("Error parsing stored personal tracking data:", error);
+        logger.error("Error parsing stored personal tracking data", {
+          error: error?.message || "Unknown error",
+          context: "SortableListItem",
+          operation: "parseStoredTrackingData",
+          itemId: item.id
+        });
       }
     }
 
@@ -137,7 +143,13 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
 
           showSuccessToast("Rating Updated", `Rated ${enhancedItem.title} ${rating}/10`);
         } catch (error) {
-          console.error("Error updating rating:", error);
+          logger.error("Error updating rating", {
+            error: error?.message || "Unknown error",
+            context: "SortableListItem",
+            operation: "updateRating",
+            itemId: item.id,
+            newRating: newRating
+          });
           showErrorToast("Rating Error", "Failed to update rating");
         }
       },
@@ -174,7 +186,13 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
           const statusLabel = status.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
           showSuccessToast("Status Updated", `Updated status to ${statusLabel}`);
         } catch (error) {
-          console.error("Error updating status:", error);
+          logger.error("Error updating status", {
+            error: error?.message || "Unknown error",
+            context: "SortableListItem",
+            operation: "updateStatus",
+            itemId: item.id,
+            newStatus: newStatus
+          });
           showErrorToast("Status Error", "Failed to update status");
         }
       },
@@ -220,7 +238,13 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
 
           showSuccessToast("Tag Added", `Added tag "${trimmedTag}"`);
         } catch (error) {
-          console.error("Error adding tag:", error);
+          logger.error("Error adding tag", {
+            error: error?.message || "Unknown error",
+            context: "SortableListItem",
+            operation: "addTag",
+            itemId: item.id,
+            tag: tag
+          });
           showErrorToast("Tag Error", "Failed to add tag");
         }
       },
@@ -263,7 +287,12 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
             showSuccessToast("Link Copied", "Item link copied to clipboard");
           }
         } catch (error) {
-          console.error("Error sharing item:", error);
+          logger.error("Error sharing item", {
+            error: error?.message || "Unknown error",
+            context: "SortableListItem",
+            operation: "shareItem",
+            itemId: item.id
+          });
           showErrorToast("Share Error", "Failed to share item");
         }
       },

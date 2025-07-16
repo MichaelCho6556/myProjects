@@ -10,6 +10,7 @@ import LoadingBanner from "../../components/Loading/LoadingBanner";
 import ErrorFallback from "../../components/Error/ErrorFallback";
 import { CustomList } from "../../types/social";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
+import { logger } from "../../utils/logger";
 
 export const MyCustomListsPage: React.FC = () => {
   const { user } = useAuth();
@@ -130,8 +131,15 @@ export const MyCustomListsPage: React.FC = () => {
       }
 
       setOpenDropdownId(null);
-    } catch (error) {
-      console.error("Error duplicating list:", error);
+    } catch (error: any) {
+      logger.error("Error duplicating list", {
+        error: error?.message || "Unknown error",
+        context: "MyCustomListsPage",
+        operation: "handleDuplicateList",
+        userId: user?.id,
+        listId: list.id,
+        listTitle: list.title
+      });
 
       const toast = document.createElement("div");
       toast.textContent = "Failed to duplicate list. Please try again.";
@@ -200,8 +208,15 @@ export const MyCustomListsPage: React.FC = () => {
         // Fallback for older browsers or non-HTTPS contexts
         throw new Error("Clipboard not available");
       }
-    } catch (err) {
-      console.error("Failed to share:", err);
+    } catch (err: any) {
+      logger.error("Failed to share", {
+        error: err?.message || "Unknown error",
+        context: "MyCustomListsPage",
+        operation: "handleShareList",
+        userId: user?.id,
+        listId: list.id,
+        listTitle: list.title
+      });
       // Final fallback: show the URL in a prompt for manual copying
       const userCopied = prompt("Copy this URL to share your list:", shareUrl);
       if (userCopied !== null) {

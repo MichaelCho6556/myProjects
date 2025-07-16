@@ -1,10 +1,11 @@
 // ABOUTME: Preview card component for displaying list information in discovery and search results
 // ABOUTME: Shows list details with follow button, tags, and preview items in compact format
 
-import React, { useState, memo } from 'react';
+import React, { useState, memo, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { CustomList } from '../../types/social';
 import { formatRelativeTime, generateAvatarColor } from '../../utils/helpers';
+import { logger } from '../../utils/logger';
 
 interface ListPreviewCardProps {
   list: CustomList;
@@ -25,7 +26,31 @@ export const ListPreviewCard: React.FC<ListPreviewCardProps> = memo(({
   const [isLoading, setIsLoading] = useState(false);
   const [followersCount, setFollowersCount] = useState(list.followersCount || 0);
 
-  const handleFollowClick = async (e: React.MouseEvent) => {
+  // Memoize privacy badge class calculation
+  const privacyBadgeClass = useMemo(() => {
+    switch (list.privacy) {
+      case 'public':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      case 'friends_only':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+    }
+  }, [list.privacy]);
+
+  // Memoize privacy label calculation
+  const privacyLabel = useMemo(() => {
+    switch (list.privacy) {
+      case 'public':
+        return 'Public';
+      case 'friends_only':
+        return 'Friends';
+      default:
+        return 'Private';
+    }
+  }, [list.privacy]);
+
+  const handleFollowClick = useCallback(async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
@@ -38,18 +63,23 @@ export const ListPreviewCard: React.FC<ListPreviewCardProps> = memo(({
       setIsFollowing(newFollowingState);
       setFollowersCount(prev => newFollowingState ? prev + 1 : Math.max(0, prev - 1));
     } catch (error) {
-      // TODO: Replace with proper error logging service (e.g., Sentry)
+      logger.error('Failed to toggle follow state in ListPreviewCard', {
+        listId: list.id,
+        listTitle: list.title,
+        isFollowing,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }, error instanceof Error ? error : undefined);
       setFollowersCount(list.followersCount || 0);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [onToggleFollow, isLoading, isFollowing, list.id, list.title, list.followersCount]);
 
-  const handleTagClick = (e: React.MouseEvent, tag: string) => {
+  const handleTagClick = useCallback((e: React.MouseEvent, tag: string) => {
     e.preventDefault();
     e.stopPropagation();
     onTagClick(tag);
-  };
+  }, [onTagClick]);
 
 
   return (
@@ -79,14 +109,8 @@ export const ListPreviewCard: React.FC<ListPreviewCardProps> = memo(({
               
               {/* Privacy Badge */}
               <div className="mt-2">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  list.privacy === 'public' 
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                    : list.privacy === 'friends_only'
-                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                    : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                }`}>
-                  {list.privacy === 'public' ? 'Public' : list.privacy === 'friends_only' ? 'Friends' : 'Private'}
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${privacyBadgeClass}`}>
+                  {privacyLabel}
                 </span>
               </div>
             </div>

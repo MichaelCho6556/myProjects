@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuthenticatedApi } from "./useAuthenticatedApi";
 import { ModerationReport, UpdateReportRequest, ModerationFilters } from "../types/moderation";
+import { logger } from "../utils/logger";
 
 export interface UseModerationReportsResult {
   reports: ModerationReport[];
@@ -84,9 +85,14 @@ export function useModerationReports(initialFilters: ModerationFilters = {}): Us
         );
 
         return true;
-      } catch (err) {
+      } catch (err: any) {
         setError(err instanceof Error ? err.message : "Failed to update report");
-        console.error("Error updating report:", err);
+        logger.error("Error updating report", {
+          error: err?.message || "Unknown error",
+          context: "useModeration",
+          operation: "updateReport",
+          reportId: reportId
+        });
         return false;
       }
     },

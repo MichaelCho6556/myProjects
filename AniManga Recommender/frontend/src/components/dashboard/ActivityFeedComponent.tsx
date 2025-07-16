@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useAuthenticatedApi } from '../../hooks/useAuthenticatedApi';
+import { logger } from '../../utils/logger';
 import LoadingBanner from '../Loading/LoadingBanner';
 import ErrorFallback from '../Error/ErrorFallback';
 
@@ -113,7 +114,13 @@ export const ActivityFeedComponent: React.FC<ActivityFeedComponentProps> = ({
       const response = await get(`/api/auth/activity-feed?limit=${limit}`);
       setActivities(response.data.activities || []);
     } catch (err: any) {
-      console.error('Failed to fetch activity feed:', err);
+      logger.error("Failed to fetch activity feed", {
+        error: err?.message || "Unknown error",
+        context: "ActivityFeedComponent",
+        operation: "fetchActivityFeed",
+        userId: user?.id,
+        limit: limit
+      });
       setError(err.response?.data?.message || 'Failed to load activity feed.');
     } finally {
       setIsLoading(false);

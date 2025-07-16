@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
+import { logger } from "../../utils/logger";
 import LoadingBanner from "../Loading/LoadingBanner";
 import ErrorFallback from "../Error/ErrorFallback";
 
@@ -58,7 +59,12 @@ export const ListCommentsSection: React.FC<ListCommentsSectionProps> = ({ listId
       const response = await get(`/api/lists/${listId}/comments`);
       setComments(response.data.comments || []);
     } catch (err: any) {
-      console.error("Failed to fetch comments:", err);
+      logger.error("Failed to fetch comments", {
+        error: err?.message || "Unknown error",
+        context: "ListCommentsSection",
+        operation: "fetchComments",
+        listId: listId
+      });
       setError(err.response?.data?.message || "Failed to load comments.");
     } finally {
       setIsLoading(false);
@@ -99,7 +105,13 @@ export const ListCommentsSection: React.FC<ListCommentsSectionProps> = ({ listId
       setIsSpoiler(false);
       setReplyingTo(null);
     } catch (err: any) {
-      console.error("Failed to submit comment:", err);
+      logger.error("Failed to submit comment", {
+        error: err?.message || "Unknown error",
+        context: "ListCommentsSection",
+        operation: "submitComment",
+        listId: listId,
+        userId: user?.id
+      });
       setError(err.response?.data?.message || "Failed to submit comment.");
     } finally {
       setIsSubmitting(false);
@@ -132,7 +144,13 @@ export const ListCommentsSection: React.FC<ListCommentsSectionProps> = ({ listId
 
       setComments((prev) => prev.map(updateComment));
     } catch (error) {
-      console.error("Failed to like comment:", error);
+      logger.error("Failed to like comment", {
+        error: error?.message || "Unknown error",
+        context: "ListCommentsSection",
+        operation: "likeComment",
+        commentId: commentId,
+        userId: user?.id
+      });
     }
   };
 
@@ -154,7 +172,13 @@ export const ListCommentsSection: React.FC<ListCommentsSectionProps> = ({ listId
 
       setComments((prev) => removeComment(prev));
     } catch (error) {
-      console.error("Failed to delete comment:", error);
+      logger.error("Failed to delete comment", {
+        error: error?.message || "Unknown error",
+        context: "ListCommentsSection",
+        operation: "deleteComment",
+        commentId: commentId,
+        userId: user?.id
+      });
     }
   };
 

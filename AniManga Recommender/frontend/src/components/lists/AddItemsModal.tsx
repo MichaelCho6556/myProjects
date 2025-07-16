@@ -4,6 +4,7 @@
 import React, { useState, useCallback } from 'react';
 import { useAuthenticatedApi } from '../../hooks/useAuthenticatedApi';
 import { useDebounce } from '../../hooks/useDebounce';
+import { logger } from '../../utils/logger';
 import './AddItemsModal.css';
 
 interface SearchResult {
@@ -70,7 +71,13 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
 
       setSearchResults(results);
     } catch (err) {
-      console.error('Search failed:', err);
+      logger.error('Search failed', {
+        error: err?.message || 'Unknown error',
+        context: 'AddItemsModal',
+        operation: 'searchItems',
+        query: query,
+        listId: listId
+      });
       setError('Failed to search items. Please try again.');
       setSearchResults([]);
     } finally {
@@ -121,7 +128,13 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
         setSuccessMessage(null);
       }, 1500);
     } catch (err: any) {
-      console.error('Failed to add items:', err);
+      logger.error('Failed to add items', {
+        error: err?.message || 'Unknown error',
+        context: 'AddItemsModal',
+        operation: 'handleAddItems',
+        listId: listId,
+        selectedItemsCount: selectedItems.length
+      });
       setError(err.response?.data?.message || 'Failed to add items. Please try again.');
     } finally {
       setIsAdding(false);

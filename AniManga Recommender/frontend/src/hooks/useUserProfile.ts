@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { UserProfile, UserStats, PrivacySettings, PublicList } from "../types/social";
 import { UserActivity } from "../types";
 import { useAuthenticatedApi } from "./useAuthenticatedApi";
+import { logger } from "../utils/logger";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -260,11 +261,22 @@ export function useUserProfile(username: string) {
           setActivities([]);
         } else {
           const errorText = await activitiesResponse.text();
-          console.error(`❌ Frontend: Activities API error - Status: ${activitiesResponse.status}, Body: ${errorText}`);
+          logger.error("Activities API error", {
+            error: `Status: ${activitiesResponse.status}, Body: ${errorText}`,
+            context: "useUserProfile",
+            operation: "fetchProfile",
+            username: username,
+            status: activitiesResponse.status
+          });
           throw new Error(`Activities API returned HTTP ${activitiesResponse.status}`);
         }
       } catch (activitiesError) {
-        console.error('❌ Frontend: Activities fetch error:', activitiesError);
+        logger.error("Activities fetch error", {
+          error: activitiesError instanceof Error ? activitiesError.message : 'Failed to fetch activities',
+          context: "useUserProfile",
+          operation: "fetchProfile",
+          username: username
+        });
         const errorMessage = activitiesError instanceof Error ? activitiesError.message : 'Failed to fetch activities';
         setActivitiesError(new Error(errorMessage));
         setActivities([]);
@@ -399,8 +411,13 @@ export function useUserProfile(username: string) {
           }
         }
       }
-    } catch (err) {
-      console.error('Error refetching stats:', err);
+    } catch (err: any) {
+      logger.error("Error refetching stats", {
+        error: err?.message || "Unknown error",
+        context: "useUserProfile",
+        operation: "refetchStats",
+        profileId: profile?.id
+      });
     }
   }, [profile?.id, pollingInterval]);
 

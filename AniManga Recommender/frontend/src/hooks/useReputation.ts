@@ -15,6 +15,7 @@ import {
   NotificationPreferences
 } from '../types/reputation';
 import { useAuthenticatedApi } from './useAuthenticatedApi';
+import { logger } from '../utils/logger';
 
 export function useReputation(userId: string): UseReputationResult {
   const [reputation, setReputation] = useState<UserReputation | null>(null);
@@ -37,8 +38,13 @@ export function useReputation(userId: string): UseReputationResult {
       } else {
         throw new Error('Failed to fetch reputation');
       }
-    } catch (err) {
-      console.error('Error fetching reputation:', err);
+    } catch (err: any) {
+      logger.error("Error fetching reputation", {
+        error: err?.message || "Unknown error",
+        context: "useReputation",
+        operation: "fetchReputation",
+        userId: userId
+      });
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
@@ -56,11 +62,20 @@ export function useReputation(userId: string): UseReputationResult {
         }
         return true;
       } else {
-        console.error('Failed to recalculate reputation');
+        logger.error("Failed to recalculate reputation", {
+          context: "useReputation",
+          operation: "recalculateReputation",
+          userId: userId
+        });
         return false;
       }
-    } catch (err) {
-      console.error('Error recalculating reputation:', err);
+    } catch (err: any) {
+      logger.error("Error recalculating reputation", {
+        error: err?.message || "Unknown error",
+        context: "useReputation",
+        operation: "recalculateReputation",
+        userId: userId
+      });
       return false;
     }
   }, [userId, post]);
@@ -108,8 +123,13 @@ export function useAppeals(filters: { status?: string; page?: number; limit?: nu
       } else {
         throw new Error('Failed to fetch appeals');
       }
-    } catch (err) {
-      console.error('Error fetching appeals:', err);
+    } catch (err: any) {
+      logger.error("Error fetching appeals", {
+        error: err?.message || "Unknown error",
+        context: "useAppeals",
+        operation: "fetchAppeals",
+        userId: userId
+      });
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
@@ -129,8 +149,13 @@ export function useAppeals(filters: { status?: string; page?: number; limit?: nu
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to create appeal');
       }
-    } catch (err) {
-      console.error('Error creating appeal:', err);
+    } catch (err: any) {
+      logger.error("Error creating appeal", {
+        error: err?.message || "Unknown error",
+        context: "useAppeals",
+        operation: "createAppeal",
+        userId: userId
+      });
       setError(err instanceof Error ? err.message : 'Unknown error');
       return null;
     }
@@ -149,8 +174,13 @@ export function useAppeals(filters: { status?: string; page?: number; limit?: nu
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to update appeal');
       }
-    } catch (err) {
-      console.error('Error updating appeal:', err);
+    } catch (err: any) {
+      logger.error("Error updating appeal", {
+        error: err?.message || "Unknown error",
+        context: "useAppeals",
+        operation: "updateAppeal",
+        userId: userId
+      });
       setError(err instanceof Error ? err.message : 'Unknown error');
       return null;
     }
@@ -199,8 +229,13 @@ export function useNotifications(filters: { unread_only?: boolean; page?: number
       } else {
         throw new Error('Failed to fetch notifications');
       }
-    } catch (err) {
-      console.error('Error fetching notifications:', err);
+    } catch (err: any) {
+      logger.error("Error fetching notifications", {
+        error: err?.message || "Unknown error",
+        context: "useNotifications",
+        operation: "fetchNotifications",
+        userId: userId
+      });
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
@@ -224,8 +259,14 @@ export function useNotifications(filters: { unread_only?: boolean; page?: number
       } else {
         return false;
       }
-    } catch (err) {
-      console.error('Error marking notification as read:', err);
+    } catch (err: any) {
+      logger.error("Error marking notification as read", {
+        error: err?.message || "Unknown error",
+        context: "useNotifications",
+        operation: "markAsRead",
+        userId: userId,
+        notificationId: notificationId
+      });
       return false;
     }
   }, [put]);
@@ -247,8 +288,13 @@ export function useNotifications(filters: { unread_only?: boolean; page?: number
       } else {
         return false;
       }
-    } catch (err) {
-      console.error('Error marking all notifications as read:', err);
+    } catch (err: any) {
+      logger.error("Error marking all notifications as read", {
+        error: err?.message || "Unknown error",
+        context: "useNotifications",
+        operation: "markAllAsRead",
+        userId: userId
+      });
       return false;
     }
   }, [put]);
@@ -292,8 +338,13 @@ export function useNotificationPreferences(userId: string): UseNotificationPrefe
       } else {
         throw new Error('Failed to fetch notification preferences');
       }
-    } catch (err) {
-      console.error('Error fetching notification preferences:', err);
+    } catch (err: any) {
+      logger.error("Error fetching notification preferences", {
+        error: err?.message || "Unknown error",
+        context: "useNotificationPreferences",
+        operation: "fetchPreferences",
+        userId: userId
+      });
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
@@ -314,8 +365,13 @@ export function useNotificationPreferences(userId: string): UseNotificationPrefe
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to update preferences');
       }
-    } catch (err) {
-      console.error('Error updating notification preferences:', err);
+    } catch (err: any) {
+      logger.error("Error updating notification preferences", {
+        error: err?.message || "Unknown error",
+        context: "useNotificationPreferences",
+        operation: "updatePreferences",
+        userId: userId
+      });
       setError(err instanceof Error ? err.message : 'Unknown error');
       return false;
     }

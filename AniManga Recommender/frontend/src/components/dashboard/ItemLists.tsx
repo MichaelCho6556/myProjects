@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { UserItem } from "../../types";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
+import { logger } from "../../utils/logger";
 
 interface ItemListsProps {
   inProgress?: UserItem[];
@@ -52,7 +53,12 @@ const ItemLists: React.FC<ItemListsProps> = ({
         onItemDeleted();
       }
     } catch (error: any) {
-      console.error("Failed to delete item:", error);
+      logger.error("Failed to delete item", {
+        error: error?.message || "Unknown error",
+        context: "ItemLists",
+        operation: "handleDeleteItem",
+        itemUid: itemUid
+      });
       alert(`Failed to remove item: ${error.message || "Unknown error"}`);
     } finally {
       setDeletingItems((prev) => {

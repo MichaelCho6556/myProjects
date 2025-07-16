@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { networkMonitor, NetworkStatus } from "../utils/errorHandler";
+import { logger } from "../utils/logger";
 
 interface UseNetworkStatusReturn extends NetworkStatus {
   isConnected: boolean;
@@ -94,8 +95,12 @@ export const useOfflineHandler = () => {
       offlineActions.forEach((action) => {
         try {
           action();
-        } catch (error) {
-          console.error("Error executing queued offline action:", error);
+        } catch (error: any) {
+          logger.error("Error executing queued offline action", {
+            error: error?.message || "Unknown error",
+            context: "useNetworkStatus",
+            operation: "executeOfflineActions"
+          });
         }
       });
       setOfflineActions([]);

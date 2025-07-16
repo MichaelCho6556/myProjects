@@ -5,6 +5,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
 import { sanitizeSearchInput } from "../utils/security";
+import { logger } from "../utils/logger";
 import "./EnhancedSearch.css";
 
 interface SearchSuggestion {
@@ -166,7 +167,12 @@ export const EnhancedSearch: React.FC<EnhancedSearchProps> = ({ className = "", 
         setSuggestions(allSuggestions.slice(0, 6)); // Limit to 6 total suggestions
         setShowSuggestions(true);
       } catch (error) {
-        console.error("Failed to fetch suggestions:", error);
+        logger.error("Failed to fetch suggestions", {
+          error: error?.message || "Unknown error",
+          context: "EnhancedSearch",
+          operation: "fetchSuggestions",
+          query: query
+        });
         setSuggestions([]);
         setShowSuggestions(false);
       } finally {

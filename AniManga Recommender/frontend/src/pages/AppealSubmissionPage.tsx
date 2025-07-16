@@ -6,6 +6,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAppeals } from "../hooks/useReputation";
 import { useAuth } from "../context/AuthContext";
 import { CreateAppealRequest, ModerationAppeal } from "../types/reputation";
+import { logger } from "../utils/logger";
 import "./AppealSubmissionPage.css";
 
 interface LocationState {
@@ -97,8 +98,15 @@ export const AppealSubmissionPage: React.FC = () => {
       } else {
         setSubmitError("Failed to submit appeal. Please try again.");
       }
-    } catch (error) {
-      console.error("Error submitting appeal:", error);
+    } catch (error: any) {
+      logger.error("Error submitting appeal", {
+        error: error?.message || "Unknown error",
+        context: "AppealSubmissionPage",
+        operation: "handleSubmit",
+        userId: user?.id,
+        contentType: formData.content_type,
+        contentId: formData.content_id
+      });
       setSubmitError("An error occurred while submitting your appeal.");
     } finally {
       setIsSubmitting(false);

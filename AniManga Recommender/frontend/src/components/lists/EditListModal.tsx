@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { CustomList } from "../../types/social";
 import { TagInputComponent } from "./TagInputComponent";
+import { logger } from "../../utils/logger";
 import "./EditListModal.css";
 
 interface EditListModalProps {
@@ -79,8 +80,14 @@ export const EditListModal: React.FC<EditListModalProps> = ({ list, isOpen, onCl
 
       await onUpdate(updateData);
       onClose();
-    } catch (error) {
-      console.error("Failed to update list:", error);
+    } catch (error: any) {
+      logger.error("Failed to update list", {
+        error: error?.message || "Unknown error",
+        context: "EditListModal",
+        operation: "handleSubmit",
+        listId: list.id,
+        listTitle: formData.title
+      });
       setErrors({ submit: "Failed to update list. Please try again." });
     } finally {
       setIsSubmitting(false);

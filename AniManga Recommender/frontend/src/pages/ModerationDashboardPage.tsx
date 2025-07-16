@@ -7,6 +7,7 @@ import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
 import { ModerationDashboard } from "../components/social/moderation/ModerationDashboard";
 import Spinner from "../components/Spinner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
+import { logger } from "../utils/logger";
 import "./ModerationDashboardPage.css";
 
 export const ModerationDashboardPage: React.FC = () => {
@@ -34,8 +35,13 @@ export const ModerationDashboardPage: React.FC = () => {
         } else {
           setError("Failed to check permissions");
         }
-      } catch (err) {
-        console.error("Error checking moderation permissions:", err);
+      } catch (err: any) {
+        logger.error("Error checking moderation permissions", {
+          error: err?.message || "Unknown error",
+          context: "ModerationDashboardPage",
+          operation: "checkModerationPermissions",
+          userId: user?.id
+        });
         setError("Failed to check permissions");
       } finally {
         setLoading(false);

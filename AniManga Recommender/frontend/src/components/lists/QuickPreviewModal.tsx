@@ -1,8 +1,11 @@
 // ABOUTME: Quick preview modal for list content without full navigation
 // ABOUTME: Shows list details, preview items, and quick actions in overlay modal
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { CustomList } from '../../types/social';
+import { XIcon, ExternalLinkIcon, HeartIcon, EyeIcon } from '../common/Icons';
+import { formatRelativeTime, generateAvatarColor } from '../../utils/helpers';
+import { logger } from '../../utils/logger';
 
 interface QuickPreviewModalProps {
   isOpen: boolean;
@@ -13,34 +16,7 @@ interface QuickPreviewModalProps {
   isAuthenticated?: boolean;
 }
 
-// Icon components
-const XIcon = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-  </svg>
-);
-
-const ExternalLinkIcon = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-  </svg>
-);
-
-const HeartIcon = ({ className, filled = false }: { className?: string; filled?: boolean }) => (
-  <svg className={className} fill={filled ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-  </svg>
-);
-
-
-const EyeIcon = ({ className }: { className?: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-  </svg>
-);
-
-export const QuickPreviewModal: React.FC<QuickPreviewModalProps> = ({
+export const QuickPreviewModal: React.FC<QuickPreviewModalProps> = memo(({
   isOpen,
   onClose,
   list,
@@ -76,7 +52,7 @@ export const QuickPreviewModal: React.FC<QuickPreviewModalProps> = ({
     };
   }, [isOpen, onClose]);
 
-  const handleFollowClick = async () => {
+  const handleFollowClick = useCallback(async () => {
     if (!onToggleFollow || isLoading) return;
     
     setIsLoading(true);
@@ -84,34 +60,22 @@ export const QuickPreviewModal: React.FC<QuickPreviewModalProps> = ({
       await onToggleFollow();
       setIsFollowing(!isFollowing);
     } catch (error) {
-      console.error('Failed to toggle follow:', error);
+      logger.error('Failed to toggle follow state in QuickPreviewModal', {
+        listId: list?.id,
+        isFollowing,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }, error instanceof Error ? error : undefined);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [onToggleFollow, isLoading, isFollowing, list?.id]);
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
+  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
       onClose();
     }
-  };
+  }, [onClose]);
 
-  const formatRelativeTime = (dateString: string): string => {
-    const now = new Date();
-    const updated = new Date(dateString);
-    const diffInHours = Math.floor((now.getTime() - updated.getTime()) / (1000 * 60 * 60));
-    
-    if (diffInHours < 1) return 'Just now';
-    if (diffInHours < 24) return `${diffInHours}h ago`;
-    if (diffInHours < 168) return `${Math.floor(diffInHours / 24)}d ago`;
-    return updated.toLocaleDateString();
-  };
-
-  const generateAvatarColor = (username: string): string => {
-    const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-red-500'];
-    const index = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[index % colors.length];
-  };
 
   const getPrivacyBadgeColor = (privacy: string) => {
     switch (privacy) {
@@ -282,4 +246,7 @@ export const QuickPreviewModal: React.FC<QuickPreviewModalProps> = ({
       </div>
     </div>
   );
-};
+});
+
+// Set displayName for better debugging
+QuickPreviewModal.displayName = 'QuickPreviewModal';

@@ -1,4 +1,5 @@
 import CryptoJS from "crypto-js";
+import { CustomList } from "../types/social";
 
 /**
  * Security Utilities Module - Comprehensive security functions for the AniManga Recommender application
@@ -135,6 +136,16 @@ export const validateInput = (
   // If passes validation, sanitize and return
   const sanitized = sanitizeInput(input);
   return { isValid: true, sanitized };
+};
+
+// ✅ NEW: List-specific sanitization function for CustomList data
+export const sanitizeListData = (data: Partial<CustomList>): Partial<CustomList> => {
+  return {
+    ...data,
+    title: data.title ? sanitizeInput(data.title) : '',
+    description: data.description ? sanitizeInput(data.description) : '',
+    tags: data.tags?.map(tag => sanitizeInput(tag)) || []
+  };
 };
 
 /**

@@ -2,6 +2,7 @@
 // ABOUTME: Handles list following functionality separate from user following with proper state management
 
 import React, { useState } from "react";
+import { logger } from "../../utils/logger";
 
 interface ListFollowButtonProps {
   isFollowing: boolean;
@@ -25,7 +26,12 @@ export const ListFollowButton: React.FC<ListFollowButtonProps> = ({
     try {
       await onToggleFollow();
     } catch (error) {
-      console.error("Failed to toggle list follow:", error);
+      logger.error("Failed to toggle list follow", {
+        error: error?.message || "Unknown error",
+        context: "ListFollowButton",
+        operation: "handleToggleFollow",
+        isFollowing: isFollowing
+      });
     } finally {
       setIsLoading(false);
     }

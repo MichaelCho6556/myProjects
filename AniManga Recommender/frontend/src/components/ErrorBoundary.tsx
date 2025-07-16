@@ -258,7 +258,14 @@ class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Log error details only in development mode
     if (process.env.NODE_ENV === "development") {
-      console.error("ErrorBoundary caught an error:", error, errorInfo);
+      logger.error("ErrorBoundary caught an error", {
+        error: error?.message || "Unknown error",
+        context: "ErrorBoundary",
+        operation: "componentDidCatch",
+        errorId: errorId,
+        retryCount: this.state.retryCount,
+        errorInfo: errorInfo?.componentStack || "No component stack"
+      });
     }
 
     this.setState({

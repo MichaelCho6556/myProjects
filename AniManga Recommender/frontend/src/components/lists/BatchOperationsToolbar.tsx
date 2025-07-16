@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { useBatchOperations, useSelectionStats } from "../../context/BatchOperationsProvider";
 import { BatchOperationType, BatchOperationData, BatchOperation } from "../../types/batchOperations";
 import { ListItem } from "../../types/social";
+import { logger } from "../../utils/logger";
 import "./BatchOperationsToolbar.css";
 
 interface BatchOperationsToolbarProps {
@@ -320,8 +321,14 @@ export const BatchOperationsToolbar: React.FC<BatchOperationsToolbarProps> = ({
         onRefresh();
       }
       setActiveComponent(null);
-    } catch (error) {
-      console.error("Batch operation failed:", error);
+    } catch (error: any) {
+      logger.error("Batch operation failed", {
+        error: error?.message || "Unknown error",
+        context: "BatchOperationsToolbar",
+        operation: "handleComponentSubmit",
+        selectedCount: selectionStats.selectedCount,
+        operationType: activeComponent
+      });
     }
   };
 
