@@ -499,9 +499,11 @@
 }
 
 .action-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 12px !important;
+  height: 12px !important;
   flex-shrink: 0;
+  max-width: 12px !important;
+  max-height: 12px !important;
 }
 
 .action-btn-label {
@@ -577,8 +579,10 @@
   }
 
   .action-btn svg {
-    width: 11px;
-    height: 11px;
+    width: 11px !important;
+    height: 11px !important;
+    max-width: 11px !important;
+    max-height: 11px !important;
   }
 }
 
@@ -633,8 +637,10 @@
   }
 
   .action-btn svg {
-    width: 10px;
-    height: 10px;
+    width: 10px !important;
+    height: 10px !important;
+    max-width: 10px !important;
+    max-height: 10px !important;
   }
 
   /* Hide labels on mobile for compact layout */

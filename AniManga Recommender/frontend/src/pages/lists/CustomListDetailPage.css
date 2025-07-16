@@ -158,9 +158,19 @@
 }
 
 .action-button svg {
-  width: 16px;
-  height: 16px;
+  width: 16px !important;
+  height: 16px !important;
   flex-shrink: 0;
+  max-width: 16px !important;
+  max-height: 16px !important;
+}
+
+/* Global SVG constraint for this page - prevent massive scaling */
+svg.w-4.h-4 {
+  width: 1rem !important;
+  height: 1rem !important;
+  max-width: 1rem !important;
+  max-height: 1rem !important;
 }
 
 /* Back Navigation */

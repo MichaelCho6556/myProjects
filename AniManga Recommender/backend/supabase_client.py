@@ -170,9 +170,7 @@ class SupabaseClient:
             
             # Check if request was successful
             if response.status_code not in [200, 201, 204]:
-                print(f"❌ Request failed: {response.status_code}")
-                print(f"   URL: {url}")
-                print(f"   Response: {response.text}")
+                logger.error(f"Request failed: {response.status_code} - {url} - {response.text}")
                 response.raise_for_status()
             
             # Handle potential response parsing issues
@@ -181,18 +179,15 @@ class SupabaseClient:
                     # Test if we can parse the JSON
                     response.json()
                 except ValueError as e:
-                    print(f"⚠️  JSON parsing issue: {e}")
-                    print(f"   Response length: {len(response.text)} bytes")
-                    print(f"   Content-Type: {response.headers.get('Content-Type', 'unknown')}")
-                    print(f"   Content-Encoding: {response.headers.get('Content-Encoding', 'none')}")
+                    logger.error(f"JSON parsing issue: {e} - Response length: {len(response.text)} bytes - Content-Type: {response.headers.get('Content-Type', 'unknown')}")
             
             return response
             
         except requests.exceptions.Timeout:
-            print(f"❌ Request timeout for {endpoint}")
+            logger.error(f"Request timeout for {endpoint}")
             raise
         except requests.exceptions.RequestException as e:
-            print(f"❌ Request failed for {endpoint}: {e}")
+            logger.error(f"Request failed for {endpoint}: {e}")
             raise
     
     def get_all_items(self, limit: int = 1000, offset: int = 0) -> List[Dict]:
@@ -935,23 +930,23 @@ class SupabaseClient:
             methods. Ensure item data matches database schema before insertion.
         """
         
-        print(f"📤 Bulk inserting {len(items)} items (batch_size={batch_size})")
+        logger.info(f"Bulk inserting {len(items)} items (batch_size={batch_size})")
         
         for i in range(0, len(items), batch_size):
             batch = items[i:i + batch_size]
             
             try:
                 response = self._make_request('POST', 'items', data=batch)
-                print(f"   ✅ Inserted batch {i//batch_size + 1}: {len(batch)} items")
+                logger.debug(f"Inserted batch {i//batch_size + 1}: {len(batch)} items")
                 
                 # Small delay to avoid rate limiting
                 time.sleep(0.1)
                 
             except Exception as e:
-                print(f"   ❌ Failed to insert batch {i//batch_size + 1}: {e}")
+                logger.error(f"Failed to insert batch {i//batch_size + 1}: {e}")
                 return False
         
-        print(f"✅ Bulk insert completed")
+        logger.info(f"Bulk insert completed")
         return True
     
     def get_distinct_values(self, column: str, table: str = 'items') -> List[str]:
@@ -3785,14 +3780,10 @@ class SupabaseAuthClient:
             )
             
             if response.status_code != 200:
-                print(f"[DISCOVER_LISTS] Error: {response.status_code}")
-                print(f"[DISCOVER_LISTS] Response: {response.text}")
-                print(f"[DISCOVER_LISTS] URL: {response.url}")
+                logger.error(f"Failed to discover lists: {response.status_code} - {response.text}")
                 return {'lists': [], 'total': 0, 'page': page, 'limit': limit}
             
             lists = response.json()
-            print(f"[DISCOVER_LISTS] Success: Found {len(lists)} lists")
-            print(f"[DISCOVER_LISTS] First few lists: {lists[:2] if lists else 'None'}")
             
             # Get total count for pagination
             count_params = {'privacy': 'eq.public', 'select': 'count'}
@@ -3896,7 +3887,7 @@ class SupabaseAuthClient:
                     f"{self.base_url}/rest/v1/list_followers",
                     headers=self.headers,
                     params={
-                        'follower_id': f'eq.{user_id}',
+                        'user_id': f'eq.{user_id}',
                         'list_id': f'in.({",".join(map(str, list_ids))})',
                         'select': 'list_id'
                     }
@@ -3922,15 +3913,107 @@ class SupabaseAuthClient:
                 if user_profiles_response.status_code == 200:
                     profiles = user_profiles_response.json()
                     user_profiles_map = {profile['id']: profile for profile in profiles}
-                    print(f"[DISCOVER_LISTS] Fetched {len(profiles)} user profiles")
             
-            # Add tags, item counts, follower counts, and follow status to each list
+            # Get content types and preview images for all lists in efficient batch queries
+            list_content_types = {}
+            list_preview_images = {}
+            
+            if lists:
+                # Get content type information - batch query to determine anime/manga mix
+                content_type_response = requests.get(
+                    f"{self.base_url}/rest/v1/custom_list_items",
+                    headers=self.headers,
+                    params={
+                        'list_id': f'in.({",".join(map(str, list_ids))})',
+                        'select': 'list_id,items!inner(media_type)'
+                    }
+                )
+                
+                if content_type_response.status_code == 200:
+                    content_data = content_type_response.json()
+                    for item in content_data:
+                        list_id = item['list_id']
+                        media_type = item['items']['media_type']
+                        
+                        if list_id not in list_content_types:
+                            list_content_types[list_id] = {'anime': 0, 'manga': 0}
+                        
+                        if media_type.lower() == 'anime':
+                            list_content_types[list_id]['anime'] += 1
+                        elif media_type.lower() == 'manga':
+                            list_content_types[list_id]['manga'] += 1
+                
+                # Get preview images - top 5 items per list ordered by position
+                preview_images_response = requests.get(
+                    f"{self.base_url}/rest/v1/custom_list_items",
+                    headers=self.headers,
+                    params={
+                        'list_id': f'in.({",".join(map(str, list_ids))})',
+                        'select': 'list_id,items!inner(image_url)',
+                        'order': 'position.asc',
+                        'limit': 200  # Reasonable batch size to get top items per list
+                    }
+                )
+                
+                if preview_images_response.status_code == 200:
+                    preview_data = preview_images_response.json()
+                    for item in preview_data:
+                        list_id = item['list_id']
+                        image_url = item['items']['image_url']
+                        
+                        if image_url:  # Only include items with valid images
+                            if list_id not in list_preview_images:
+                                list_preview_images[list_id] = []
+                            
+                            # Limit to top 5 images per list
+                            if len(list_preview_images[list_id]) < 5:
+                                list_preview_images[list_id].append(image_url)
+            
+            # Add tags, item counts, follower counts, and computed fields to each list
             for list_item in lists:
                 list_id = list_item['id']
                 list_item['tags'] = list_tags_map.get(list_id, [])
                 list_item['item_count'] = list_item_counts.get(list_id, 0)
                 list_item['followers_count'] = list_follower_counts.get(list_id, 0)
                 list_item['is_following'] = list_id in user_following_lists
+                
+                # Calculate content_type
+                content_stats = list_content_types.get(list_id, {'anime': 0, 'manga': 0})
+                anime_count = content_stats['anime']
+                manga_count = content_stats['manga']
+                
+                if anime_count > 0 and manga_count == 0:
+                    list_item['content_type'] = 'anime'
+                elif manga_count > 0 and anime_count == 0:
+                    list_item['content_type'] = 'manga'
+                else:
+                    list_item['content_type'] = 'mixed'
+                
+                # Add preview images
+                list_item['preview_images'] = list_preview_images.get(list_id, [])
+                
+                # Calculate quality score using production-ready algorithm
+                # Formula: (description_bonus) + (item_count_score) + (followers_score) + (recency_score)
+                description_bonus = 10 if list_item.get('description') else 0
+                item_count_score = min(list_item['item_count'], 20)  # Cap at 20 to prevent dominance
+                followers_score = min(list_item['followers_count'] * 2, 50)  # Cap at 50
+                
+                # Recency score based on days since last updated
+                try:
+                    from datetime import datetime, timezone
+                    if list_item.get('updated_at'):
+                        updated_at = datetime.fromisoformat(list_item['updated_at'].replace('Z', '+00:00'))
+                        days_since_update = (datetime.now(timezone.utc) - updated_at).days
+                        recency_score = max(0, 20 - days_since_update)  # 20 points for today, decreasing
+                    else:
+                        recency_score = 0
+                except:
+                    recency_score = 0
+                
+                list_item['quality_score'] = description_bonus + item_count_score + followers_score + recency_score
+                
+                # Add is_collaborative flag (already in database schema)
+                list_item['is_collaborative'] = list_item.get('is_collaborative', False)
                 
                 # Add user profile info
                 user_profile = user_profiles_map.get(list_item['user_id'], {})
@@ -3940,6 +4023,9 @@ class SupabaseAuthClient:
                     'avatar_url': user_profile.get('avatar_url')
                 }
             
+            # Filter out empty lists (lists with 0 items) to improve discovery quality
+            lists = [list_item for list_item in lists if list_item['item_count'] > 0]
+            
             # Sort lists by the requested criteria (client-side sorting after DB query)
             if sort_by == 'followers_count':
                 lists.sort(key=lambda x: x['followers_count'], reverse=True)
@@ -3948,6 +4034,9 @@ class SupabaseAuthClient:
             elif sort_by == 'popularity':
                 # Popularity = combination of followers and recent activity
                 lists.sort(key=lambda x: (x['followers_count'] * 2 + x['item_count']), reverse=True)
+            elif sort_by == 'quality_score':
+                # Sort by the new quality score algorithm
+                lists.sort(key=lambda x: x['quality_score'], reverse=True)
             
             return {
                 'lists': lists,
@@ -3958,7 +4047,7 @@ class SupabaseAuthClient:
             }
             
         except Exception as e:
-            print(f"Error discovering lists: {e}")
+            logger.error(f"Error discovering lists: {e}")
             return {'lists': [], 'total': 0, 'page': page, 'limit': limit}
     
     def update_list_item(self, list_id: int, item_id: int, user_id: str, update_data: dict) -> bool:

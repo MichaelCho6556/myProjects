@@ -33,7 +33,9 @@
     "build": "react-scripts build",
     "test": "react-scripts test --watchAll=false",
     "eject": "react-scripts eject",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "eslintConfig": {
     "extends": [
