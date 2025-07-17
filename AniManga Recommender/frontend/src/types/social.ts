@@ -55,6 +55,8 @@ export interface CustomList {
   followersCount: number;
   isFollowing?: boolean;
   isCollaborative?: boolean;
+  contentType?: "anime" | "manga" | "mixed" | "empty";
+  previewItems?: ListItem[];
   items?: ListItem[];
 }
 

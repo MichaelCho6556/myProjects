@@ -107,7 +107,9 @@ def sanitize_input(data):
         return data
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"], 
+     allow_headers=["Content-Type", "Authorization"], 
+     supports_credentials=True)
 
 # Configure structured logging
 logging.basicConfig(
@@ -6313,7 +6315,7 @@ def get_my_custom_lists():
                     "id": 1,
                     "title": "My Favorite Action Anime",
                     "description": "A curated list of the best action anime",
-                    "privacy": "Public",
+                    "privacy": "public",
                     "itemCount": 15,
                     "followersCount": 23,
                     "tags": ["Action", "Must Watch"],
@@ -7095,10 +7097,16 @@ def discover_lists():
             print(f"[ERROR] ERROR: auth_client ({type(auth_client)}) does not have discover_lists method")
             return jsonify({'error': 'Lists discovery feature not available'}), 500
             
-        # Get user_id from auth context if available
+        # Get user_id from auth context if available (optional authentication)
         user_id = None
-        if hasattr(g, 'current_user') and g.current_user:
-            user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if 'Authorization' in request.headers:
+            # Extract viewer ID if authenticated
+            try:
+                token = request.headers['Authorization'].replace('Bearer ', '')
+                g.current_user = verify_token(token)
+                user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+            except Exception as e:
+                pass  # Ignore auth errors for public endpoint
         
         result = auth_client.discover_lists(search=search, tags=tags, sort_by=sort_by, page=page, limit=limit, user_id=user_id)
         
@@ -7106,6 +7114,108 @@ def discover_lists():
         
     except Exception as e:
         print(f"Error discovering lists: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/lists/<int:list_id>', methods=['GET'])
+@rate_limit(requests_per_minute=30, per_ip=True)
+def get_public_list_details(list_id):
+    """
+    Get details for a public custom list (no authentication required).
+    
+    Path Parameters:
+        list_id (int): ID of the list to retrieve
+        
+    Returns:
+        JSON Response containing list details or error if private
+        
+    HTTP Status Codes:
+        200: Success - List details retrieved
+        403: Forbidden - List is private or not found
+        500: Server Error - Database error
+        
+    Example Request:
+        GET /api/lists/123
+    """
+    try:
+        # Use supabase_client for database operations
+        client = supabase_client if supabase_client else auth_client
+        if not client:
+            return jsonify({'error': 'Database client not available'}), 500
+            
+        # Get user_id from auth context if available (for privacy checking)
+        user_id = None
+        if hasattr(g, 'current_user') and g.current_user:
+            user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        
+        # Get list details - use the method that exists on the client
+        if hasattr(client, 'get_custom_list_details'):
+            result = client.get_custom_list_details(list_id, user_id)
+        else:
+            # Fallback to direct API call
+            list_response = requests.get(
+                f"{client.base_url}/rest/v1/custom_lists",
+                headers=client.headers,
+                params={
+                    'id': f'eq.{list_id}',
+                    'select': '*'
+                }
+            )
+            
+            if list_response.status_code != 200 or not list_response.json():
+                return jsonify({'error': 'List not found'}), 404
+            
+            result = list_response.json()[0]
+        
+        # Check if the list is public or if user has access
+        if not result or result.get('privacy') not in ['public']:
+            return jsonify({'error': 'List not found or not public'}), 403
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error getting public list details: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/lists/<int:list_id>/items', methods=['GET'])
+@rate_limit(requests_per_minute=30, per_ip=True)
+def get_public_list_items(list_id):
+    """
+    Get items for a public custom list (no authentication required).
+    
+    Path Parameters:
+        list_id (int): ID of the list to retrieve items from
+        
+    Returns:
+        JSON Response containing list items or error if private
+        
+    HTTP Status Codes:
+        200: Success - List items retrieved
+        403: Forbidden - List is private or not found
+        500: Server Error - Database error
+        
+    Example Request:
+        GET /api/lists/123/items
+    """
+    try:
+        # Use supabase_client for database operations
+        if not supabase_client:
+            return jsonify({'error': 'Database client not available'}), 500
+        
+        # First check if the list exists and is public
+        list_info = supabase_client.get_custom_list_details(list_id)
+        if not list_info:
+            return jsonify({'error': 'List not found'}), 404
+        
+        if list_info.get('privacy') != 'public':
+            return jsonify({'error': 'List not found or not public'}), 403
+        
+        # Get list items using the proper client method
+        result = supabase_client.get_custom_list_items(list_id)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error getting public list items: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/reorder', methods=['POST'])
@@ -10360,7 +10470,7 @@ def update_custom_list_route(list_id):
         if 'title' in update_data and not update_data['title'].strip():
             return jsonify({'error': 'Title cannot be empty'}), 400
             
-        if 'privacy' in update_data and update_data['privacy'] not in ['Public', 'Private', 'Friends Only']:
+        if 'privacy' in update_data and update_data['privacy'] not in ['public', 'private', 'friends_only']:
             return jsonify({'error': 'Invalid privacy setting'}), 400
         
         # Update the list
@@ -10385,7 +10495,7 @@ def get_custom_list_items_route(list_id):
         if not list_info:
             return jsonify({'error': 'List not found'}), 404
 
-        if list_info['userId'] != user_id and list_info['privacy'] != 'Public':
+        if list_info['userId'] != user_id and list_info['privacy'] != 'public':
             return jsonify({'error': 'Forbidden'}), 403
 
         # Handle POST request to add an item to the list
@@ -10543,7 +10653,7 @@ def duplicate_custom_list(list_id):
             return jsonify({'error': 'Original list not found'}), 404
             
         # Check if user can access the original list (owner or public list)
-        if original_list['userId'] != user_id and original_list['privacy'] != 'Public':
+        if original_list['userId'] != user_id and original_list['privacy'] != 'public':
             return jsonify({'error': 'Access denied to original list'}), 403
         
         # Create new list with duplicated data
@@ -10616,7 +10726,7 @@ def duplicate_custom_list(list_id):
             'id': str(new_list_id),
             'title': new_list_data['title'],
             'description': new_list_data.get('description', ''),
-            'privacy': 'Public',
+            'privacy': 'public',
             'tags': original_list.get('tags', []),
             'createdAt': new_list_data['created_at'],
             'updatedAt': new_list_data['updated_at'],
@@ -11432,18 +11542,24 @@ def follow_list(list_id):
         500: Server Error - Database error
     """
     try:
-        global supabase_client
+        global supabase_client, auth_client
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
         if not user_id:
             return jsonify({'error': 'User ID not found in token'}), 400
         
+        
+        # Use auth_client for consistency with discover_lists
+        client = auth_client
+        if not client:
+            return jsonify({'error': 'Database client not available'}), 500
+        
         # Check if list exists and is public
         list_response = requests.get(
-            f"{supabase_client.base_url}/rest/v1/custom_lists",
-            headers=supabase_client.headers,
+            f"{client.base_url}/rest/v1/custom_lists",
+            headers=client.headers,
             params={
                 'id': f'eq.{list_id}',
-                'select': 'id,is_public,user_id'
+                'select': 'id,privacy,user_id'
             }
         )
         
@@ -11452,17 +11568,21 @@ def follow_list(list_id):
         
         list_data = list_response.json()[0]
         
+        # Only allow following public lists
+        if list_data['privacy'] != 'public':
+            return jsonify({'error': 'Can only follow public lists'}), 400
+        
         # Don't allow following your own list
         if list_data['user_id'] == user_id:
             return jsonify({'error': 'Cannot follow your own list'}), 400
         
         # Check if already following
         follow_response = requests.get(
-            f"{supabase_client.base_url}/rest/v1/list_followers",
-            headers=supabase_client.headers,
+            f"{client.base_url}/rest/v1/list_followers",
+            headers=client.headers,
             params={
                 'list_id': f'eq.{list_id}',
-                'follower_id': f'eq.{user_id}'
+                'user_id': f'eq.{user_id}'
             }
         )
         
@@ -11471,11 +11591,11 @@ def follow_list(list_id):
         if is_following:
             # Unfollow: Delete the follow relationship
             delete_response = requests.delete(
-                f"{supabase_client.base_url}/rest/v1/list_followers",
-                headers=supabase_client.headers,
+                f"{client.base_url}/rest/v1/list_followers",
+                headers=client.headers,
                 params={
                     'list_id': f'eq.{list_id}',
-                    'follower_id': f'eq.{user_id}'
+                    'user_id': f'eq.{user_id}'
                 }
             )
             
@@ -11486,13 +11606,13 @@ def follow_list(list_id):
         else:
             # Follow: Create the follow relationship
             follow_data = {
-                'list_id': str(list_id),
-                'follower_id': user_id
+                'list_id': list_id,
+                'user_id': user_id
             }
             
             create_response = requests.post(
-                f"{supabase_client.base_url}/rest/v1/list_followers",
-                headers=supabase_client.headers,
+                f"{client.base_url}/rest/v1/list_followers",
+                headers=client.headers,
                 json=follow_data
             )
             
@@ -11503,8 +11623,8 @@ def follow_list(list_id):
         
         # Get updated followers count
         count_response = requests.get(
-            f"{supabase_client.base_url}/rest/v1/list_followers",
-            headers={**supabase_client.headers, 'Prefer': 'count=exact'},
+            f"{client.base_url}/rest/v1/list_followers",
+            headers={**client.headers, 'Prefer': 'count=exact'},
             params={
                 'list_id': f'eq.{list_id}',
                 'select': 'id'

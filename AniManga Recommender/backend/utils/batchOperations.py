@@ -70,7 +70,7 @@ class BatchOperationsManager:
                 # Verify item ownership in the list
                 placeholders = ','.join(['%s'] * len(item_ids))
                 cursor.execute(f"""
-                    SELECT id FROM list_items 
+                    SELECT id FROM custom_custom_list_items 
                     WHERE list_id = %s AND id IN ({placeholders})
                 """, [list_id] + item_ids)
                 
@@ -149,7 +149,7 @@ class BatchOperationsManager:
         # Update the status using JSON operations to modify personal_data
         placeholders = ','.join(['%s'] * len(item_ids))
         cursor.execute(f"""
-            UPDATE list_items 
+            UPDATE custom_custom_list_items 
             SET personal_data = COALESCE(personal_data, '{{}}')::jsonb || %s::jsonb,
                 updated_at = NOW()
             WHERE list_id = %s AND id IN ({placeholders})
@@ -164,7 +164,7 @@ class BatchOperationsManager:
         
         placeholders = ','.join(['%s'] * len(item_ids))
         cursor.execute(f"""
-            UPDATE list_items 
+            UPDATE custom_custom_list_items 
             SET personal_data = COALESCE(personal_data, '{{}}')::jsonb || %s::jsonb,
                 updated_at = NOW()
             WHERE list_id = %s AND id IN ({placeholders})
@@ -186,7 +186,7 @@ class BatchOperationsManager:
         for item_id in item_ids:
             # Get current tags
             cursor.execute(
-                "SELECT personal_data FROM list_items WHERE list_id = %s AND id = %s",
+                "SELECT personal_data FROM custom_list_items WHERE list_id = %s AND id = %s",
                 (list_id, item_id)
             )
             row = cursor.fetchone()
@@ -203,7 +203,7 @@ class BatchOperationsManager:
             # Update the item
             updated_data = {**current_data, 'customTags': new_tags}
             cursor.execute(
-                "UPDATE list_items SET personal_data = %s, updated_at = NOW() WHERE list_id = %s AND id = %s",
+                "UPDATE custom_list_items SET personal_data = %s, updated_at = NOW() WHERE list_id = %s AND id = %s",
                 (json.dumps(updated_data), list_id, item_id)
             )
             updated_count += cursor.rowcount
@@ -223,7 +223,7 @@ class BatchOperationsManager:
         for item_id in item_ids:
             # Get current tags
             cursor.execute(
-                "SELECT personal_data FROM list_items WHERE list_id = %s AND id = %s",
+                "SELECT personal_data FROM custom_list_items WHERE list_id = %s AND id = %s",
                 (list_id, item_id)
             )
             row = cursor.fetchone()
@@ -237,7 +237,7 @@ class BatchOperationsManager:
             if len(new_tags) != len(current_tags):
                 updated_data = {**current_data, 'customTags': new_tags}
                 cursor.execute(
-                    "UPDATE list_items SET personal_data = %s, updated_at = NOW() WHERE list_id = %s AND id = %s",
+                    "UPDATE custom_list_items SET personal_data = %s, updated_at = NOW() WHERE list_id = %s AND id = %s",
                     (json.dumps(updated_data), list_id, item_id)
                 )
                 updated_count += cursor.rowcount
@@ -256,7 +256,7 @@ class BatchOperationsManager:
         
         # Get max position in target list
         cursor.execute(
-            "SELECT COALESCE(MAX(position), 0) as max_pos FROM list_items WHERE list_id = %s",
+            "SELECT COALESCE(MAX(position), 0) as max_pos FROM custom_list_items WHERE list_id = %s",
             (target_list_id,)
         )
         max_position = cursor.fetchone()['max_pos']
@@ -264,11 +264,11 @@ class BatchOperationsManager:
         # Copy items
         placeholders = ','.join(['%s'] * len(item_ids))
         cursor.execute(f"""
-            INSERT INTO list_items (list_id, item_uid, title, media_type, image_url, position, personal_data, created_at)
+            INSERT INTO custom_list_items (list_id, item_uid, title, media_type, image_url, position, personal_data, created_at)
             SELECT %s, item_uid, title, media_type, image_url, 
                    ROW_NUMBER() OVER() + %s as position,
                    personal_data, NOW()
-            FROM list_items 
+            FROM custom_list_items 
             WHERE id IN ({placeholders})
             ON CONFLICT (list_id, item_uid) DO NOTHING
         """, [target_list_id, max_position] + item_ids)
@@ -288,7 +288,7 @@ class BatchOperationsManager:
         if position < 0:
             # Move to end
             cursor.execute(
-                "SELECT COALESCE(MAX(position), 0) as max_pos FROM list_items WHERE list_id = %s",
+                "SELECT COALESCE(MAX(position), 0) as max_pos FROM custom_list_items WHERE list_id = %s",
                 (list_id,)
             )
             position = cursor.fetchone()['max_pos'] + 1
@@ -296,7 +296,7 @@ class BatchOperationsManager:
         # Update positions for moved items
         placeholders = ','.join(['%s'] * len(item_ids))
         cursor.execute(f"""
-            UPDATE list_items 
+            UPDATE custom_list_items 
             SET position = %s + ROW_NUMBER() OVER() - 1,
                 updated_at = NOW()
             WHERE list_id = %s AND id IN ({placeholders})
@@ -306,13 +306,13 @@ class BatchOperationsManager:
         cursor.execute("""
             WITH numbered_items AS (
                 SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) as new_pos
-                FROM list_items 
+                FROM custom_list_items 
                 WHERE list_id = %s
             )
-            UPDATE list_items 
+            UPDATE custom_list_items 
             SET position = numbered_items.new_pos
             FROM numbered_items 
-            WHERE list_items.id = numbered_items.id
+            WHERE custom_list_items.id = numbered_items.id
         """, (list_id,))
         
         return {"moved_count": len(item_ids), "new_position": position}
@@ -321,7 +321,7 @@ class BatchOperationsManager:
         """Remove items from the list"""
         placeholders = ','.join(['%s'] * len(item_ids))
         cursor.execute(f"""
-            DELETE FROM list_items 
+            DELETE FROM custom_list_items 
             WHERE list_id = %s AND id IN ({placeholders})
         """, [list_id] + item_ids)
         
@@ -337,13 +337,13 @@ class BatchOperationsManager:
         cursor.execute("""
             WITH numbered_items AS (
                 SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) as new_pos
-                FROM list_items 
+                FROM custom_list_items 
                 WHERE list_id = %s
             )
-            UPDATE list_items 
+            UPDATE custom_list_items 
             SET position = numbered_items.new_pos
             FROM numbered_items 
-            WHERE list_items.id = numbered_items.id
+            WHERE custom_list_items.id = numbered_items.id
         """, (list_id,))
         
         return {"removed_count": removed_count}

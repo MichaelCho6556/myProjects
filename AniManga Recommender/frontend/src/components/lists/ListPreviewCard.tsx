@@ -5,6 +5,7 @@ import React, { useState, memo, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { CustomList } from '../../types/social';
 import { formatRelativeTime, generateAvatarColor } from '../../utils/helpers';
+import { useAuth } from '../../context/AuthContext';
 import { logger } from '../../utils/logger';
 
 interface ListPreviewCardProps {
@@ -22,9 +23,13 @@ export const ListPreviewCard: React.FC<ListPreviewCardProps> = memo(({
   onListClick,
   isAuthenticated = true
 }) => {
+  const { user } = useAuth();
   const [isFollowing, setIsFollowing] = useState(list.isFollowing || false);
   const [isLoading, setIsLoading] = useState(false);
   const [followersCount, setFollowersCount] = useState(list.followersCount || 0);
+
+  // Check if current user is the owner of the list
+  const isOwner = user?.id === list.userId;
 
   // Memoize privacy badge class calculation
   const privacyBadgeClass = useMemo(() => {
@@ -178,7 +183,7 @@ export const ListPreviewCard: React.FC<ListPreviewCardProps> = memo(({
 
         {/* Right Side - Follow Button */}
         <div className="flex-shrink-0">
-          {isAuthenticated ? (
+          {!isOwner && isAuthenticated ? (
             <button
               onClick={handleFollowClick}
               disabled={isLoading}
@@ -190,13 +195,17 @@ export const ListPreviewCard: React.FC<ListPreviewCardProps> = memo(({
             >
               {isLoading ? '...' : isFollowing ? 'Following' : 'Follow'}
             </button>
-          ) : (
+          ) : !isOwner && !isAuthenticated ? (
             <Link
               to="/auth/login"
               className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
             >
               Sign in to follow
             </Link>
+          ) : (
+            <div className="px-6 py-2 text-gray-500 text-sm">
+              Your list
+            </div>
           )}
         </div>
       </div>

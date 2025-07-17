@@ -2,9 +2,10 @@
 // ABOUTME: Provides comprehensive list browsing experience with infinite scroll pagination and community discovery
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
+import { supabase } from "../lib/supabase";
 // Removed ListPreviewCard import - using grid view only
 import { ListGridCard } from "../components/lists/ListGridCard";
 // Removed ListPreviewCardSkeleton import - using grid view only
@@ -165,8 +166,10 @@ export const ListDiscoveryPage: React.FC = () => {
   const { user } = useAuth();
   const { get, post } = useAuthenticatedApi();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const [lists, setLists] = useState<CustomList[]>([]);
+  const [totalLists, setTotalLists] = useState(0);
   const [filters, setFilters] = useState<DiscoveryFilters>({
     search: searchParams.get("q") || "",
     sortBy: (searchParams.get("sort") as SortOption) || "popular",
@@ -184,8 +187,8 @@ export const ListDiscoveryPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [showUserSearch, setShowUserSearch] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  // Removed viewMode state - only using grid view
   const [selectedList, setSelectedList] = useState<CustomList | null>(null);
+  // Removed viewMode state - only using grid view
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
@@ -244,14 +247,42 @@ export const ListDiscoveryPage: React.FC = () => {
 
         // Use authenticated API if user is logged in, otherwise use public fetch
         let result;
+        const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+        
         if (user) {
-          const response = await get(
-            `/api/lists/discover?${params.toString()}`
-          );
-          result = response;
+          // Get current session and token
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          
+          if (token) {
+            const requestHeaders = {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            };
+            
+            // Use fetch with Authorization header for public endpoint with auth
+            const response = await fetch(
+              `${API_BASE_URL}/api/lists/discover?${params.toString()}`,
+              {
+                method: 'GET',
+                headers: requestHeaders,
+              }
+            );
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            result = await response.json();
+          } else {
+            // Fallback to anonymous request
+            const response = await fetch(
+              `${API_BASE_URL}/api/lists/discover?${params.toString()}`
+            );
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            result = await response.json();
+          }
         } else {
-          const API_BASE_URL =
-            process.env.REACT_APP_API_URL || "http://localhost:5000";
           const response = await fetch(
             `${API_BASE_URL}/api/lists/discover?${params.toString()}`
           );
@@ -265,24 +296,32 @@ export const ListDiscoveryPage: React.FC = () => {
         // Note: Backend API already provides tags correctly via list_tag_associations table
 
         // Transform backend response to frontend format
-        const transformedLists = rawLists.map((rawList: any) => ({
-          id: rawList.id.toString(),
-          title: rawList.title,
-          description: rawList.description || "",
-          privacy: rawList.privacy || "private",
-          tags: rawList.tags || [],
-          createdAt: rawList.created_at,
-          updatedAt: rawList.updated_at,
-          userId: rawList.user_id,
-          username: rawList.user_profiles?.username || "",
-          itemCount: rawList.item_count || 0,
-          followersCount: rawList.followers_count || 0,
-          isFollowing: rawList.is_following || false,
-          items: [],
-        }));
+        const transformedLists = rawLists.map((rawList: any) => {
+          const transformed = {
+            id: rawList.id.toString(),
+            title: rawList.title,
+            description: rawList.description || "",
+            privacy: rawList.privacy || "private",
+            tags: rawList.tags || [],
+            createdAt: rawList.created_at,
+            updatedAt: rawList.updated_at,
+            userId: rawList.user_id,
+            username: rawList.user_profiles?.username || "",
+            itemCount: rawList.item_count || 0,
+            followersCount: rawList.followers_count || 0,
+            isFollowing: rawList.is_following || false,
+            contentType: rawList.content_type || "mixed",
+            previewItems: rawList.preview_items || [],
+            items: [],
+          };
+          
+          
+          return transformed;
+        });
 
         if (isFirstPage) {
           setLists(transformedLists);
+          setTotalLists(result.total || 0);
         } else {
           setLists((prev) => [...prev, ...transformedLists]);
         }
@@ -309,7 +348,7 @@ export const ListDiscoveryPage: React.FC = () => {
   // Initial load
   useEffect(() => {
     fetchLists(true);
-  }, []);
+  }, [fetchLists]);
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
@@ -358,7 +397,13 @@ export const ListDiscoveryPage: React.FC = () => {
     }
 
     try {
-      const response = await post(`/api/auth/lists/${listId}/follow`);
+      // Convert string listId to integer for backend API
+      const numericListId = parseInt(listId, 10);
+      if (isNaN(numericListId)) {
+        throw new Error("Invalid list ID");
+      }
+      
+      const response = await post(`/api/auth/lists/${numericListId}/follow`);
 
       // Update the list in the local state to reflect the new follow status
       setLists((prevLists) =>
@@ -416,6 +461,7 @@ export const ListDiscoveryPage: React.FC = () => {
   }, [handleFilterChange, handleTagRemove]);
 
   const handleListClick = useCallback((list: CustomList) => {
+    // Show preview modal for quick preview
     setSelectedList(list);
   }, []);
 
@@ -425,8 +471,9 @@ export const ListDiscoveryPage: React.FC = () => {
 
   const handleViewFull = useCallback((listId: string) => {
     // Navigate to full list detail page
-    window.location.href = `/lists/${listId}`;
-  }, []);
+    navigate(`/lists/${listId}`);
+    setSelectedList(null); // Close modal
+  }, [navigate]);
 
   // Generate active filter chips (memoized to prevent unnecessary recalculation)
   const activeFilterChips = useMemo(() => createFilterChips(filters), [filters]);
@@ -444,13 +491,13 @@ export const ListDiscoveryPage: React.FC = () => {
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">Discover Lists</h1>
               <div className="hidden lg:flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-1">
-                  <span className="font-semibold text-gray-900 dark:text-white">{lists.length > 0 ? '2,847' : '0'}</span>
-                  <span className="text-gray-500 dark:text-gray-400">lists</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{totalLists.toLocaleString()}</span>
+                  <span className="text-gray-500 dark:text-gray-400">lists available</span>
                 </div>
                 <div className="w-px h-4 bg-gray-300 dark:bg-gray-600"></div>
                 <div className="flex items-center gap-1">
-                  <span className="font-semibold text-gray-900 dark:text-white">156</span>
-                  <span className="text-gray-500 dark:text-gray-400">curators</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">{lists.length}</span>
+                  <span className="text-gray-500 dark:text-gray-400">showing</span>
                 </div>
               </div>
             </div>
@@ -505,7 +552,6 @@ export const ListDiscoveryPage: React.FC = () => {
                 >
                   <div className="flex items-center justify-between">
                     <span>⭐ Popular</span>
-                    <span className="text-xs text-gray-500">2.8k</span>
                   </div>
                 </button>
                 <button
@@ -518,7 +564,6 @@ export const ListDiscoveryPage: React.FC = () => {
                 >
                   <div className="flex items-center justify-between">
                     <span>🕒 Recent</span>
-                    <span className="text-xs text-gray-500">156</span>
                   </div>
                 </button>
                 <button
@@ -531,7 +576,6 @@ export const ListDiscoveryPage: React.FC = () => {
                 >
                   <div className="flex items-center justify-between">
                     <span>📺 Anime</span>
-                    <span className="text-xs text-gray-500">1.5k</span>
                   </div>
                 </button>
                 <button
@@ -544,7 +588,6 @@ export const ListDiscoveryPage: React.FC = () => {
                 >
                   <div className="flex items-center justify-between">
                     <span>📚 Manga</span>
-                    <span className="text-xs text-gray-500">892</span>
                   </div>
                 </button>
                 <div className="border-t border-gray-200 dark:border-gray-700 my-3"></div>
