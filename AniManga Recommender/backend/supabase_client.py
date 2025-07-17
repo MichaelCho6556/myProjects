@@ -2303,7 +2303,7 @@ class SupabaseClient:
                     headers=self.headers,
                     params={
                         'id': f'eq.{rec["item_id"]}',
-                        'select': 'uid,title,media_type,media_type_id,media_types(name),image_url'
+                        'select': 'uid,title,media_type_id,media_types(name),image_url'
                     }
                 )
                 if item_resp.status_code == 200 and item_resp.text.strip():
@@ -2311,14 +2311,9 @@ class SupabaseClient:
                     if item_data:
                         item_info = item_data[0] if isinstance(item_data, list) else item_data
                         
-                        # Get media type from joined media_types table if available, fallback to direct field
-                        media_type = item_info.get('media_type') or ''
-                        if isinstance(media_type, str):
-                            media_type = media_type.strip()
-                        else:
-                            media_type = ''
-                        
-                        if not media_type and item_info.get('media_types'):
+                        # Get media type from joined media_types table
+                        media_type = ''
+                        if item_info.get('media_types'):
                             media_type = item_info['media_types']['name']
                         
                         items.append({
@@ -3792,13 +3787,16 @@ class SupabaseAuthClient:
                 # These will be sorted in Python after fetching data
                 db_sort_by = 'updated_at'
             
+            # Fetch extra items to account for empty lists that will be filtered out
+            fetch_limit = limit * 3  # Fetch 3x requested to ensure we have enough after filtering
+            
             params = {
                 'privacy': 'eq.public',
                 'select': '''
                     *,
                     user_profiles!custom_lists_user_id_fkey(username, display_name, avatar_url)
                 ''',
-                'limit': limit,
+                'limit': fetch_limit,
                 'offset': offset,
                 'order': f'{db_sort_by}.desc'
             }
@@ -3973,7 +3971,7 @@ class SupabaseAuthClient:
             
             # Get content types and preview images for all lists in efficient batch queries
             list_content_types = {}
-            list_preview_images = {}
+            list_preview_items = {}
             
             if lists:
                 # Get content type information - batch query to determine anime/manga mix
@@ -3982,7 +3980,7 @@ class SupabaseAuthClient:
                     headers=self.headers,
                     params={
                         'list_id': f'in.({",".join(map(str, list_ids))})',
-                        'select': 'list_id,items!inner(media_type)'
+                        'select': 'list_id,items!inner(media_type_id,media_types!inner(name))'
                     }
                 )
                 
@@ -3990,7 +3988,11 @@ class SupabaseAuthClient:
                     content_data = content_type_response.json()
                     for item in content_data:
                         list_id = item['list_id']
-                        media_type = item['items']['media_type']
+                        
+                        # Extract media type from the joined media_types table
+                        media_type = None
+                        if item.get('items') and item['items'].get('media_types'):
+                            media_type = item['items']['media_types']['name']
                         
                         if list_id not in list_content_types:
                             list_content_types[list_id] = {'anime': 0, 'manga': 0}
@@ -4002,31 +4004,44 @@ class SupabaseAuthClient:
                             elif media_type.lower() == 'manga':
                                 list_content_types[list_id]['manga'] += 1
                 
-                # Get preview images - top 5 items per list ordered by position
-                preview_images_response = requests.get(
+                # Get preview items - top 5 items per list ordered by position with full details
+                preview_items_response = requests.get(
                     f"{self.base_url}/rest/v1/custom_list_items",
                     headers=self.headers,
                     params={
                         'list_id': f'in.({",".join(map(str, list_ids))})',
-                        'select': 'list_id,items!inner(image_url)',
+                        'select': 'list_id,position,items!inner(uid,title,image_url,media_type_id,media_types!inner(name))',
                         'order': 'position.asc',
                         'limit': 200  # Reasonable batch size to get top items per list
                     }
                 )
                 
-                if preview_images_response.status_code == 200:
-                    preview_data = preview_images_response.json()
+                if preview_items_response.status_code == 200:
+                    preview_data = preview_items_response.json()
                     for item in preview_data:
                         list_id = item['list_id']
-                        image_url = item['items']['image_url']
+                        item_details = item['items']
                         
-                        if image_url:  # Only include items with valid images
-                            if list_id not in list_preview_images:
-                                list_preview_images[list_id] = []
-                            
-                            # Limit to top 5 images per list
-                            if len(list_preview_images[list_id]) < 5:
-                                list_preview_images[list_id].append(image_url)
+                        # Extract media type from the joined media_types table
+                        media_type = None
+                        if item_details.get('media_types'):
+                            media_type = item_details['media_types']['name']
+                        
+                        # Create rich preview item object
+                        preview_item = {
+                            'id': item_details['uid'],
+                            'title': item_details['title'],
+                            'mediaType': media_type,
+                            'imageUrl': item_details['image_url'],
+                            'position': item['position']
+                        }
+                        
+                        if list_id not in list_preview_items:
+                            list_preview_items[list_id] = []
+                        
+                        # Limit to top 5 items per list
+                        if len(list_preview_items[list_id]) < 5:
+                            list_preview_items[list_id].append(preview_item)
             
             # Add tags, item counts, follower counts, and computed fields to each list
             for list_item in lists:
@@ -4045,24 +4060,17 @@ class SupabaseAuthClient:
                     list_item['content_type'] = 'anime'
                 elif manga_count > 0 and anime_count == 0:
                     list_item['content_type'] = 'manga'
+                elif anime_count == 0 and manga_count == 0:
+                    list_item['content_type'] = 'empty'
                 else:
                     list_item['content_type'] = 'mixed'
                 
-                # Add preview images - use database value if available, otherwise use calculated
-                if list_item.get('preview_images'):
-                    # Use pre-calculated preview images from database
-                    try:
-                        list_item['preview_images'] = json.loads(list_item['preview_images']) if isinstance(list_item['preview_images'], str) else list_item['preview_images']
-                    except:
-                        list_item['preview_images'] = list_preview_images.get(list_id, [])
-                else:
-                    # Fallback to calculated preview images
-                    preview_images = list_preview_images.get(list_id, [])
-                    list_item['preview_images'] = preview_images
-                    
-                    # Store in database for next time
-                    if preview_images and not list_item.get('preview_images'):
-                        self._update_preview_images_cache(list_id, preview_images)
+                # Add preview items - use calculated rich preview items
+                preview_items = list_preview_items.get(list_id, [])
+                list_item['preview_items'] = preview_items
+                
+                # Also maintain backward compatibility with preview_images for any existing code
+                list_item['preview_images'] = [item.get('imageUrl') for item in preview_items if item.get('imageUrl')]
                 
                 # Use pre-calculated quality score from database if available, otherwise calculate
                 if list_item.get('quality_score') is not None:
@@ -4129,12 +4137,20 @@ class SupabaseAuthClient:
                 # Sort by the new quality score algorithm
                 lists.sort(key=lambda x: x['quality_score'], reverse=True)
             
+            # Limit results to requested amount after filtering
+            lists = lists[:limit]
+            
+            # Adjust total count to reflect filtered results (approximate)
+            if len(lists) < limit and page == 1:
+                # If we got fewer than requested on first page, that's the total
+                total = len(lists)
+            
             return {
                 'lists': lists,
                 'total': total,
                 'page': page,
                 'limit': limit,
-                'has_more': (page * limit) < total
+                'has_more': len(lists) == limit  # If we got full page, there might be more
             }
             
         except Exception as e:
@@ -4397,13 +4413,17 @@ class SupabaseAuthClient:
                         headers=self.headers,
                         params={
                             'uid': f'eq.{activity["item_uid"]}',
-                            'select': 'uid, title, image_url, media_type'
+                            'select': 'uid, title, image_url, media_type_id, media_types(name)'
                         }
                     )
                     
                     item_data = item_response.json()
                     if item_data:
-                        activity['item'] = item_data[0]
+                        item_info = item_data[0]
+                        # Extract media type from joined media_types table
+                        if item_info.get('media_types'):
+                            item_info['media_type'] = item_info['media_types']['name']
+                        activity['item'] = item_info
             
             # Get total count
             count_response = requests.get(

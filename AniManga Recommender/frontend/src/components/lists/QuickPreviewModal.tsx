@@ -88,16 +88,10 @@ export const QuickPreviewModal: React.FC<QuickPreviewModalProps> = memo(({
     }
   };
 
-  // Mock preview items - in real implementation, this would come from API
-  const mockPreviewItems = [
-    { id: '1', title: 'Attack on Titan', imageUrl: null, mediaType: 'anime' },
-    { id: '2', title: 'Demon Slayer', imageUrl: null, mediaType: 'anime' },
-    { id: '3', title: 'Your Name', imageUrl: null, mediaType: 'anime' },
-    { id: '4', title: 'Spirited Away', imageUrl: null, mediaType: 'anime' },
-    { id: '5', title: 'One Piece', imageUrl: null, mediaType: 'anime' }
-  ];
-
   if (!isOpen || !list) return null;
+
+  // Use actual preview items from API
+  const previewItems = list.previewItems || [];
 
   return (
     <div 
@@ -183,31 +177,39 @@ export const QuickPreviewModal: React.FC<QuickPreviewModalProps> = memo(({
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
                 Preview Items
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {mockPreviewItems.slice(0, 6).map((item, index) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                  >
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 dark:text-white truncate">
-                        {item.title}
-                      </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
-                        {item.mediaType}
-                      </p>
-                    </div>
+              {previewItems.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {previewItems.slice(0, 6).map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                      >
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                          {index + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 dark:text-white truncate">
+                            {item.title}
+                          </p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+                            {item.mediaType}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              
-              {list.itemCount > 6 && (
-                <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-3">
-                  And {list.itemCount - 6} more items...
-                </p>
+                  
+                  {list.itemCount > 6 && (
+                    <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-3">
+                      And {list.itemCount - 6} more items...
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                  <p>No items in this list yet.</p>
+                </div>
               )}
             </div>
           </div>

@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
+import axios from "axios";
 
 import { EditListModal } from "../../components/lists/EditListModal";
 import { AddItemsModal } from "../../components/lists/AddItemsModal";
@@ -18,6 +19,42 @@ import LoadingBanner from "../../components/Loading/LoadingBanner";
 import { CustomList, ListItem } from "../../types/social";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 import "./CustomListDetailPage.css";
+
+// Utility function to make API calls with fallback to public endpoints
+const makeFlexibleApiCall = async (
+  authenticatedApiCall: () => Promise<any>,
+  publicUrl: string,
+  isAuthenticated: boolean
+): Promise<any> => {
+  if (isAuthenticated) {
+    try {
+      console.log('🔒 Trying authenticated API call');
+      return await authenticatedApiCall();
+    } catch (error: any) {
+      console.log('❌ Authenticated call failed:', error.response?.status, error.message);
+      // If authenticated call fails with 403/401 or contains "Forbidden", try public endpoint as fallback
+      const shouldFallback = error.response?.status === 403 || 
+                           error.response?.status === 401 || 
+                           error.message?.includes('Forbidden') ||
+                           error.message?.includes('403');
+      
+      if (shouldFallback) {
+        console.log('🌐 Falling back to public endpoint:', publicUrl);
+        const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+        const fullUrl = publicUrl.startsWith('http') ? publicUrl : `${API_BASE_URL}${publicUrl}`;
+        console.log('📡 Making public API call to:', fullUrl);
+        return await axios.get(fullUrl);
+      }
+      throw error;
+    }
+  } else {
+    // For anonymous users, use public endpoint directly
+    console.log('🌐 Making public API call for anonymous user:', publicUrl);
+    const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+    const fullUrl = publicUrl.startsWith('http') ? publicUrl : `${API_BASE_URL}${publicUrl}`;
+    return await axios.get(fullUrl);
+  }
+};
 
 export const CustomListDetailPage: React.FC = () => {
   const { listId } = useParams<{ listId: string }>();
@@ -186,15 +223,23 @@ export const CustomListDetailPage: React.FC = () => {
   }, [items]);
 
   const fetchListDetails = async () => {
-    if (!listId || !user) return;
+    if (!listId) return;
 
     try {
       setIsLoading(true);
       setError(null);
 
       const [listResponse, itemsResponse] = await Promise.all([
-        get(`/api/auth/lists/${listId}`),
-        get(`/api/auth/lists/${listId}/items`),
+        makeFlexibleApiCall(
+          () => get(`/api/auth/lists/${listId}`),
+          `/api/lists/${listId}`,
+          !!user
+        ),
+        makeFlexibleApiCall(
+          () => get(`/api/auth/lists/${listId}/items`),
+          `/api/lists/${listId}/items`,
+          !!user
+        ),
       ]);
 
       const listData = listResponse.data || listResponse;
@@ -253,8 +298,12 @@ export const CustomListDetailPage: React.FC = () => {
 
       setItems(itemsWithPersonalData);
     } catch (err: any) {
+      console.error("Error loading list details:", err);
       if (err.response?.status === 404) {
         setError("List not found or you do not have permission to view it.");
+      } else if (err.response?.status === 403) {
+        const errorMessage = err.response?.data?.error || err.response?.data?.message || "not public";
+        setError(errorMessage);
       } else {
         setError(
           err.response?.data?.message || err.message || "Failed to load list details. Please try again."
@@ -266,10 +315,10 @@ export const CustomListDetailPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (listId && user) {
+    if (listId) {
       fetchListDetails();
     }
-  }, [listId, user?.id]); // Only depend on user.id to prevent unnecessary refetches
+  }, [listId, user?.id]); // Depend on user.id to refetch when auth state changes
 
   // Load user's other lists for context menu "Copy to List" functionality
   useEffect(() => {
@@ -488,7 +537,8 @@ export const CustomListDetailPage: React.FC = () => {
 
   const isOwner = user && list && list.userId === user.id;
 
-  if (!user) {
+  // Show private list message only if we tried to load but got permission denied
+  if (!user && error && error.includes('not public')) {
     return (
       <div className="custom-list-detail-page">
         <div className="custom-list-container">
@@ -511,7 +561,7 @@ export const CustomListDetailPage: React.FC = () => {
                 </svg>
               </div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                Authentication Required
+                Private List
               </h2>
               <p className="text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
                 This list is private and requires you to be signed in to view its contents.
@@ -528,7 +578,7 @@ export const CustomListDetailPage: React.FC = () => {
                   </svg>
                   Go to Homepage
                 </Link>
-                <Link to="/my-lists" className="action-button secondary w-full">
+                <Link to="/discover/lists" className="action-button secondary w-full">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
