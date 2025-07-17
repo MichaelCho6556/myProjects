@@ -49,16 +49,17 @@ export const CreateCustomListModal: React.FC<CreateCustomListModalProps> = ({
     setIsLoading(true);
     setApiError(null);
 
+    // Transform frontend format to backend format
+    const listData = {
+      title: data.title,
+      description: data.description,
+      privacy: data.privacy === "Public" ? "public" : 
+               data.privacy === "Friends Only" ? "friends_only" : "private",
+      is_collaborative: false, // Default to false for now
+      tags: tags,
+    };
+
     try {
-      // Transform frontend format to backend format
-      const listData = {
-        title: data.title,
-        description: data.description,
-        privacy: data.privacy === "Public" ? "public" : 
-                 data.privacy === "Friends Only" ? "friends_only" : "private",
-        is_collaborative: false, // Default to false for now
-        tags: tags,
-      };
 
       const response = await post("/api/auth/lists/custom", listData);
 
@@ -94,7 +95,7 @@ export const CreateCustomListModal: React.FC<CreateCustomListModalProps> = ({
       }
     } catch (error: any) {
       logger.error("Failed to create list", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "CreateCustomListModal",
         operation: "onSubmit",
         listTitle: listData.title,

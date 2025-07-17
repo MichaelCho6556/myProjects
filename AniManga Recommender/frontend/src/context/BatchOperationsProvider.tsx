@@ -145,10 +145,10 @@ export const BatchOperationsProvider: React.FC<BatchOperationsProviderProps> = (
         return result;
       } catch (error: any) {
         logger.error("Batch operation failed", {
-          error: error?.message || "Unknown error",
+          error: error instanceof Error ? error.message : "Unknown error",
           context: "BatchOperationsProvider",
           operation: "executeBatchOperation",
-          operationType: type,
+          operationType: operation,
           selectedItemsCount: selectedItems.size,
           listId: listId
         });

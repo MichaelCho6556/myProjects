@@ -145,7 +145,7 @@ export const ListCommentsSection: React.FC<ListCommentsSectionProps> = ({ listId
       setComments((prev) => prev.map(updateComment));
     } catch (error) {
       logger.error("Failed to like comment", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "ListCommentsSection",
         operation: "likeComment",
         commentId: commentId,
@@ -173,7 +173,7 @@ export const ListCommentsSection: React.FC<ListCommentsSectionProps> = ({ listId
       setComments((prev) => removeComment(prev));
     } catch (error) {
       logger.error("Failed to delete comment", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "ListCommentsSection",
         operation: "deleteComment",
         commentId: commentId,

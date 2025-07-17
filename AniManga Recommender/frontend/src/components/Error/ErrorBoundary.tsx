@@ -94,7 +94,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     if (process.env.NODE_ENV === "development") {
       console.group(`🚨 Error Boundary Triggered: ${errorId}`);
       logger.error("Error boundary caught error", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "ErrorBoundary",
         operation: "componentDidCatch",
         errorId: errorId,

@@ -40,7 +40,7 @@ export const CommentReactionsComponent: React.FC<CommentReactionsProps> = ({
       await onReact(reactionType);
     } catch (error: any) {
       logger.error("Error reacting to comment", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "CommentReactionsComponent",
         operation: "handleReaction",
         reactionType: reactionType

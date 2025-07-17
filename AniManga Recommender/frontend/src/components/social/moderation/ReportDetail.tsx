@@ -60,7 +60,7 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({ report, onResolveRep
       setActionNotes("");
     } catch (error: any) {
       logger.error("Error performing action", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "ReportDetail",
         operation: "handleConfirmAction",
         reportId: report.id,

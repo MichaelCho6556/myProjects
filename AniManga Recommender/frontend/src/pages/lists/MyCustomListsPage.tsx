@@ -133,7 +133,7 @@ export const MyCustomListsPage: React.FC = () => {
       setOpenDropdownId(null);
     } catch (error: any) {
       logger.error("Error duplicating list", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "MyCustomListsPage",
         operation: "handleDuplicateList",
         userId: user?.id,

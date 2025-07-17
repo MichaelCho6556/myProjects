@@ -168,7 +168,7 @@ export const EnhancedSearch: React.FC<EnhancedSearchProps> = ({ className = "", 
         setShowSuggestions(true);
       } catch (error) {
         logger.error("Failed to fetch suggestions", {
-          error: error?.message || "Unknown error",
+          error: error instanceof Error ? error.message : "Unknown error",
           context: "EnhancedSearch",
           operation: "fetchSuggestions",
           query: query

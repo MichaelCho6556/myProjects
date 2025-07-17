@@ -323,7 +323,7 @@ export const BatchOperationsToolbar: React.FC<BatchOperationsToolbarProps> = ({
       setActiveComponent(null);
     } catch (error: any) {
       logger.error("Batch operation failed", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "BatchOperationsToolbar",
         operation: "handleComponentSubmit",
         selectedCount: selectionStats.selectedCount,

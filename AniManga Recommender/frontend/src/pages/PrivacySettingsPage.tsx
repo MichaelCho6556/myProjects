@@ -65,7 +65,7 @@ const PrivacySettingsPage: React.FC = () => {
       }
     } catch (error: any) {
       logger.error("Failed to load privacy settings", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "PrivacySettingsPage",
         operation: "loadPrivacySettings",
         userId: profile?.id

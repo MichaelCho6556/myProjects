@@ -176,13 +176,13 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
       }
     } catch (error: any) {
       logger.error("Error fetching dashboard data", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "DashboardPage",
         operation: "fetchDashboardData",
         userId: user?.id,
         errorCode: error?.code || error?.response?.status
       });
-      setError(`Failed to load dashboard: ${error.message || "Unknown error"}`);
+      setError(`Failed to load dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setLoading(false);
     }

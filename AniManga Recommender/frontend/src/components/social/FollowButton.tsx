@@ -50,7 +50,7 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
       const errorMessage = error instanceof Error ? error.message : 'Failed to update follow status';
       setError(errorMessage);
       logger.error('Failed to toggle follow', {
-        error: error?.message || 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error" || 'Unknown error',
         context: 'FollowButton',
         operation: 'handleToggleFollow',
         isFollowing: isFollowing

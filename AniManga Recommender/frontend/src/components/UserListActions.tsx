@@ -160,7 +160,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
         operation: "updateStatus",
         userId: user?.id,
         itemUid: item.uid,
-        newStatus: statusToUpdate
+        newStatus: selectedStatus
       });
       setError(err.message || "Failed to update status");
     } finally {

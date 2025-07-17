@@ -349,7 +349,7 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
         }
       } catch (error: any) {
         logger.error("Error updating item status", {
-          error: error?.message || "Unknown error",
+          error: error instanceof Error ? error.message : "Unknown error",
           context: "UserListsPage",
           operation: "updateItemStatus",
           userId: user?.id,
@@ -407,11 +407,11 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
         }
       } catch (error: any) {
         logger.error("Error updating items in bulk", {
-          error: error?.message || "Unknown error",
+          error: error instanceof Error ? error.message : "Unknown error",
           context: "UserListsPage",
           operation: "updateItemsInBulk",
           userId: user?.id,
-          itemCount: selectedItems.length,
+          itemCount: selectedItems.size,
           newStatus: newStatus
         });
       } finally {
@@ -444,11 +444,11 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
       }
     } catch (error: any) {
       logger.error("Error removing items in bulk", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "UserListsPage",
         operation: "removeItemsInBulk",
         userId: user?.id,
-        itemCount: selectedItems.length
+        itemCount: selectedItems.size
       });
     } finally {
       setIsUpdatingBulk(false);

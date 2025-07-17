@@ -59,7 +59,7 @@ export const CommentForm: React.FC<CommentFormProps> = ({
         setSelectedMentionIndex(0);
       } catch (error) {
         logger.error("Error searching mentions", {
-          error: error?.message || "Unknown error",
+          error: error instanceof Error ? error.message : "Unknown error",
           context: "CommentForm",
           operation: "searchMentions",
           query: query
@@ -177,7 +177,7 @@ export const CommentForm: React.FC<CommentFormProps> = ({
       setMentions([]);
     } catch (error) {
       logger.error("Error creating comment", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "CommentForm",
         operation: "handleSubmit",
         parentType: parentType,

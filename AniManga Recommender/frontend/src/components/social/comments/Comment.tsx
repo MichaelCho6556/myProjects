@@ -120,7 +120,7 @@ export const Comment: React.FC<CommentItemProps> = ({
       }
     } catch (error: any) {
       logger.error("Error deleting comment", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "Comment",
         operation: "handleDelete",
         commentId: comment.id,

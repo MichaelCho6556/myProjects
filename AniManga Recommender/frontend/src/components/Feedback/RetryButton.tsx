@@ -81,11 +81,11 @@ const RetryButton: React.FC<RetryButtonProps> = ({
       }
     } catch (error) {
       logger.error("Retry operation failed", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "RetryButton",
         operation: "handleRetry",
         maxRetries: retryConfig?.maxRetries || 3,
-        retryAttempts: retryAttempts
+        retryAttempts: retryAttempt
       });
     } finally {
       setIsRetrying(false);

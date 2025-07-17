@@ -16,7 +16,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ onRefresh }) => {
     } catch (error: any) {
       // Handle errors gracefully - just log them but don't crash
       logger.error("Refresh failed", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "QuickActions",
         operation: "handleRefresh"
       });

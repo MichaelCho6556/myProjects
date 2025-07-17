@@ -255,7 +255,7 @@ export const AnalyticsExportButton: React.FC<AnalyticsExportButtonProps> = ({
       }
     } catch (error: any) {
       logger.error("Export failed", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "AnalyticsExportButton",
         operation: "handleExport",
         exportFormat: exportFormat

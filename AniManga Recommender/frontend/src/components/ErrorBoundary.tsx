@@ -170,6 +170,7 @@
  */
 
 import { Component, ErrorInfo, ReactNode } from "react";
+import { logger } from "../utils/logger";
 
 /**
  * Props interface for ErrorBoundary component
@@ -190,11 +191,15 @@ interface Props {
  * @property {boolean} hasError - Flag indicating whether an error has been caught
  * @property {Error | null} error - Captured error object with message and stack trace
  * @property {ErrorInfo | null} errorInfo - React error info with component stack details
+ * @property {string | null} errorId - Unique identifier for error tracking
+ * @property {number} retryCount - Number of retry attempts made
  */
 interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+  errorId: string | null;
+  retryCount: number;
 }
 
 class ErrorBoundary extends Component<Props, State> {
@@ -204,6 +209,8 @@ class ErrorBoundary extends Component<Props, State> {
       hasError: false,
       error: null,
       errorInfo: null,
+      errorId: null,
+      retryCount: 0,
     };
   }
 
@@ -231,6 +238,8 @@ class ErrorBoundary extends Component<Props, State> {
       hasError: true,
       error,
       errorInfo: null,
+      errorId: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      retryCount: 0,
     };
   }
 
@@ -259,10 +268,10 @@ class ErrorBoundary extends Component<Props, State> {
     // Log error details only in development mode
     if (process.env.NODE_ENV === "development") {
       logger.error("ErrorBoundary caught an error", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "ErrorBoundary",
         operation: "componentDidCatch",
-        errorId: errorId,
+        errorId: this.state.errorId,
         retryCount: this.state.retryCount,
         errorInfo: errorInfo?.componentStack || "No component stack"
       });
