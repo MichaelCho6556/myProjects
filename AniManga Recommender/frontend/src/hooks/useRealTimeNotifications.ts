@@ -75,7 +75,7 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
       }
     } catch (error: any) {
       logger.error("Failed to fetch initial notifications", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "useRealTimeNotifications",
         operation: "fetchInitialNotifications",
         userId: user?.id
@@ -164,7 +164,7 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
 
       eventSource.onerror = (error: any) => {
         logger.error("EventSource error", {
-          error: error?.message || "EventSource connection error",
+          error: error instanceof Error ? error.message : "Unknown error" || "EventSource connection error",
           context: "useRealTimeNotifications",
           operation: "eventSourceError",
           userId: user?.id
@@ -199,7 +199,7 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
       
     } catch (error: any) {
       logger.error("Failed to establish notification stream", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "useRealTimeNotifications",
         operation: "connectToNotificationStream",
         userId: user?.id
@@ -246,7 +246,7 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
       }
     } catch (error: any) {
       logger.error("Failed to mark notification as read", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "useRealTimeNotifications",
         operation: "markAsRead",
         userId: user?.id,
@@ -276,7 +276,7 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
       }
     } catch (error: any) {
       logger.error("Failed to mark all notifications as read", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "useRealTimeNotifications",
         operation: "markAllAsRead",
         userId: user?.id

@@ -82,7 +82,7 @@ export const EditListModal: React.FC<EditListModalProps> = ({ list, isOpen, onCl
       onClose();
     } catch (error: any) {
       logger.error("Failed to update list", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "EditListModal",
         operation: "handleSubmit",
         listId: list.id,

@@ -54,12 +54,12 @@ const ItemLists: React.FC<ItemListsProps> = ({
       }
     } catch (error: any) {
       logger.error("Failed to delete item", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "ItemLists",
         operation: "handleDeleteItem",
         itemUid: itemUid
       });
-      alert(`Failed to remove item: ${error.message || "Unknown error"}`);
+      alert(`Failed to remove item: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setDeletingItems((prev) => {
         const newSet = new Set(prev);

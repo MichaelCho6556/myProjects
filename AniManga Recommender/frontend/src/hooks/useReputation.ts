@@ -43,7 +43,6 @@ export function useReputation(userId: string): UseReputationResult {
         error: err?.message || "Unknown error",
         context: "useReputation",
         operation: "fetchReputation",
-        userId: userId
       });
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -65,7 +64,6 @@ export function useReputation(userId: string): UseReputationResult {
         logger.error("Failed to recalculate reputation", {
           context: "useReputation",
           operation: "recalculateReputation",
-          userId: userId
         });
         return false;
       }
@@ -74,7 +72,6 @@ export function useReputation(userId: string): UseReputationResult {
         error: err?.message || "Unknown error",
         context: "useReputation",
         operation: "recalculateReputation",
-        userId: userId
       });
       return false;
     }
@@ -127,8 +124,7 @@ export function useAppeals(filters: { status?: string; page?: number; limit?: nu
       logger.error("Error fetching appeals", {
         error: err?.message || "Unknown error",
         context: "useAppeals",
-        operation: "fetchAppeals",
-        userId: userId
+        operation: "fetchAppeals"
       });
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -154,7 +150,6 @@ export function useAppeals(filters: { status?: string; page?: number; limit?: nu
         error: err?.message || "Unknown error",
         context: "useAppeals",
         operation: "createAppeal",
-        userId: userId
       });
       setError(err instanceof Error ? err.message : 'Unknown error');
       return null;
@@ -179,7 +174,6 @@ export function useAppeals(filters: { status?: string; page?: number; limit?: nu
         error: err?.message || "Unknown error",
         context: "useAppeals",
         operation: "updateAppeal",
-        userId: userId
       });
       setError(err instanceof Error ? err.message : 'Unknown error');
       return null;
@@ -234,7 +228,6 @@ export function useNotifications(filters: { unread_only?: boolean; page?: number
         error: err?.message || "Unknown error",
         context: "useNotifications",
         operation: "fetchNotifications",
-        userId: userId
       });
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -263,9 +256,7 @@ export function useNotifications(filters: { unread_only?: boolean; page?: number
       logger.error("Error marking notification as read", {
         error: err?.message || "Unknown error",
         context: "useNotifications",
-        operation: "markAsRead",
-        userId: userId,
-        notificationId: notificationId
+        operation: "markAsRead"
       });
       return false;
     }
@@ -293,7 +284,6 @@ export function useNotifications(filters: { unread_only?: boolean; page?: number
         error: err?.message || "Unknown error",
         context: "useNotifications",
         operation: "markAllAsRead",
-        userId: userId
       });
       return false;
     }
@@ -343,7 +333,6 @@ export function useNotificationPreferences(userId: string): UseNotificationPrefe
         error: err?.message || "Unknown error",
         context: "useNotificationPreferences",
         operation: "fetchPreferences",
-        userId: userId
       });
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -370,7 +359,6 @@ export function useNotificationPreferences(userId: string): UseNotificationPrefe
         error: err?.message || "Unknown error",
         context: "useNotificationPreferences",
         operation: "updatePreferences",
-        userId: userId
       });
       setError(err instanceof Error ? err.message : 'Unknown error');
       return false;

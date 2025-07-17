@@ -179,10 +179,9 @@ export const CommentModerationTools: React.FC<CommentModerationProps> = ({
       // In a real implementation, this would call the report API with the provided data
     } catch (error: any) {
       logger.error("Error reporting comment", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "CommentModerationTools",
-        operation: "handleReport",
-        reason: selectedReason
+        operation: "handleReport"
       });
     } finally {
       setIsReporting(false);

@@ -71,7 +71,7 @@ global.IntersectionObserver = jest.fn().mockImplementation((callback: Intersecti
     disconnect: jest.fn(),
     root: options?.root || null,
     rootMargin: options?.rootMargin || "",
-    thresholds: Array.isArray(options?.threshold) ? options.threshold : [options?.threshold || 0],
+    thresholds: options ? (Array.isArray(options.threshold) ? options.threshold : [options.threshold || 0]) : [0],
     takeRecords: jest.fn(() => []),
   };
 });

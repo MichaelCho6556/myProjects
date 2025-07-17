@@ -112,11 +112,11 @@ export const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, o
       onClose();
     } catch (error) {
       logger.error("Failed to save item", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "EditItemModal",
         operation: "handleSave",
         itemId: item?.id,
-        itemUid: item?.item_uid
+        itemUid: item?.itemUid
       });
     } finally {
       setIsSaving(false);

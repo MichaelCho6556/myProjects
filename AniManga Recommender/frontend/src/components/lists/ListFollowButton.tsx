@@ -27,7 +27,7 @@ export const ListFollowButton: React.FC<ListFollowButtonProps> = ({
       await onToggleFollow();
     } catch (error) {
       logger.error("Failed to toggle list follow", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "ListFollowButton",
         operation: "handleToggleFollow",
         isFollowing: isFollowing

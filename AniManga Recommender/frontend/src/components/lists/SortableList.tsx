@@ -122,7 +122,7 @@ const SortableListInner: React.FC<SortableListProps> = ({
         await onReorder(updatedItems);
       } catch (error) {
         logger.error("Failed to reorder items", {
-          error: error?.message || "Unknown error",
+          error: error instanceof Error ? error.message : "Unknown error",
           context: "SortableList",
           operation: "handleDragEnd",
           fromIndex: oldIndex,

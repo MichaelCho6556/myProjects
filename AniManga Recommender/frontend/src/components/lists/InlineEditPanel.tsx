@@ -163,11 +163,11 @@ export const InlineEditPanel: React.FC<InlineEditPanelProps> = ({ item, onSave, 
       onCancel();
     } catch (error) {
       logger.error("Failed to save item", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "InlineEditPanel",
         operation: "handleSave",
         itemId: item?.id,
-        itemUid: item?.item_uid
+        itemUid: item?.itemUid
       });
       throw error; // Re-throw so the error handling in the UI can show feedback
     } finally {

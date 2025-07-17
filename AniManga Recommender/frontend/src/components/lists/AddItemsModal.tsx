@@ -72,7 +72,7 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
       setSearchResults(results);
     } catch (err) {
       logger.error('Search failed', {
-        error: err?.message || 'Unknown error',
+        error: err instanceof Error ? err.message : 'Unknown error',
         context: 'AddItemsModal',
         operation: 'searchItems',
         query: query,

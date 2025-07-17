@@ -86,7 +86,7 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
         };
       } catch (error) {
         logger.error("Error parsing stored personal tracking data", {
-          error: error?.message || "Unknown error",
+          error: error instanceof Error ? error.message : "Unknown error",
           context: "SortableListItem",
           operation: "parseStoredTrackingData",
           itemId: item.id
@@ -144,11 +144,11 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
           showSuccessToast("Rating Updated", `Rated ${enhancedItem.title} ${rating}/10`);
         } catch (error) {
           logger.error("Error updating rating", {
-            error: error?.message || "Unknown error",
+            error: error instanceof Error ? error.message : "Unknown error",
             context: "SortableListItem",
             operation: "updateRating",
             itemId: item.id,
-            newRating: newRating
+            newRating: rating
           });
           showErrorToast("Rating Error", "Failed to update rating");
         }
@@ -187,11 +187,11 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
           showSuccessToast("Status Updated", `Updated status to ${statusLabel}`);
         } catch (error) {
           logger.error("Error updating status", {
-            error: error?.message || "Unknown error",
+            error: error instanceof Error ? error.message : "Unknown error",
             context: "SortableListItem",
             operation: "updateStatus",
             itemId: item.id,
-            newStatus: newStatus
+            newStatus: status
           });
           showErrorToast("Status Error", "Failed to update status");
         }
@@ -239,7 +239,7 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
           showSuccessToast("Tag Added", `Added tag "${trimmedTag}"`);
         } catch (error) {
           logger.error("Error adding tag", {
-            error: error?.message || "Unknown error",
+            error: error instanceof Error ? error.message : "Unknown error",
             context: "SortableListItem",
             operation: "addTag",
             itemId: item.id,
@@ -288,7 +288,7 @@ export const SortableListItem: React.FC<SortableListItemProps> = ({
           }
         } catch (error) {
           logger.error("Error sharing item", {
-            error: error?.message || "Unknown error",
+            error: error instanceof Error ? error.message : "Unknown error",
             context: "SortableListItem",
             operation: "shareItem",
             itemId: item.id

@@ -97,7 +97,7 @@ export const useOfflineHandler = () => {
           action();
         } catch (error: any) {
           logger.error("Error executing queued offline action", {
-            error: error?.message || "Unknown error",
+            error: error instanceof Error ? error.message : "Unknown error",
             context: "useNetworkStatus",
             operation: "executeOfflineActions"
           });

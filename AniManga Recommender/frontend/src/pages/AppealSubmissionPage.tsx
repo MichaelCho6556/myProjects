@@ -100,7 +100,7 @@ export const AppealSubmissionPage: React.FC = () => {
       }
     } catch (error: any) {
       logger.error("Error submitting appeal", {
-        error: error?.message || "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error",
         context: "AppealSubmissionPage",
         operation: "handleSubmit",
         userId: user?.id,

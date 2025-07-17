@@ -5,18 +5,16 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
-import { ListPreviewCard } from "../components/lists/ListPreviewCard";
+// Removed ListPreviewCard import - using grid view only
 import { ListGridCard } from "../components/lists/ListGridCard";
-import { ListPreviewCardSkeleton } from "../components/lists/ListPreviewCardSkeleton";
+// Removed ListPreviewCardSkeleton import - using grid view only
 import { AdvancedFiltersPanel } from "../components/lists/AdvancedFiltersPanel";
-import { SearchHeroSection } from "../components/lists/SearchHeroSection";
-import { FilterChips } from "../components/lists/FilterChips";
 import { UserSearchComponent } from "../components/social/UserSearchComponent";
 import { QuickPreviewModal } from "../components/lists/QuickPreviewModal";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import { CustomList } from "../types/social";
 import useDocumentTitle from "../hooks/useDocumentTitle";
-import { SearchIcon, GridIcon, ListIcon, LoadingSpinner } from "../components/common/Icons";
+import { SearchIcon, LoadingSpinner } from "../components/common/Icons";
 
 type SortOption = "recent" | "popular" | "followers" | "items";
 
@@ -186,7 +184,7 @@ export const ListDiscoveryPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [showUserSearch, setShowUserSearch] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  // Removed viewMode state - only using grid view
   const [selectedList, setSelectedList] = useState<CustomList | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -433,302 +431,335 @@ export const ListDiscoveryPage: React.FC = () => {
   // Generate active filter chips (memoized to prevent unnecessary recalculation)
   const activeFilterChips = useMemo(() => createFilterChips(filters), [filters]);
 
-  // Generate suggested filter chips (memoized to prevent unnecessary filtering)
-  const suggestedFilterChips = useMemo(() => [
-    {
-      id: 'sort-recent',
-      label: 'Recently Updated',
-      value: 'recent',
-      type: 'sort' as const,
-      color: 'blue' as const
-    },
-    {
-      id: 'content-anime',
-      label: 'Anime Only',
-      value: 'anime',
-      type: 'content_type' as const,
-      color: 'purple' as const
-    },
-    {
-      id: 'content-manga',
-      label: 'Manga Only',
-      value: 'manga',
-      type: 'content_type' as const,
-      color: 'purple' as const
-    },
-    {
-      id: 'popularity-popular',
-      label: 'Popular Lists',
-      value: 'popular',
-      type: 'popularity' as const,
-      color: 'pink' as const
-    }
-  ].filter(chip => !activeFilterChips.some(active => active.id === chip.id)), [activeFilterChips]);
-
   // Note: This page is now publicly accessible, but some features require authentication
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Hero Search Section */}
-      <SearchHeroSection
-        searchTerm={filters.search}
-        onSearchChange={(value) => handleFilterChange("search", value)}
-        placeholder="Search for amazing community lists..."
-      />
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Controls Bar */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 mb-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            {/* Left Side - View Toggle and User Search */}
-            <div className="flex items-center gap-3">
-              {/* View Mode Toggle */}
-              <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded-md transition-colors ${
-                    viewMode === 'grid'
-                      ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-                  }`}
-                  aria-label="Grid view"
-                >
-                  <GridIcon className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`p-2 rounded-md transition-colors ${
-                    viewMode === 'list'
-                      ? 'bg-white dark:bg-gray-600 text-blue-600 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-                  }`}
-                  aria-label="List view"
-                >
-                  <ListIcon className="w-5 h-5" />
-                </button>
+      {/* Compact Header Bar */}
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Left: Title and Stats */}
+            <div className="flex items-center gap-6">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Discover Lists</h1>
+              <div className="hidden lg:flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-gray-900 dark:text-white">{lists.length > 0 ? '2,847' : '0'}</span>
+                  <span className="text-gray-500 dark:text-gray-400">lists</span>
+                </div>
+                <div className="w-px h-4 bg-gray-300 dark:bg-gray-600"></div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold text-gray-900 dark:text-white">156</span>
+                  <span className="text-gray-500 dark:text-gray-400">curators</span>
+                </div>
               </div>
-
-              {/* User Search Toggle */}
+            </div>
+            
+            {/* Center: Search */}
+            <div className="flex-1 max-w-xl mx-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={filters.search}
+                  onChange={(e) => handleFilterChange('search', e.target.value)}
+                  placeholder="Search lists..."
+                  className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <SearchIcon className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+              </div>
+            </div>
+            
+            {/* Right: View Controls */}
+            <div className="flex items-center gap-3">
+              {/* View mode toggle removed - using grid view only */}
               <button
                 onClick={() => setShowUserSearch(!showUserSearch)}
-                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300
-                         rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
-                {showUserSearch ? "List Search" : "User Search"}
-              </button>
-            </div>
-
-            {/* Right Side - Advanced Filters */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className={`px-4 py-2 rounded-lg transition-colors ${
-                  showAdvancedFilters 
-                    ? "bg-blue-500 text-white" 
-                    : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                }`}
-              >
-                Advanced Filters
+                {showUserSearch ? "Lists" : "Users"}
               </button>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Filter Chips */}
-        {(activeFilterChips.length > 0 || suggestedFilterChips.length > 0) && (
-          <div className="mb-6">
-            <FilterChips
-              activeFilters={activeFilterChips}
-              onFilterRemove={handleFilterChipRemove}
-              suggestedFilters={suggestedFilterChips}
-              showSuggestions={activeFilterChips.length < 3}
-            />
-          </div>
-        )}
-
-        {/* Advanced Filters Panel */}
-        {showAdvancedFilters && (
-          <AdvancedFiltersPanel 
-            filters={filters}
-            onFilterChange={(key: string, value: any) => {
-              handleFilterChange(key as keyof DiscoveryFilters, value);
-            }}
-            onClearFilters={() => {
-              setFilters({
-                search: "",
-                sortBy: "popular",
-                tags: [],
-                contentType: "all",
-                privacy: "all",
-                itemCount: "all",
-                followerCount: "all",
-              });
-            }}
-            isCollapsed={false}
-            onToggleCollapse={() => setShowAdvancedFilters(!showAdvancedFilters)}
-          />
-        )}
-
-        {/* Loading State */}
-        {isLoading && lists.length === 0 && (
-          <div className="mb-8">
-            {viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {[...Array(8)].map((_, index) => (
-                  <div key={index} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                    {/* Skeleton for grid card */}
-                    <div className="h-28 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 animate-pulse relative">
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-8 h-8 bg-gray-300 dark:bg-gray-600 rounded-lg animate-pulse"></div>
-                      </div>
-                    </div>
-                    <div className="p-4 space-y-3">
-                      <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
-                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-full"></div>
-                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-2/3"></div>
-                      <div className="flex gap-2">
-                        {[...Array(2)].map((_, i) => (
-                          <div key={i} className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-12"></div>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-between pt-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div>
-                          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-16"></div>
-                        </div>
-                        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse w-16"></div>
-                      </div>
-                    </div>
+      {/* Main Content Area */}
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        {/* Filter Bar */}
+        <div className="flex flex-col lg:flex-row gap-4 mb-6">
+          {/* Left Sidebar - Categories */}
+          <div className="lg:w-64 flex-shrink-0">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Quick Filters</h3>
+              <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    handleFilterChange('sortBy', 'popular');
+                    handleFilterChange('contentType', 'all');
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                    filters.sortBy === 'popular' && filters.contentType === 'all'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span>⭐ Popular</span>
+                    <span className="text-xs text-gray-500">2.8k</span>
                   </div>
-                ))}
+                </button>
+                <button
+                  onClick={() => handleFilterChange('sortBy', 'recent')}
+                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                    filters.sortBy === 'recent'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span>🕒 Recent</span>
+                    <span className="text-xs text-gray-500">156</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleFilterChange('contentType', 'anime')}
+                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                    filters.contentType === 'anime'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span>📺 Anime</span>
+                    <span className="text-xs text-gray-500">1.5k</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleFilterChange('contentType', 'manga')}
+                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                    filters.contentType === 'manga'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span>📚 Manga</span>
+                    <span className="text-xs text-gray-500">892</span>
+                  </div>
+                </button>
+                <div className="border-t border-gray-200 dark:border-gray-700 my-3"></div>
+                <button
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <span>🎛️ Advanced</span>
+                    <svg className={`w-4 h-4 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {[...Array(6)].map((_, index) => (
-                  <ListPreviewCardSkeleton key={index} />
-                ))}
+              
+              {/* Active Filters Summary */}
+              {activeFilterChips.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Active Filters</span>
+                    <button
+                      onClick={() => {
+                        setFilters({
+                          search: "",
+                          sortBy: "popular",
+                          tags: [],
+                          contentType: "all",
+                          privacy: "all",
+                          itemCount: "all",
+                          followerCount: "all",
+                        });
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    {activeFilterChips.map((filter) => (
+                      <div
+                        key={filter.id}
+                        className="text-xs text-gray-600 dark:text-gray-400 flex items-center justify-between"
+                      >
+                        <span className="truncate">{filter.label}</span>
+                        <button
+                          onClick={() => handleFilterChipRemove(filter.id)}
+                          className="ml-2 text-gray-400 hover:text-gray-600"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Main Content Area */}
+          <div className="flex-1">
+            {/* Advanced Filters Panel */}
+            {showAdvancedFilters && (
+              <AdvancedFiltersPanel 
+                filters={filters}
+                onFilterChange={(key: string, value: any) => {
+                  handleFilterChange(key as keyof DiscoveryFilters, value);
+                }}
+                onClearFilters={() => {
+                  setFilters({
+                    search: "",
+                    sortBy: "popular",
+                    tags: [],
+                    contentType: "all",
+                    privacy: "all",
+                    itemCount: "all",
+                    followerCount: "all",
+                  });
+                }}
+                isCollapsed={false}
+                onToggleCollapse={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              />
+            )}
+
+            {/* Loading State */}
+            {isLoading && lists.length === 0 && (
+              <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                    {[...Array(12)].map((_, index) => (
+                      <div key={index} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="h-24 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 animate-pulse"></div>
+                        <div className="p-4 space-y-3">
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
+                          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-full"></div>
+                          <div className="flex items-center justify-between pt-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse"></div>
+                              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-16"></div>
+                            </div>
+                            <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse w-20"></div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
               </div>
             )}
-          </div>
-        )}
 
-        {/* Error State */}
-        {error && !isLoading && (
-          <div className="mb-8">
-            <ErrorFallback
-              error={new Error(error)}
-              onRetry={handleRetry}
-              showDetails={false}
-            />
-          </div>
-        )}
+            {/* Error State */}
+            {error && !isLoading && (
+              <div className="mb-8">
+                <ErrorFallback
+                  error={new Error(error)}
+                  onRetry={handleRetry}
+                  showDetails={false}
+                />
+              </div>
+            )}
 
-        {/* Content */}
-        {showUserSearch ? (
-          <UserSearchComponent />
-        ) : (
-          <>
-            {!isLoading && !error && (
+            {/* Content */}
+            {showUserSearch ? (
+              <UserSearchComponent />
+            ) : (
               <>
-                {lists.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="mx-auto w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-                      <SearchIcon className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      No Lists Found
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
-                      Try adjusting your search terms or filters to discover more lists.
-                    </p>
-                  </div>
-                ) : (
+                {!isLoading && !error && (
                   <>
-                    {/* Results Count and Active Filters Summary */}
-                    <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {lists.length} list{lists.length !== 1 ? "s" : ""} found
-                        {filters.search && ` for "${filters.search}"`}
-                      </p>
-                      
-                      {/* Active Filter Summary */}
-                      {(filters.tags.length > 0 || filters.contentType !== "all" || 
-                        filters.privacy !== "all" || filters.itemCount !== "all" || 
-                        filters.followerCount !== "all") && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-500 dark:text-gray-400">
-                            Active filters:
-                          </span>
-                          <div className="flex flex-wrap gap-2">
-                            {filters.tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 
-                                         text-blue-800 dark:text-blue-200 rounded-full text-xs"
-                              >
-                                #{tag}
-                                <button
-                                  onClick={() => handleTagRemove(tag)}
-                                  className="ml-1 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
-                                  aria-label={`Remove ${tag} tag`}
-                                >
-                                  ×
-                                </button>
-                              </span>
-                            ))}
-                          </div>
+                    {lists.length === 0 ? (
+                      <div className="text-center py-16">
+                        <div className="mx-auto w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-2xl flex items-center justify-center mb-6">
+                          <SearchIcon className="w-10 h-10 text-gray-400" />
                         </div>
-                      )}
-                    </div>
-
-                    {/* Lists Display */}
-                    {viewMode === 'grid' ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {lists.map((list) => (
-                          <ListGridCard
-                            key={list.id}
-                            list={list}
-                            onTagClick={handleTagAdd}
-                            onToggleFollow={() => handleFollowList(list.id)}
-                            onListClick={() => handleListClick(list)}
-                            isAuthenticated={!!user}
-                          />
-                        ))}
+                        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">
+                          No Lists Found
+                        </h3>
+                        <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
+                          Try adjusting your search terms or filters to discover more lists.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setFilters({
+                              search: "",
+                              sortBy: "popular",
+                              tags: [],
+                              contentType: "all",
+                              privacy: "all",
+                              itemCount: "all",
+                              followerCount: "all",
+                            });
+                          }}
+                          className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                        >
+                          Reset Filters
+                        </button>
                       </div>
                     ) : (
-                      <div className="space-y-4">
-                        {lists.map((list) => (
-                          <ListPreviewCard
-                            key={list.id}
-                            list={list}
-                            onTagClick={handleTagAdd}
-                            onToggleFollow={() => handleFollowList(list.id)}
-                            onListClick={() => handleListClick(list)}
-                            isAuthenticated={!!user}
-                          />
-                        ))}
-                      </div>
-                    )}
+                      <>
+                        {/* Results Header */}
+                        <div className="flex items-center justify-between mb-4">
+                          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                            {lists.length} {lists.length === 1 ? 'List' : 'Lists'}
+                            {filters.search && (
+                              <span className="text-gray-500 dark:text-gray-400 font-normal ml-1">
+                                matching "{filters.search}"
+                              </span>
+                            )}
+                          </h2>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={filters.sortBy}
+                              onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                              className="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="popular">Most Popular</option>
+                              <option value="recent">Recently Updated</option>
+                              <option value="followers">Most Followed</option>
+                              <option value="items">Most Items</option>
+                            </select>
+                          </div>
+                        </div>
 
-                    {/* Load More Sentinel */}
-                    {hasMore && (
-                      <div ref={sentinelRef} className="mt-8 py-4">
-                        {isLoadingMore && (
-                          <div className="text-center">
-                            <div className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                              <LoadingSpinner className="animate-spin h-5 w-5" />
-                              <span>Loading more lists...</span>
-                            </div>
+                        {/* Lists Display */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                            {lists.map((list) => (
+                              <ListGridCard
+                                key={list.id}
+                                list={list}
+                                onTagClick={handleTagAdd}
+                                onToggleFollow={() => handleFollowList(list.id)}
+                                onListClick={() => handleListClick(list)}
+                                isAuthenticated={!!user}
+                              />
+                            ))}
+                          </div>
+
+                        {/* Load More Sentinel */}
+                        {hasMore && (
+                          <div ref={sentinelRef} className="mt-8 py-4">
+                            {isLoadingMore && (
+                              <div className="text-center">
+                                <div className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                                  <LoadingSpinner className="animate-spin h-5 w-5" />
+                                  <span>Loading more lists...</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
-                      </div>
+                      </>
                     )}
                   </>
                 )}
               </>
             )}
-          </>
-        )}
+          </div>
+        </div>
       </div>
 
       {/* Quick Preview Modal */}

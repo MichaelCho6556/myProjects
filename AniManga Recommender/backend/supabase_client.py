@@ -3995,10 +3995,12 @@ class SupabaseAuthClient:
                         if list_id not in list_content_types:
                             list_content_types[list_id] = {'anime': 0, 'manga': 0}
                         
-                        if media_type.lower() == 'anime':
-                            list_content_types[list_id]['anime'] += 1
-                        elif media_type.lower() == 'manga':
-                            list_content_types[list_id]['manga'] += 1
+                        # Check if media_type is not None before calling .lower()
+                        if media_type:
+                            if media_type.lower() == 'anime':
+                                list_content_types[list_id]['anime'] += 1
+                            elif media_type.lower() == 'manga':
+                                list_content_types[list_id]['manga'] += 1
                 
                 # Get preview images - top 5 items per list ordered by position
                 preview_images_response = requests.get(
