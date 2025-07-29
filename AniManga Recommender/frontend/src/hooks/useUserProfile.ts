@@ -46,7 +46,6 @@ export function useUserProfile(username: string) {
           headers['Authorization'] = `Bearer ${session.access_token}`;
         }
       } catch (authError) {
-        console.log('No auth session found, continuing with public request');
       }
 
       // Fetch profile data using public API (but with auth if available for auto-creation)
@@ -58,7 +57,6 @@ export function useUserProfile(username: string) {
       }
       const rawProfile = await profileResponse.json();
 
-      console.log('Raw profile response:', rawProfile);
 
       // Transform backend response to frontend format
       const transformedProfile: UserProfile = {
@@ -87,7 +85,6 @@ export function useUserProfile(username: string) {
         
         if (statsResponse.ok) {
           const response = await statsResponse.json();
-          console.log('Raw stats response:', response);
           
           // Check if response has new format with cache metadata
           let rawStats;
@@ -106,8 +103,6 @@ export function useUserProfile(username: string) {
             setStatsUpdating(false);
           }
           
-          console.log('Favorite genres from API:', rawStats.favorite_genres);
-          console.log('Completion rate from API:', rawStats.completion_rate);
 
           if (rawStats && typeof rawStats === 'object') {
             // Ensure favorite_genres is always an array
@@ -138,7 +133,6 @@ export function useUserProfile(username: string) {
               ratingDistribution: rawStats.rating_distribution || undefined,
             };
             
-            console.log('Transformed stats favorite genres:', transformedStats.favoriteGenres);
             setStats(transformedStats);
           } else {
             // Set default empty stats if no data returned
@@ -158,7 +152,6 @@ export function useUserProfile(username: string) {
           }
         } else if (statsResponse.status === 404) {
           // User has no stats yet or stats are private - set default empty stats
-          console.log('No stats available for user (404), setting defaults');
           setStats({
             totalAnime: 0,
             completedAnime: 0,
@@ -176,7 +169,6 @@ export function useUserProfile(username: string) {
           throw new Error(`HTTP ${statsResponse.status}`);
         }
       } catch (statsError) {
-        console.log('Stats fetch error:', statsError);
         // Set default empty stats on error
         setStats({
           totalAnime: 0,
@@ -201,7 +193,6 @@ export function useUserProfile(username: string) {
         
         if (listsResponse.ok) {
           const rawLists = await listsResponse.json();
-          console.log('Raw lists response:', rawLists);
           
           if (rawLists && rawLists.lists && Array.isArray(rawLists.lists)) {
             // Validate each list object has required properties
@@ -210,21 +201,17 @@ export function useUserProfile(username: string) {
               typeof list.id !== 'undefined' && 
               typeof list.title === 'string'
             );
-            console.log('Valid public lists found:', validLists.length);
             setPublicLists(validLists);
           } else {
-            console.log('No valid lists structure in response:', rawLists);
             setPublicLists([]);
           }
         } else if (listsResponse.status === 404) {
           // User has no public lists - set empty array
-          console.log('No public lists available for user (404), setting empty array');
           setPublicLists([]);
         } else {
           throw new Error(`Lists API returned HTTP ${listsResponse.status}`);
         }
       } catch (listsError) {
-        console.log('Lists fetch error:', listsError);
         const errorMessage = listsError instanceof Error ? listsError.message : 'Failed to fetch lists';
         setListsError(new Error(errorMessage));
         setPublicLists([]);
@@ -234,30 +221,23 @@ export function useUserProfile(username: string) {
 
       // Fetch user activities if available using public API (with auth if available)
       try {
-        console.log(`🔍 Frontend: Fetching activities for username: ${username}`);
         const activitiesUrl = `${API_BASE_URL}/api/users/${username}/activity?limit=20`;
-        console.log(`📡 Frontend: Activities URL: ${activitiesUrl}`);
         
         const activitiesResponse = await fetch(activitiesUrl, {
           headers
         });
         
-        console.log(`📊 Frontend: Activities response status: ${activitiesResponse.status}`);
         
         if (activitiesResponse.ok) {
           const rawActivities = await activitiesResponse.json();
-          console.log('✅ Frontend: Raw activities response:', rawActivities);
           
           if (rawActivities && rawActivities.activities && Array.isArray(rawActivities.activities)) {
-            console.log(`✅ Frontend: Setting ${rawActivities.activities.length} activities`);
             setActivities(rawActivities.activities);
           } else {
-            console.log('⚠️ Frontend: No valid activities structure in response:', rawActivities);
             setActivities([]);
           }
         } else if (activitiesResponse.status === 404) {
           // User has no activities or they're private - set empty array
-          console.log('⚠️ Frontend: No activities available for user (404), setting empty array');
           setActivities([]);
         } else {
           const errorText = await activitiesResponse.text();
@@ -284,7 +264,6 @@ export function useUserProfile(username: string) {
         setActivitiesLoading(false);
       }
     } catch (err: any) {
-      console.log('Profile fetch error:', err);
       if (err.response?.status === 404) {
         setError(new Error("User not found"));
       } else {
@@ -312,11 +291,17 @@ export function useUserProfile(username: string) {
               }
             : null
         );
+        
+        // Refetch profile to ensure server state is in sync
+        // This ensures the follow state persists on page refresh
+        setTimeout(() => {
+          fetchProfile();
+        }, 500); // Small delay to allow server to update
       }
     } catch (err) {
       setError(err instanceof Error ? err : new Error("Failed to follow user"));
     }
-  }, [profile, username, api]);
+  }, [profile, username, api, fetchProfile]);
 
   const updatePrivacySettings = useCallback(
     async (settings: PrivacySettings) => {
@@ -350,7 +335,6 @@ export function useUserProfile(username: string) {
           headers['Authorization'] = `Bearer ${session.access_token}`;
         }
       } catch (authError) {
-        console.log('No auth session found');
       }
 
       const url = forceRefresh 
@@ -528,7 +512,6 @@ export function useCurrentUserProfile() {
           });
         }
       } catch (privacyError) {
-        console.warn("Privacy settings API error:", privacyError);
         // Set defaults but don't fail the whole component
         setPrivacySettings({
           profileVisibility: "Public",
@@ -622,8 +605,8 @@ export function useFollowers(username: string) {
         api.get(`/api/users/${username}/following`),
       ]);
 
-      setFollowers(followersResponse.data);
-      setFollowing(followingResponse.data);
+      setFollowers(followersResponse.data?.followers || followersResponse.data || []);
+      setFollowing(followingResponse.data?.following || followingResponse.data || []);
     } catch (err) {
       setError(err instanceof Error ? err : new Error("Failed to fetch follow data"));
     } finally {

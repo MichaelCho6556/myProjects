@@ -159,16 +159,13 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
         return;
       }
 
-      console.log("🚀 Making dashboard request...");
 
       // ✅ FIXED: Use the dedicated getDashboardData method OR makeAuthenticatedRequest correctly
       const response = await makeAuthenticatedRequest("/api/auth/dashboard");
 
-      console.log("📊 Dashboard API Response:", response);
 
       // ✅ FIXED: The response IS the dashboard data (not wrapped in .data)
       if (response && typeof response === "object") {
-        console.log("✅ Setting dashboard data:", response);
         setDashboardData(response);
       } else {
         console.warn("⚠️ Invalid dashboard data format:", response);
@@ -205,7 +202,6 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
    * ```
    */
   const refreshDashboard = async (): Promise<void> => {
-    console.log("🔄 Refreshing dashboard data...");
     await fetchDashboardData();
   };
 
@@ -271,7 +267,6 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
      */
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "animanga_list_updated") {
-        console.log("📱 Detected list update, refreshing dashboard...");
         refreshDashboard();
       }
     };

@@ -24,9 +24,8 @@ export const UserSearchComponent: React.FC = () => {
     setSearchQuery(e.target.value);
   };
 
-  const handleFollowUser = useCallback(async (username: string) => {
+  const handleFollowUser = useCallback(async (_username: string) => {
     // This would typically call an API to follow/unfollow the user
-    console.log(`Toggle follow for user: ${username}`);
   }, []);
 
   return (

@@ -1091,7 +1091,6 @@ export const MyCustomListsPage: React.FC = () => {
                             // Prevent double-click processing
                             const now = Date.now();
                             if (now - lastClickTimeRef.current < 200) {
-                              console.log("Ignoring rapid click");
                               return;
                             }
                             lastClickTimeRef.current = now;

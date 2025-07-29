@@ -402,7 +402,6 @@ const ItemDetailPage: React.FC = () => {
    * @since 1.0.0
    */
   const handleStatusUpdate = () => {
-    console.log("Status updated successfully!");
   };
 
   if (loading) {

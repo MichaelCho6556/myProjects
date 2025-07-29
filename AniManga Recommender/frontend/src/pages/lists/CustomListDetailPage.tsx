@@ -28,10 +28,8 @@ const makeFlexibleApiCall = async (
 ): Promise<any> => {
   if (isAuthenticated) {
     try {
-      console.log('🔒 Trying authenticated API call');
       return await authenticatedApiCall();
     } catch (error: any) {
-      console.log('❌ Authenticated call failed:', error.response?.status, error.message);
       // If authenticated call fails with 403/401 or contains "Forbidden", try public endpoint as fallback
       const shouldFallback = error.response?.status === 403 || 
                            error.response?.status === 401 || 
@@ -39,17 +37,14 @@ const makeFlexibleApiCall = async (
                            error.message?.includes('403');
       
       if (shouldFallback) {
-        console.log('🌐 Falling back to public endpoint:', publicUrl);
         const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
         const fullUrl = publicUrl.startsWith('http') ? publicUrl : `${API_BASE_URL}${publicUrl}`;
-        console.log('📡 Making public API call to:', fullUrl);
         return await axios.get(fullUrl);
       }
       throw error;
     }
   } else {
     // For anonymous users, use public endpoint directly
-    console.log('🌐 Making public API call for anonymous user:', publicUrl);
     const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
     const fullUrl = publicUrl.startsWith('http') ? publicUrl : `${API_BASE_URL}${publicUrl}`;
     return await axios.get(fullUrl);

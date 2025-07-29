@@ -112,7 +112,6 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
 
     // Prevent duplicate requests
     if (requestInProgress.current) {
-      console.log("🚫 Request already in progress, skipping...");
       return;
     }
 
@@ -127,12 +126,10 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
     try {
       setListData((prev) => ({ ...prev, loading: true, error: null }));
 
-      console.log(`🔍 Fetching items for status: ${currentStatus}`);
 
       // Use the enhanced API endpoint that includes item details
       const response = await makeAuthenticatedRequest(`/api/auth/user-items?status=${currentStatus}`);
 
-      console.log(`📊 Raw API response:`, response);
 
       // ✅ FIXED: Better data validation and structure checking
       let items: UserItem[] = [];
@@ -682,7 +679,6 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
               {filteredItems.map((userItem) => {
                 // ✅ FIXED: Enhanced validation before rendering
                 if (!userItem || !userItem.item_uid || !userItem.item) {
-                  console.warn("⚠️ Skipping invalid item:", userItem);
                   return null;
                 }
 

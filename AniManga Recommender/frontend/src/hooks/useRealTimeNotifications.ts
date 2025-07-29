@@ -97,7 +97,6 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
       );
 
       eventSource.onopen = () => {
-        console.log('Real-time notification connection established');
         setIsConnected(true);
         setError(null);
         reconnectAttempts.current = 0;
@@ -109,7 +108,6 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
           
           switch (data.type) {
             case 'connected':
-              console.log('Notification stream connected at:', data.timestamp);
               break;
               
             case 'heartbeat':
@@ -178,7 +176,6 @@ export const useRealTimeNotifications = (): UseRealTimeNotificationsReturn => {
         // Implement exponential backoff for reconnection
         if (reconnectAttempts.current < maxReconnectAttempts) {
           const delay = calculateReconnectDelay(reconnectAttempts.current);
-          console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts.current + 1})`);
           
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectAttempts.current++;

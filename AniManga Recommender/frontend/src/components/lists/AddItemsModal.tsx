@@ -51,7 +51,6 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
 
     try {
       const response = await get(`/api/items?q=${encodeURIComponent(query)}&limit=20`);
-      console.log('Search API response:', response);
 
       // Handle different response structures
       let responseData = response.data || response;

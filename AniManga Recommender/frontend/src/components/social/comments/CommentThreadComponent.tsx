@@ -62,10 +62,9 @@ export const CommentThreadComponent: React.FC<CommentThreadProps> = ({
   };
 
   // Handle comment editing
-  const handleEditComment = async (commentId: number) => {
+  const handleEditComment = async (_commentId: number) => {
     // This would typically open an edit modal or inline editor
     // For now, we'll just call the API
-    console.log("Edit comment:", commentId);
   };
 
   // Handle comment deletion
@@ -93,9 +92,8 @@ export const CommentThreadComponent: React.FC<CommentThreadProps> = ({
   };
 
   // Handle reply to comment
-  const handleReplyToComment = (commentId: number) => {
+  const handleReplyToComment = (_commentId: number) => {
     // This would scroll to the comment and open its reply form
-    console.log("Reply to comment:", commentId);
   };
 
   // Load more comments (pagination)

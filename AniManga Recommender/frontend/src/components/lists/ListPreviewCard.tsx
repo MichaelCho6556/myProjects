@@ -1,7 +1,7 @@
 // ABOUTME: Preview card component for displaying list information in discovery and search results
 // ABOUTME: Shows list details with follow button, tags, and preview items in compact format
 
-import React, { useState, memo, useMemo, useCallback } from 'react';
+import React, { useState, memo, useMemo, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { CustomList } from '../../types/social';
 import { formatRelativeTime, generateAvatarColor } from '../../utils/helpers';
@@ -27,6 +27,12 @@ export const ListPreviewCard: React.FC<ListPreviewCardProps> = memo(({
   const [isFollowing, setIsFollowing] = useState(list.isFollowing || false);
   const [isLoading, setIsLoading] = useState(false);
   const [followersCount, setFollowersCount] = useState(list.followersCount || 0);
+
+  // Sync local state with prop changes (e.g., when user is followed from profile page)
+  useEffect(() => {
+    setIsFollowing(list.isFollowing || false);
+    setFollowersCount(list.followersCount || 0);
+  }, [list.isFollowing, list.followersCount]);
 
   // Check if current user is the owner of the list
   const isOwner = user?.id === list.userId;

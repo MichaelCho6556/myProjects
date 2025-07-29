@@ -2087,3 +2087,307 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   }
 }
+
+/* Followers/Following Pages Styles */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.breadcrumb-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: color 0.2s ease;
+}
+
+.breadcrumb-link:hover {
+  color: var(--accent-color);
+}
+
+.breadcrumb-separator {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.count-badge {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  margin-left: 0.5rem;
+}
+
+/* Search Section */
+.search-section {
+  margin-bottom: 2rem;
+}
+
+.search-input-container {
+  position: relative;
+  max-width: 400px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  z-index: 1;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem 1rem 0.75rem 3rem;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Main Content */
+.followers-main-content {
+  width: 100%;
+}
+
+/* Followers Grid */
+.followers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.follower-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+.follower-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.follower-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.follower-avatar-link {
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.follower-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border-color);
+}
+
+.follower-avatar-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: bold;
+  border: 2px solid var(--border-color);
+}
+
+.follower-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.follower-name-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.follower-name-link:hover .follower-name {
+  color: var(--accent-color);
+}
+
+.follower-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.25rem 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+
+.follower-username {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.follower-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.mutual-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--success-color, #22c55e);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.mutual-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.follow-button {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.follow-button.following {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.follow-button.following:hover {
+  background: #fca5a5;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.follow-button.not-following {
+  background: var(--accent-color);
+  color: white;
+}
+
+.follow-button.not-following:hover {
+  background: var(--accent-color-dark, #2563eb);
+}
+
+.follower-meta {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.follow-date {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* Load More Section */
+.load-more-section {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.load-more-button {
+  padding: 0.75rem 2rem;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.load-more-button:hover:not(:disabled) {
+  background: var(--accent-color-dark, #2563eb);
+}
+
+.load-more-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .followers-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .follower-card {
+    padding: 1rem;
+  }
+  
+  .search-input-container {
+    max-width: 100%;
+  }
+  
+  .follower-header {
+    gap: 0.75rem;
+  }
+  
+  .follower-actions {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .profile-header-content {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .breadcrumb {
+    font-size: 0.85rem;
+  }
+  
+  .follower-card {
+    padding: 0.75rem;
+  }
+  
+  .follower-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  
+  .follower-info {
+    width: 100%;
+  }
+}
