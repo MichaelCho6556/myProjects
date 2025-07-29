@@ -6996,6 +6996,10 @@ def discover_lists():
         - sort_by (str, optional): Sort field ('updated_at', 'created_at', 'title')
         - page (int, optional): Page number for pagination (default: 1)
         - limit (int, optional): Items per page (default: 20, max: 50)
+        - contentType (str, optional): Filter by content type ('anime', 'manga', 'mixed', 'all')
+        - privacy (str, optional): Filter by privacy level ('public', 'friends_only', 'all')
+        - itemCount (str, optional): Filter by item count ('small', 'medium', 'large', 'all')
+        - followerCount (str, optional): Filter by follower count ('popular', 'trending', 'viral', 'all')
         
     Returns:
         JSON Response containing:
@@ -7011,7 +7015,7 @@ def discover_lists():
         500: Server Error - Database error
         
     Example Request:
-        GET /api/lists/discover?search=action&tags=Action,Must Watch&page=1&limit=10
+        GET /api/lists/discover?search=action&tags=Action,Must Watch&contentType=anime&page=1&limit=10
     """
     try:
         # Parse query parameters
@@ -7019,6 +7023,12 @@ def discover_lists():
         tags_param = request.args.get('tags')
         tags = tags_param.split(',') if tags_param else None
         sort_by = request.args.get('sort_by', 'updated_at')
+        
+        # Additional filter parameters
+        content_type = request.args.get('contentType')
+        privacy = request.args.get('privacy')
+        item_count = request.args.get('itemCount')
+        follower_count = request.args.get('followerCount')
         
         try:
             page = int(request.args.get('page', 1))
@@ -7054,7 +7064,18 @@ def discover_lists():
             except Exception as e:
                 pass  # Ignore auth errors for public endpoint
         
-        result = auth_client.discover_lists(search=search, tags=tags, sort_by=sort_by, page=page, limit=limit, user_id=user_id)
+        result = auth_client.discover_lists(
+            search=search, 
+            tags=tags, 
+            sort_by=sort_by, 
+            page=page, 
+            limit=limit, 
+            user_id=user_id,
+            content_type=content_type,
+            privacy=privacy,
+            item_count=item_count,
+            follower_count=follower_count
+        )
         
         return jsonify(result)
         

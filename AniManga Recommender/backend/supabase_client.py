@@ -4059,7 +4059,7 @@ class SupabaseAuthClient:
             
             # Add search filter
             if search:
-                params['or'] = f'title.ilike.%{search}%,description.ilike.%{search}%'
+                params['or'] = f'(title.ilike.%{search}%,description.ilike.%{search}%)'
             
             response = requests.get(
                 f"{self.base_url}/rest/v1/custom_lists",
@@ -4081,7 +4081,7 @@ class SupabaseAuthClient:
                 elif privacy == 'friends_only':
                     count_params['privacy'] = 'eq.friends_only'
             if search:
-                count_params['or'] = f'title.ilike.%{search}%,description.ilike.%{search}%'
+                count_params['or'] = f'(title.ilike.%{search}%,description.ilike.%{search}%)'
                 
             count_response = requests.get(
                 f"{self.base_url}/rest/v1/custom_lists",
