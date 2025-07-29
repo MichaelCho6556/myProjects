@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
 import { sanitizeSearchInput } from "../utils/security";
 import { logger } from "../utils/logger";
+import { SearchIcon } from "./common/Icons";
 import "./EnhancedSearch.css";
 
 interface SearchSuggestion {
@@ -35,13 +36,13 @@ export const EnhancedSearch: React.FC<EnhancedSearchProps> = ({ className = "", 
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize search value from URL
+  // Initialize search value from URL only on mount
   useEffect(() => {
     const queryParam = searchParams.get("q");
     if (queryParam) {
       setSearchValue(queryParam);
     }
-  }, [searchParams]);
+  }, []); // Empty dependency array - only run on mount
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -294,7 +295,7 @@ export const EnhancedSearch: React.FC<EnhancedSearchProps> = ({ className = "", 
             {isLoading ? (
               <div className="search-spinner" aria-hidden="true" />
             ) : (
-              <span className="search-icon">🔍</span>
+              <SearchIcon className="search-icon" size={16} />
             )}
           </button>
         </div>

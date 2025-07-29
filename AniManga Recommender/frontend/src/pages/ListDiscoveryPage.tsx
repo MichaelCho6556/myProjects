@@ -361,10 +361,10 @@ export const ListDiscoveryPage: React.FC = () => {
     [user, page, filters, get]
   );
 
-  // Initial load
+  // Initial load - only on mount
   useEffect(() => {
     fetchLists(true);
-  }, [fetchLists]);
+  }, []); // Empty dependency array - only run on mount
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
@@ -532,19 +532,26 @@ export const ListDiscoveryPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Compact Header Bar */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
+      <div 
+        className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700"
+        style={{ 
+          position: 'sticky', 
+          top: '76px', 
+          zIndex: 30 
+        }}
+      >
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Left: Title and Stats */}
-            <div className="flex items-center gap-6">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Discover Lists</h1>
+            <div className="flex items-center gap-6" style={{ flexShrink: 0 }}>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white" style={{ whiteSpace: 'nowrap' }}>Discover Lists</h1>
               <div className="hidden lg:flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 whitespace-nowrap">
                   <span className="font-semibold text-gray-900 dark:text-white">{totalLists.toLocaleString()}</span>
                   <span className="text-gray-500 dark:text-gray-400">lists available</span>
                 </div>
                 <div className="w-px h-4 bg-gray-300 dark:bg-gray-600"></div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 whitespace-nowrap">
                   <span className="font-semibold text-gray-900 dark:text-white">{lists.length}</span>
                   <span className="text-gray-500 dark:text-gray-400">showing</span>
                 </div>
@@ -554,19 +561,35 @@ export const ListDiscoveryPage: React.FC = () => {
             {/* Center: Search */}
             <div className="flex-1 max-w-xl mx-4">
               <div className="relative">
+                <span 
+                  className="absolute text-gray-400 pointer-events-none" 
+                  style={{ 
+                    left: '12px', 
+                    top: '50%', 
+                    transform: 'translateY(-50%)',
+                    zIndex: 10
+                  }}
+                >
+                  <SearchIcon className="w-4 h-4" />
+                </span>
                 <input
                   type="text"
                   value={filters.search}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
                   placeholder="Search lists..."
-                  className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  style={{ 
+                    paddingLeft: '40px',
+                    paddingRight: '16px',
+                    paddingTop: '8px',
+                    paddingBottom: '8px'
+                  }}
                 />
-                <SearchIcon className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
               </div>
             </div>
             
             {/* Right: View Controls */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3" style={{ flexShrink: 0 }}>
               {/* View mode toggle removed - using grid view only */}
               <button
                 onClick={() => setShowUserSearch(!showUserSearch)}
