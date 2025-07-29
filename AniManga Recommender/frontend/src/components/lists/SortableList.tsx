@@ -156,29 +156,25 @@ const SortableListInner: React.FC<SortableListProps> = ({
   // Default handlers to prevent errors if not provided
   const handleQuickRate =
     onQuickRate ||
-    (async (itemId: string, rating: number) => {
-      console.log(`Setting rating ${rating} for item ${itemId}`);
+    (async (_itemId: string, _rating: number) => {
       // This would normally call your API
     });
 
   const handleUpdateStatus =
     onUpdateStatus ||
-    (async (itemId: string, status: string) => {
-      console.log(`Setting status ${status} for item ${itemId}`);
+    (async (_itemId: string, _status: string) => {
       // This would normally call your API
     });
 
   const handleAddTag =
     onAddTag ||
-    (async (itemId: string, tag: string) => {
-      console.log(`Adding tag ${tag} to item ${itemId}`);
+    (async (_itemId: string, _tag: string) => {
       // This would normally call your API
     });
 
   const handleCopyToList =
     onCopyToList ||
-    (async (itemId: string, targetListId: string) => {
-      console.log(`Copying item ${itemId} to list ${targetListId}`);
+    (async (_itemId: string, _targetListId: string) => {
       // This would normally call your API
     });
 

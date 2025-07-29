@@ -214,7 +214,7 @@ def generate_token(user_data: Dict[str, Any], expiry_hours: int = 24) -> str:
     Example:
         >>> user = {'id': 'user123', 'email': 'user@example.com'}
         >>> token = generate_token(user, expiry_hours=24)
-        >>> print(token)  # eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+        >>> # Example: token  # eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
     
     Note:
         Uses HS256 algorithm for token signing. Secret key is loaded from
@@ -256,7 +256,7 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
         >>> token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
         >>> payload = verify_token(token)
         >>> if payload:
-        ...     print(f"User ID: {payload['user_id']}")
+        ...     # Debug: User ID: {payload['user_id']}
         
     Note:
         Returns None for expired or invalid tokens. Uses Flask app config
@@ -306,12 +306,12 @@ try:
     
     if base_url and api_key and service_key:
         auth_client = SupabaseAuthClient(base_url, api_key, service_key)
-        print("[SUCCESS] Supabase clients initialized successfully")
+        pass  # Debug output removed
     else:
-        print("[WARNING] Auth client not initialized: missing environment variables")
+        pass  # Debug output removed
         auth_client = None
 except Exception as e:
-    print(f"[ERROR] Failed to initialize Supabase clients: {e}")
+    pass  # Debug output removed
     supabase_client = None
     auth_client = None
 
@@ -340,7 +340,7 @@ def parse_list_cols_on_load(df: pd.DataFrame) -> pd.DataFrame:
     Example:
         >>> df = pd.DataFrame({'genres': ["['Action', 'Comedy']", "['Drama']"]})
         >>> parsed_df = parse_list_cols_on_load(df)
-        >>> print(parsed_df['genres'].iloc[0])  # ['Action', 'Comedy']
+        >>> # Example: parsed_df['genres'].iloc[0]  # ['Action', 'Comedy']
         
     Note:
         Processes the following columns: genres, themes, demographics, studios,
@@ -397,7 +397,7 @@ def parse_list_cols_on_load(df: pd.DataFrame) -> pd.DataFrame:
                 df_copy[col] = df_copy[col].apply(parse_list_string)
             except Exception as e:
                 # If there's an error in any row processing, fall back to empty lists for all values
-                print(f"Warning: Error parsing column {col}, setting all values to empty lists: {e}")
+                pass  # Debug output removed
                 df_copy[col] = df_copy[col].apply(lambda x: [])
     
     return df_copy
@@ -439,26 +439,25 @@ def load_data_and_tfidf_from_supabase() -> None:
     global df_processed, tfidf_vectorizer_global, tfidf_matrix_global, uid_to_idx, supabase_client
 
     if df_processed is not None and tfidf_matrix_global is not None:
-        print(f"[INFO] Data already loaded: {len(df_processed)} items")
+        # Debug: [INFO] Data already loaded: {len(df_processed} items")
         return
 
     try:
-        print("[INFO] Starting data load from Supabase...")
-        
+        pass  # Debug output removed
         # Use global Supabase client
         global supabase_client
         if supabase_client is None:
-            print("[WARNING] Supabase client not initialized, creating new instance...")
+            pass  # Debug output removed
             supabase_client = SupabaseClient()
         
         # Get data as DataFrame from Supabase
-        print("📊 Loading items from Supabase...")
+        pass  # Debug output removed
         df_processed = supabase_client.items_to_dataframe(include_relations=True)
         
-        print(f"[SUCCESS] Loaded DataFrame with {len(df_processed)} items")
+        # Debug: [SUCCESS] Loaded DataFrame with {len(df_processed} items")
         
         if df_processed is None or len(df_processed) == 0:
-            print("[ERROR] No data loaded!")
+            pass  # Debug output removed
             df_processed = pd.DataFrame()
             tfidf_vectorizer_global = None
             tfidf_matrix_global = None
@@ -467,16 +466,15 @@ def load_data_and_tfidf_from_supabase() -> None:
         
         # Create combined text features for TF-IDF (if not exists)
         if 'combined_text_features' not in df_processed.columns:
-            print("🔧 Creating combined text features...")
+            pass  # Debug output removed
             df_processed = create_combined_text_features(df_processed)
-            print(f"[SUCCESS] Text features created. DataFrame now: {df_processed.shape}")
-        
+            pass  # Debug output removed
         # Fill NaN values in combined_text_features
         df_processed['combined_text_features'] = df_processed['combined_text_features'].fillna('')
         
         # Initialize TF-IDF vectorizer
         if len(df_processed) > 0:
-            print("🤖 Creating TF-IDF matrix...")
+            pass  # Debug output removed
             tfidf_vectorizer_global = TfidfVectorizer(stop_words='english', max_features=5000)
             tfidf_matrix_global = tfidf_vectorizer_global.fit_transform(df_processed['combined_text_features'])
 
@@ -485,16 +483,16 @@ def load_data_and_tfidf_from_supabase() -> None:
             if 'uid' in df_processed.columns:
                 uid_to_idx = pd.Series(df_processed.index, index=df_processed['uid'])
             else:
-                print("[WARNING] Warning: 'uid' column not found, creating empty mapping")
+                pass  # Debug output removed
                 uid_to_idx = pd.Series(dtype='int64')
-            print(f"[SUCCESS] TF-IDF matrix created. Final data: {len(df_processed)} items")
+            # Debug: [SUCCESS] TF-IDF matrix created. Final data: {len(df_processed} items")
         else:
             tfidf_vectorizer_global = None
             tfidf_matrix_global = None
             uid_to_idx = pd.Series(dtype='int64')
             
     except Exception as e:
-        print(f"[ERROR] Error in load_data_and_tfidf_from_supabase: {e}")
+        pass  # Debug output removed
         # Initialize empty globals to prevent further errors
         df_processed = pd.DataFrame()
         tfidf_vectorizer_global = None
@@ -550,7 +548,7 @@ def create_combined_text_features(df: pd.DataFrame) -> pd.DataFrame:
         ...     'themes': [['Military', 'Survival']]
         ... })
         >>> result_df = create_combined_text_features(df)
-        >>> print(result_df['combined_text_features'].iloc[0])
+        >>> # Example: result_df['combined_text_features'].iloc[0]
         'attack on titan humanity fights titans action drama military survival'
         
     Note:
@@ -644,7 +642,7 @@ def map_field_names_for_frontend(data_dict):
     Example:
         >>> backend_data = {'uid': 'anime_123', 'title': 'Test Anime', 'image_url': 'http://example.com/image.jpg'}
         >>> mapped_data = map_field_names_for_frontend(backend_data)
-        >>> print(mapped_data['main_picture'])
+        >>> # Example: mapped_data['main_picture']
         'http://example.com/image.jpg'
         
     Note:
@@ -698,7 +696,7 @@ def map_records_for_frontend(records_list):
         ...     {'uid': 'anime_2', 'title': 'Anime 2', 'image_url': 'url2.jpg'}
         ... ]
         >>> mapped_records = map_records_for_frontend(backend_records)
-        >>> print(mapped_records[0]['main_picture'])
+        >>> # Example: mapped_records[0]['main_picture']
         'url1.jpg'
         
     Note:
@@ -927,7 +925,7 @@ def get_items():
         return jsonify({"error": "Dataset not available."}), 503
     
     if len(df_processed) == 0:
-        print(f"[ERROR] df_processed is empty! Type: {type(df_processed)}")
+        # Debug: [ERROR] df_processed is empty! Type: {type(df_processed}")
         return jsonify({
             "items": [], "page": 1, "per_page": 30,
             "total_items": 0, "total_pages": 0, "sort_by": "score_desc",
@@ -951,7 +949,7 @@ def get_items():
     sort_by = request.args.get('sort_by', 'score_desc', type=str)
 
     data_subset = df_processed.copy()
-    print(f"[DEBUG] Initial data_subset size: {len(data_subset)}")
+    # Debug: [DEBUG] Initial data_subset size: {len(data_subset}")
     
     # Apply filters sequentially
     if search_query:
@@ -1340,9 +1338,8 @@ def get_recommendations(item_uid):
             "recommendations": related_mapped  # Field name kept for API compatibility
         })
     except Exception as e:
-        print(f"[ERROR] Related items error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        # Debug: [ERROR] Related items error: {str(e}")
+        pass  # Exception traceback removed
         return jsonify({"error": f"Could not generate related items: {str(e)}"}), 500
 
 @app.route('/api/auth/profile', methods=['GET'])
@@ -1659,9 +1656,8 @@ def get_user_dashboard():
         
         return jsonify(dashboard_data)
     except Exception as e:
-        print(f"Error getting dashboard data: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return jsonify({'error': 'Failed to load dashboard data'}), 500
 
 @app.route('/api/auth/user-items', methods=['GET'])
@@ -1801,7 +1797,7 @@ def get_user_items():
         })
         
     except Exception as e:
-        print(f"[ERROR] Error in get_user_items: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/user-items/<item_uid>', methods=['POST', 'PUT'])
@@ -2016,9 +2012,8 @@ def update_user_item_status(item_uid):
             return jsonify({'error': 'Failed to update item status'}), 400
             
     except Exception as e:
-        print(f"[ERROR] Error in update_user_item_status: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/user-items/<item_uid>', methods=['DELETE'])
@@ -2180,7 +2175,7 @@ def get_user_items_by_status_route(status):
         items = get_user_items_by_status(user_id, status)
         return jsonify({'items': items, 'count': len(items)})
     except Exception as e:
-        print(f"Error getting items by status: {e}")
+        pass  # Debug output removed
         return jsonify({'error': 'Failed to get items'}), 500
 
 @app.route('/api/auth/verify-token', methods=['GET'])
@@ -2350,7 +2345,7 @@ def get_user_statistics():
         return jsonify(stats)
         
     except Exception as e:
-        print(f"Error calculating user statistics: {e}")
+        pass  # Debug output removed
         return jsonify({'error': 'Failed to calculate statistics'}), 500
 
 @app.route('/api/auth/force-refresh-stats', methods=['POST'])
@@ -2463,7 +2458,7 @@ def force_refresh_statistics():
             return jsonify({'error': 'Failed to update statistics'}), 500
             
     except Exception as e:
-        print(f"Error force refreshing statistics: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/cleanup-orphaned-items', methods=['POST'])
@@ -2541,7 +2536,7 @@ def cleanup_orphaned_user_items():
             
             if not anime_exists and not manga_exists:
                 orphaned_items.append(item)
-                print(f"🗑️ Found orphaned item: {item_uid}")
+                pass  # Debug output removed
             else:
                 valid_items.append(item)
         
@@ -2559,8 +2554,7 @@ def cleanup_orphaned_user_items():
             
             if delete_response.status_code == 204:
                 removed_count += 1
-                print(f"[SUCCESS] Removed orphaned item: {orphaned_item['item_uid']}")
-        
+                pass  # Debug output removed
         # Invalidate all caches to force complete refresh
         invalidate_all_user_caches(user_id)
         
@@ -2572,7 +2566,7 @@ def cleanup_orphaned_user_items():
         })
         
     except Exception as e:
-        print(f"Error cleaning up orphaned items: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 #helper functions
@@ -2615,8 +2609,8 @@ def get_user_statistics(user_id: str) -> dict:
         
     Example:
         >>> stats = get_user_statistics("123e4567-e89b-12d3-a456-426614174000")
-        >>> print(f"User completed {stats['total_anime_watched']} anime")
-        >>> print(f"Cache status: {'fresh' if stats else 'calculated'}")
+        >>> # Example: f"User completed {stats['total_anime_watched']} anime"
+        >>> # Example: f"Cache status: {'fresh' if stats else 'calculated'}"
         
     Note:
         This function is thread-safe and handles all error scenarios gracefully.
@@ -2627,7 +2621,7 @@ def get_user_statistics(user_id: str) -> dict:
         # Try Redis cache first (fastest)
         redis_stats = get_user_stats_from_cache(user_id)
         if redis_stats:
-            print(f"[SUCCESS] Redis cache hit for user stats: {user_id}")
+            pass  # Debug output removed
             return redis_stats
         
         # Try database cache second
@@ -2663,7 +2657,7 @@ def get_user_statistics(user_id: str) -> dict:
         return get_default_user_statistics()
         
     except Exception as e:
-        print(f"Error getting user statistics: {e}")
+        pass  # Debug output removed
         return get_default_user_statistics()
 
 def get_cached_user_statistics(user_id: str) -> dict:
@@ -2687,7 +2681,7 @@ def get_cached_user_statistics(user_id: str) -> dict:
     Example:
         >>> cached_stats = get_cached_user_statistics("123e4567-e89b-12d3-a456-426614174000")
         >>> if cached_stats:
-        ...     print(f"User has watched {cached_stats['total_anime_watched']} anime")
+        ...     # Debug: User has watched {cached_stats['total_anime_watched']} anime
         
     Note:
         Returns None if no cached data exists or if database query fails.
@@ -2706,7 +2700,7 @@ def get_cached_user_statistics(user_id: str) -> dict:
                 return data[0]
         return None
     except Exception as e:
-        print(f"Error getting cached statistics: {e}")
+        pass  # Debug output removed
         return None
 
 def is_cache_fresh(cached_stats: dict, max_age_minutes: int = 5) -> bool:
@@ -2749,10 +2743,10 @@ def is_cache_fresh(cached_stats: dict, max_age_minutes: int = 5) -> bool:
         age = now - updated_at
         
         is_fresh = age < timedelta(minutes=max_age_minutes)
-        print(f"🕒 Cache age: {age}, fresh: {is_fresh}")
+        pass  # Debug output removed
         return is_fresh
     except Exception as e:
-        print(f"Error checking cache freshness: {e}")
+        pass  # Debug output removed
         return False
 
 def update_user_statistics_cache(user_id: str, stats: dict):
@@ -2786,7 +2780,7 @@ def update_user_statistics_cache(user_id: str, stats: dict):
         ...     'average_score': 8.2
         ... }
         >>> success = update_user_statistics_cache("user_uuid", stats)
-        >>> print(success)
+        >>> # Example: success
         True
         
     Error Handling:
@@ -2825,14 +2819,14 @@ def update_user_statistics_cache(user_id: str, stats: dict):
         )
         
         if response.status_code in [200, 201]:
-            print(f"[SUCCESS] Statistics cache updated successfully")
+            pass  # Debug output removed
             return True
         else:
-            print(f"[ERROR] Failed to update cache: {response.status_code} - {response.text}")
+            pass  # Debug output removed
             return False
             
     except Exception as e:
-        print(f"Error updating statistics cache: {e}")
+        pass  # Debug output removed
         return False
 
 def invalidate_user_statistics_cache(user_id: str):
@@ -2888,8 +2882,7 @@ def invalidate_user_statistics_cache(user_id: str):
         performance. Cache will be automatically rebuilt on next statistics access.
     """
     try:
-        print(f"🗑️ Invalidating statistics cache for user {user_id}")
-        
+        pass  # Debug output removed
         # Check if we're in test mode
         if hasattr(auth_client, 'db'):
             # Test mode: delete directly from database
@@ -2900,7 +2893,7 @@ def invalidate_user_statistics_cache(user_id: str):
                 )
                 return True
             except Exception as e:
-                print(f"Error invalidating cache in test mode: {e}")
+                pass  # Debug output removed
                 return False
         else:
             # Production mode: make HTTP request
@@ -2912,7 +2905,7 @@ def invalidate_user_statistics_cache(user_id: str):
             
             return response.status_code in [200, 204]
     except Exception as e:
-        print(f"Error invalidating cache: {e}")
+        pass  # Debug output removed
         return False
 
 def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
@@ -2958,8 +2951,7 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
         recommendations on the next API call.
     """
     try:
-        print(f"🤖 Invalidating personalized recommendation cache for user {user_id}")
-        
+        pass  # Debug output removed
         cache_key = f"personalized_recommendations:{user_id}"
         success = False
         
@@ -2968,20 +2960,18 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
             try:
                 redis_client.delete(cache_key)
                 success = True
-                print(f"[SUCCESS] Redis recommendation cache cleared for user {user_id}")
+                pass  # Debug output removed
             except Exception as e:
-                print(f"[WARNING] Failed to clear Redis cache: {e}")
-        
+                pass  # Debug output removed
         # Clear in-memory cache
         if cache_key in _recommendation_cache:
             del _recommendation_cache[cache_key]
             success = True
-            print(f"[SUCCESS] In-memory recommendation cache cleared for user {user_id}")
-        
+            pass  # Debug output removed
         return success
         
     except Exception as e:
-        print(f"[ERROR] Error invalidating recommendation cache: {e}")
+        pass  # Debug output removed
         return False
 
 def invalidate_all_user_caches(user_id: str) -> bool:
@@ -3004,13 +2994,12 @@ def invalidate_all_user_caches(user_id: str) -> bool:
         
         success = stats_success and recs_success
         if success:
-            print(f"[SUCCESS] All caches invalidated successfully for user {user_id}")
+            pass  # Debug output removed
         else:
-            print(f"[WARNING] Partial cache invalidation for user {user_id}")
-            
+            pass  # Debug output removed
         return success
     except Exception as e:
-        print(f"[ERROR] Error invalidating all caches: {e}")
+        pass  # Debug output removed
         return False
 
 def get_default_user_statistics() -> dict:
@@ -3073,8 +3062,8 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
         
     Example:
         >>> stats = calculate_user_statistics_realtime("123e4567-e89b-12d3-a456-426614174000")
-        >>> print(f"User completed {stats['total_anime_watched']} anime")
-        >>> print(f"Average score: {stats['average_score']:.1f}/10")
+        >>> # Example: f"User completed {stats['total_anime_watched']} anime"
+        >>> # Example: f"Average score: {stats['average_score']:.1f}/10"
         
     Note:
         Returns empty dict on error. All values are properly typed for frontend consumption.
@@ -3085,7 +3074,7 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
         if hasattr(auth_client, 'get_user_items'):
             # Use the test method directly
             user_items = auth_client.get_user_items(user_id)
-            print(f"📝 Found {len(user_items)} total user items (from test client)")
+            # Debug: 📝 Found {len(user_items} total user items (from test client)")
         else:
             # Production: make HTTP request
             response = requests.get(
@@ -3095,14 +3084,14 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
             )
             
             if response.status_code != 200:
-                print(f"❌ Failed to get user items: {response.status_code}")
+                pass  # Debug output removed
                 return get_default_user_statistics()
             
             user_items = response.json()
-            print(f"📝 Found {len(user_items)} total user items")
+            # Debug: 📝 Found {len(user_items} total user items")
         
         completed_items = [item for item in user_items if item['status'] == 'completed']
-        print(f"[SUCCESS] Found {len(completed_items)} completed items")
+        # Debug: [SUCCESS] Found {len(completed_items} completed items")
         
         # Count anime vs manga in completed items
         anime_count = 0
@@ -3110,15 +3099,13 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
         
         for item in completed_items:
             media_type = get_item_media_type(item['item_uid'])
-            print(f"🎯 Item {item['item_uid']}: media_type = {media_type}")
-            
+            pass  # Debug output removed
             if media_type == 'anime':
                 anime_count += 1
             elif media_type == 'manga':
                 manga_count += 1
         
-        print(f"📊 Final counts: anime={anime_count}, manga={manga_count}")
-        
+        pass  # Debug output removed
         # Count items by status
         status_counts = {
             'watching': 0,
@@ -3180,16 +3167,14 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
         
         return stats
     except Exception as e:
-        print(f"Error calculating real-time statistics: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return {}
 
 def get_recent_user_activity(user_id: str, limit: int = 10) -> list:
     """Get user's recent activity"""
     try:
-        print(f"🔎 DEBUG get_recent_user_activity: user_id={user_id}, limit={limit}")
-        
+        pass  # Debug output removed
         response = requests.get(
             f"{auth_client.base_url}/rest/v1/user_activity",
             headers=auth_client.headers,
@@ -3200,11 +3185,10 @@ def get_recent_user_activity(user_id: str, limit: int = 10) -> list:
             }
         )
         
-        print(f"📡 DEBUG: user_activity table response status: {response.status_code}")
-        
+        pass  # Debug output removed
         if response.status_code == 200:
             activities = response.json()
-            print(f"📋 DEBUG: Found {len(activities)} raw activities from user_activity table")
+            # Debug: 📋 DEBUG: Found {len(activities} raw activities from user_activity table")
             
             # Enrich with item details
             for activity in activities:
@@ -3212,17 +3196,15 @@ def get_recent_user_activity(user_id: str, limit: int = 10) -> list:
                 activity['item'] = item_details
                 
             if activities:
-                print(f"[SUCCESS] DEBUG: First enriched activity: {activities[0]}")
-            
+                pass  # Debug output removed
             return activities
         else:
-            print(f"[ERROR] DEBUG: Failed to fetch from user_activity table: {response.status_code}")
-            print(f"[ERROR] DEBUG: Response text: {response.text}")
+            pass  # Debug output removed
+            pass  # Debug output removed
         return []
     except Exception as e:
-        print(f"Error getting recent activity: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return []
 
 def get_user_items_by_status(user_id: str, status: str, limit: int = 20) -> list:
@@ -3254,8 +3236,8 @@ def get_user_items_by_status(user_id: str, status: str, limit: int = 20) -> list
     Example:
         >>> watching_items = get_user_items_by_status("user_uuid", "watching", 10)
         >>> for item in watching_items:
-        ...     print(f"Currently watching: {item['item']['title']}")
-        ...     print(f"Progress: Episode {item.get('progress', 0)}")
+        ...     # Debug: Currently watching: {item['item']['title']}
+        ...     # Debug: Progress: Episode {item.get('progress', 0}")
         
     Status Categories:
         - 'watching': Currently consuming content
@@ -3294,7 +3276,7 @@ def get_user_items_by_status(user_id: str, status: str, limit: int = 20) -> list
             return user_items
         return []
     except Exception as e:
-        print(f"Error getting items by status: {e}")
+        pass  # Debug output removed
         return []
 
 def get_recently_completed(user_id: str, days: int = 30, limit: int = 10) -> list:
@@ -3323,7 +3305,7 @@ def get_recently_completed(user_id: str, days: int = 30, limit: int = 10) -> lis
             return items
         return []
     except Exception as e:
-        print(f"Error getting recently completed: {e}")
+        pass  # Debug output removed
         return []
 
 def get_quick_stats(user_id: str) -> dict:
@@ -3348,7 +3330,7 @@ def get_quick_stats(user_id: str) -> dict:
             return stats
         return {}
     except Exception as e:
-        print(f"Error getting quick stats: {e}")
+        pass  # Debug output removed
         return {}
 
 def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_data: dict = None):
@@ -3422,7 +3404,7 @@ def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_
     try:
         # Add null check for auth_client
         if auth_client is None:
-            print("WARNING: Cannot log activity - auth_client not initialized. Check SUPABASE environment variables.")
+            pass  # Debug output removed
             return False
             
         # Check if we're in test mode
@@ -3444,7 +3426,7 @@ def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_
                 )
                 return True
             except Exception as e:
-                print(f"Error logging activity in test mode: {e}")
+                pass  # Debug output removed
                 return False
         else:
             # Production mode: make HTTP requests
@@ -3487,7 +3469,7 @@ def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_
             
             return response.status_code in [200, 201]
     except Exception as e:
-        print(f"Error logging activity: {e}")
+        pass  # Debug output removed
         return False
 
 def log_activity_with_error_handling(user_id: str, activity_type: str, item_uid: str, activity_data: dict = None):
@@ -3509,9 +3491,8 @@ def log_activity_with_error_handling(user_id: str, activity_type: str, item_uid:
     try:
         return log_user_activity(user_id, activity_type, item_uid, activity_data)
     except Exception as e:
-        print(f"ERROR in async activity logging: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return False
 
 def calculate_watch_time(completed_items: list) -> float:
@@ -3545,7 +3526,7 @@ def calculate_watch_time(completed_items: list) -> float:
         ...     {'item_uid': 'anime_21', 'status': 'completed'}   # Attack on Titan (87 eps)
         ... ]
         >>> hours = calculate_watch_time(completed)
-        >>> print(f"Total watch time: {hours} hours")
+        >>> # Example: f"Total watch time: {hours} hours"
         122.8
         
     Note:
@@ -3570,7 +3551,7 @@ def calculate_watch_time(completed_items: list) -> float:
         
         return round(total_minutes / 60.0, 1)  # Convert to hours
     except Exception as e:
-        print(f"Error calculating watch time: {e}")
+        pass  # Debug output removed
         return 0.0
 
 def calculate_chapters_read(completed_items: list) -> int:
@@ -3591,7 +3572,7 @@ def calculate_chapters_read(completed_items: list) -> int:
         
         return total_chapters
     except Exception as e:
-        print(f"Error calculating chapters read: {e}")
+        pass  # Debug output removed
         return 0
 
 def get_user_favorite_genres(user_items: list) -> list:
@@ -3611,7 +3592,7 @@ def get_user_favorite_genres(user_items: list) -> list:
         sorted_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)
         return [genre for genre, count in sorted_genres[:5]]
     except Exception as e:
-        print(f"Error getting favorite genres: {e}")
+        pass  # Debug output removed
         return []
 
 def calculate_current_streak(user_id: str) -> int:
@@ -3668,7 +3649,7 @@ def calculate_current_streak(user_id: str) -> int:
         
         return current_streak
     except Exception as e:
-        print(f"Error calculating current streak: {e}")
+        pass  # Debug output removed
         return 0
 
 def calculate_longest_streak(user_id: str) -> int:
@@ -3718,7 +3699,7 @@ def calculate_longest_streak(user_id: str) -> int:
         
         return longest_streak
     except Exception as e:
-        print(f"Error calculating longest streak: {e}")
+        pass  # Debug output removed
         return 0
 
 def get_item_details_for_stats(item_uid: str) -> dict:
@@ -3742,7 +3723,7 @@ def get_item_details_for_stats(item_uid: str) -> dict:
                 }
         return {}
     except Exception as e:
-        print(f"Error getting item details for stats: {e}")
+        pass  # Debug output removed
         return {}
 
 def calculate_user_statistics(user_id: str) -> dict:
@@ -3778,7 +3759,7 @@ def calculate_user_statistics(user_id: str) -> dict:
         
         return stats
     except Exception as e:
-        print(f"Error calculating enhanced statistics: {e}")
+        pass  # Debug output removed
         return {}
 
 def calculate_average_user_score(user_items: list) -> float:
@@ -3791,7 +3772,7 @@ def calculate_average_user_score(user_items: list) -> float:
         total_score = sum(item['rating'] for item in scored_items)
         return round(total_score / len(scored_items), 2)
     except Exception as e:
-        print(f"Error calculating average score: {e}")
+        pass  # Debug output removed
         return 0.0
 
 def calculate_completion_rate(user_items: list) -> float:
@@ -3817,18 +3798,17 @@ def get_item_media_type(item_uid: str) -> str:
                 media_type = item_row.iloc[0].get('media_type', 'unknown')
                 # Cache the result
                 _media_type_cache[item_uid] = media_type
-                print(f"🔍 Item {item_uid}: media_type = {media_type} (cached)")
+                # Debug: 🔍 Item {item_uid}: media_type = {media_type} (cached")
                 return media_type
             else:
-                print(f"[WARNING] Item {item_uid} not found in df_processed")
+                pass  # Debug output removed
         else:
-            print(f"[WARNING] df_processed is None or empty")
-        
+            pass  # Debug output removed
         # Cache unknown results too
         _media_type_cache[item_uid] = 'unknown'
         return 'unknown'
     except Exception as e:
-        print(f"Error getting item media type for {item_uid}: {e}")
+        pass  # Debug output removed
         return 'unknown'
 
 # Add this to get item details for frontend calculations
@@ -3866,10 +3846,10 @@ def get_item_details_simple(item_uid: str) -> dict:
         
     Example:
         >>> details = get_item_details_simple("anime_21")
-        >>> print(f"Title: {details['title']}")
-        >>> print(f"Episodes: {details['episodes']}")
+        >>> # Example: f"Title: {details['title']}"
+        >>> # Example: f"Episodes: {details['episodes']}"
         >>> if details['image_url']:
-        ...     print(f"Cover: {details['image_url']}")
+        ...     # Debug: Cover: {details['image_url']}
         
     Use Cases:
         - API response enrichment for user items
@@ -3906,7 +3886,7 @@ def get_item_details_simple(item_uid: str) -> dict:
                 }
         return {}
     except Exception as e:
-        print(f"Error getting item details: {e}")
+        pass  # Debug output removed
         return {}
 
 # === Personalized Recommendation System =====================================
@@ -3925,9 +3905,9 @@ try:
     )
     # Test Redis connection
     redis_client.ping()
-    print("[SUCCESS] Redis connected successfully for personalized recommendations")
+    pass  # Debug output removed
 except Exception as e:
-    print(f"[WARNING] Redis unavailable, using in-memory cache: {e}")
+    pass  # Debug output removed
     redis_client = None
 
 # In-memory cache fallback for recommendations
@@ -3980,10 +3960,9 @@ def get_personalized_recommendation_cache(user_id: str, content_type: str = 'all
                     else:
                         # Invalid cache data, remove it
                         redis_client.delete(cache_key)
-                        print(f"[WARNING] Removed invalid cache data for key: {cache_key}")
-                        
+                        pass  # Debug output removed
             except Exception as redis_error:
-                print(f"[WARNING] Redis cache error for {cache_key}: {redis_error}")
+                pass  # Debug output removed
                 # Continue to in-memory fallback
         
         # Fall back to in-memory cache with the same key structure
@@ -3997,14 +3976,12 @@ def get_personalized_recommendation_cache(user_id: str, content_type: str = 'all
                     # Remove stale cache
                     if cache_key in _recommendation_cache:
                         del _recommendation_cache[cache_key]
-                    print(f"🗑️ Removed stale in-memory cache for: {cache_key}")
-                    
+                    pass  # Debug output removed
         return None
         
     except Exception as e:
-        print(f"[ERROR] Error retrieving recommendation cache for {user_id}: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return None
 
 def _is_valid_cache_data(data: Dict[str, Any]) -> bool:
@@ -4079,7 +4056,7 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
         
         # Validate input data before caching
         if not _is_valid_cache_input(recommendations):
-            print(f"[WARNING] Invalid cache input for {cache_key}, skipping cache storage")
+            pass  # Debug output removed
             return False
         
         # Ensure timestamp is set
@@ -4105,10 +4082,9 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
                 pipe.execute()
                 
                 success = True
-                print(f"[SUCCESS] Cached recommendations in Redis: {cache_key}")
-                
+                pass  # Debug output removed
             except Exception as redis_error:
-                print(f"[WARNING] Redis caching failed for {cache_key}: {redis_error}")
+                pass  # Debug output removed
                 # Continue to fallback caching
         
         # Fallback caching: In-memory with manual TTL
@@ -4119,20 +4095,17 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
             
             _recommendation_cache[cache_key] = cache_data
             success = True
-            print(f"[SUCCESS] Cached recommendations in memory: {cache_key}")
-            
+            pass  # Debug output removed
             # Clean up old in-memory cache entries periodically
             _cleanup_stale_memory_cache()
             
         except Exception as memory_error:
-            print(f"[ERROR] In-memory caching failed for {cache_key}: {memory_error}")
-            
+            pass  # Debug output removed
         return success
         
     except Exception as e:
-        print(f"[ERROR] Error caching recommendations for {user_id}: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return False
 
 def _is_valid_cache_input(data: Dict[str, Any]) -> bool:
@@ -4179,11 +4152,11 @@ def _cleanup_stale_memory_cache():
             del _recommendation_cache[key]
             
         if stale_keys:
-            print(f"🗑️ Cleaned up {len(stale_keys)} stale in-memory cache entries")
+            # Debug: Cleaned up stale in-memory cache entries
+            pass
             
     except Exception as e:
-        print(f"[WARNING] Error during memory cache cleanup: {e}")
-
+        pass  # Debug output removed
 def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: str, section: str) -> Optional[Dict[str, Any]]:
     """
     Filter cached recommendations by content type and section for production efficiency.
@@ -4243,7 +4216,7 @@ def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: st
                             if item_media_type == content_type.lower():
                                 filtered_items.append(item)
                     except Exception as filter_error:
-                        print(f"[WARNING] Error filtering item in section {section_name}: {filter_error}")
+                        pass  # Debug output removed
                         continue
             
             if filtered_items:
@@ -4252,7 +4225,7 @@ def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: st
         
         # Return None if no items match the filter
         if total_filtered_items == 0:
-            print(f"📭 No items found after filtering content_type: {content_type}, section: {section}")
+            pass  # Debug output removed
             return None
         
         # Create filtered response maintaining original structure
@@ -4271,13 +4244,12 @@ def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: st
             'generated_at': datetime.now().isoformat()
         })
         
-        print(f"[SUCCESS] Successfully filtered cache: {total_filtered_items} items for content_type: {content_type}")
+        pass  # Debug output removed
         return filtered_response
         
     except Exception as e:
-        print(f"[ERROR] Error filtering cached recommendations: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return None
 
 def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
@@ -4309,9 +4281,9 @@ def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
         
     Example:
         >>> prefs = analyze_user_preferences("user_123")
-        >>> print(f"Top genre: {max(prefs['genre_preferences'], key=prefs['genre_preferences'].get)}")
-        >>> print(f"Prefers: {prefs['media_type_preference']}")
-        >>> print(f"Typical rating: {prefs['preferred_score_range']}")
+        >>> # Example: f"Top genre: {max(prefs['genre_preferences'], key=prefs['genre_preferences'].get}")
+        >>> # Example: f"Prefers: {prefs['media_type_preference']}"
+        >>> # Example: f"Typical rating: {prefs['preferred_score_range']}"
     """
     try:
         # Get user's complete item list
@@ -4391,7 +4363,7 @@ def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
                             total_weighted_score += rating_weight
                             
             except Exception as e:
-                print(f"Error processing item {item.get('item_uid', 'unknown')}: {e}")
+                # Debug: Error processing item {item.get('item_uid', 'unknown'}: {e}")
                 continue
         
         # Normalize genre scores safely
@@ -4432,7 +4404,7 @@ def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
                     min(10.0, avg_user_rating + score_std)
                 )
             except Exception as e:
-                print(f"Error calculating score range: {e}")
+                pass  # Debug output removed
                 preferred_range = (6.0, 9.0)
         else:
             avg_user_rating = 7.0  # Default fallback
@@ -4453,9 +4425,8 @@ def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        print(f"Error analyzing user preferences: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return _get_default_preferences()
 
 def _get_default_preferences() -> Dict[str, Any]:
@@ -4539,7 +4510,7 @@ def generate_personalized_recommendations(user_id: str, user_preferences: Dict[s
         # Also exclude dismissed items
         if dismissed_items:
             user_item_uids.update(dismissed_items)
-            print(f"🚫 Excluding {len(dismissed_items)} dismissed items from recommendations")
+            # Debug: 🚫 Excluding {len(dismissed_items} dismissed items from recommendations")
         
         recommendations = {
             'completed_based': [],
@@ -4569,7 +4540,7 @@ def generate_personalized_recommendations(user_id: str, user_preferences: Dict[s
         return recommendations
         
     except Exception as e:
-        print(f"Error generating personalized recommendations: {e}")
+        pass  # Debug output removed
         return {'completed_based': [], 'trending_genres': [], 'hidden_gems': []}
 
 def _get_user_items_for_recommendations(user_id: str) -> List[Dict[str, Any]]:
@@ -4582,7 +4553,7 @@ def _get_user_items_for_recommendations(user_id: str) -> List[Dict[str, Any]]:
         )
         return response.json() if response.status_code == 200 else []
     except Exception as e:
-        print(f"Error getting user items: {e}")
+        pass  # Debug output removed
         return []
 
 def _generate_content_based_recommendations(completed_items: List[Dict[str, Any]], 
@@ -4648,23 +4619,22 @@ def _generate_content_based_recommendations(completed_items: List[Dict[str, Any]
                 if item_data:
                     recommendations.append(item_data)
                 else:
-                    print(f"[WARNING] Failed to create recommendation item for idx {idx}")
-                    
+                    pass  # Debug output removed
             except Exception as item_error:
-                print(f"[ERROR] Error processing recommendation item at idx {idx}: {item_error}")
+                pass  # Debug output removed
                 continue
         
         # Production monitoring logs
-        print(f"📊 Content-based recommendations: {len(recommendations)}/{processed_count} items processed")
-        print(f"   - Skipped (excluded): {skipped_excluded}")
-        print(f"   - Skipped (content_type): {skipped_content_type}")
-        print(f"   - Content type filter: {content_type}")
-        print(f"   - Final recommendations: {len(recommendations)}")
+        # Debug: 📊 Content-based recommendations: {len(recommendations}/{processed_count} items processed")
+        # Debug:    - Skipped (excluded: {skipped_excluded}")
+        # Debug:    - Skipped (content_type: {skipped_content_type}")
+        pass  # Debug output removed
+        # Debug:    - Final recommendations: {len(recommendations}")
         
         return recommendations
         
     except Exception as e:
-        print(f"Error generating content-based recommendations: {e}")
+        pass  # Debug output removed
         return []
 
 def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
@@ -4716,10 +4686,10 @@ def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
                 # Log filter effectiveness for monitoring
                 total_items = len(content_filtered_df)
                 filtered_items = len(genre_items)
-                print(f"🔍 Genre '{genre}' filter: {filtered_items}/{total_items} items (content_type: {content_type})")
+                # Debug: 🔍 Genre '{genre}' filter: {filtered_items}/{total_items} items (content_type: {content_type}")
                 
             except Exception as filter_error:
-                print(f"[ERROR] Error filtering genre '{genre}': {filter_error}")
+                pass  # Debug output removed
                 continue
             
             if genre_items.empty:
@@ -4743,7 +4713,7 @@ def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
         return recommendations[:limit]
         
     except Exception as e:
-        print(f"Error generating trending genre recommendations: {e}")
+        pass  # Debug output removed
         return []
 
 def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
@@ -4766,7 +4736,7 @@ def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
             
             # Early termination if no items match content type
             if base_df.empty:
-                print(f"📭 No items available for content_type: {content_type}")
+                pass  # Debug output removed
                 return []
             
             # Vectorized filtering for production performance
@@ -4781,10 +4751,10 @@ def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
             hidden_gems = base_df[score_mask & exclude_mask].copy()
             
             # Log filter effectiveness for monitoring
-            print(f"🔍 Hidden gems filter: {len(hidden_gems)}/{len(base_df)} items (content_type: {content_type}, min_score: {min_score})")
+            # Debug: 🔍 Hidden gems filter: {len(hidden_gems}/{len(base_df)} items (content_type: {content_type}, min_score: {min_score})")
             
         except Exception as filter_error:
-            print(f"[ERROR] Error in hidden gems filtering: {filter_error}")
+            pass  # Debug output removed
             return []
         
         if hidden_gems.empty:
@@ -4826,7 +4796,7 @@ def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
         return recommendations
         
     except Exception as e:
-        print(f"Error generating hidden gem recommendations: {e}")
+        pass  # Debug output removed
         return []
 
 def _create_recommendation_item(df_idx: int, base_score: float, 
@@ -4864,7 +4834,7 @@ def _create_recommendation_item(df_idx: int, base_score: float,
         }
         
     except Exception as e:
-        print(f"Error creating recommendation item: {e}")
+        pass  # Debug output removed
         return None
 
 def _generate_recommendation_reasoning(item_data: Dict[str, Any], 
@@ -4899,7 +4869,7 @@ def _generate_recommendation_reasoning(item_data: Dict[str, Any],
             return "Recommended for you"
             
     except Exception as e:
-        print(f"Error generating reasoning: {e}")
+        pass  # Debug output removed
         return "Recommended for you"
 
 def _get_explanation_factors(reason_type: str, item_data: Dict[str, Any], 
@@ -4940,7 +4910,7 @@ def _get_explanation_factors(reason_type: str, item_data: Dict[str, Any],
         return factors[:3]  # Limit to top 3 factors
         
     except Exception as e:
-        print(f"Error getting explanation factors: {e}")
+        pass  # Debug output removed
         return ["recommendation"]
 
 @app.route('/api/auth/personalized-recommendations', methods=['GET'])
@@ -5126,10 +5096,9 @@ def get_personalized_recommendations():
             force_refresh = refresh_str in ['true', '1', 'yes', 'on']
             
             # Log request parameters for monitoring
-            print(f"🎯 Recommendation request: user={user_id}, limit={limit}, section={section}, content_type={content_type}, refresh={force_refresh}")
-            
+            pass  # Debug output removed
         except Exception as param_error:
-            print(f"[ERROR] Parameter validation error: {param_error}")
+            pass  # Debug output removed
             return jsonify({'error': f'Parameter validation failed: {str(param_error)}'}), 400
         
         # Production-ready cache management with content type and section support
@@ -5141,7 +5110,7 @@ def get_personalized_recommendations():
             if cached_recommendations:
                 cache_hit = True
                 cached_recommendations['cache_info']['cache_hit'] = True
-                print(f"[SUCCESS] Cache hit for user {user_id}, content_type: {content_type}, section: {section}")
+                pass  # Debug output removed
                 return jsonify(cached_recommendations)
             
             # If no exact match and we're looking for 'all' content, try to find base cache
@@ -5149,7 +5118,7 @@ def get_personalized_recommendations():
             if content_type != 'all' and section == 'all':
                 base_cached = get_personalized_recommendation_cache(user_id, 'all', 'all')
                 if base_cached:
-                    print(f"🔄 Filtering base cache for content_type: {content_type}")
+                    pass  # Debug output removed
                     filtered_cache = _filter_cached_recommendations(base_cached, content_type, section)
                     if filtered_cache:
                         # Cache the filtered result for future requests
@@ -5160,25 +5129,24 @@ def get_personalized_recommendations():
         
         # Generate fresh recommendations with production error handling
         start_time = datetime.now()
-        print(f"🤖 Generating personalized recommendations for user {user_id}")
-        print(f"   - Content type: {content_type}")
-        print(f"   - Section: {section}")
-        print(f"   - Limit: {limit}")
-        print(f"   - Force refresh: {force_refresh}")
-        
+        pass  # Debug output removed
+        pass  # Debug output removed
+        pass  # Debug output removed
+        pass  # Debug output removed
+        pass  # Debug output removed
         try:
             # Analyze user preferences with error handling
             user_preferences = analyze_user_preferences(user_id)
             if not user_preferences:
-                print(f"[WARNING] Could not analyze preferences for user {user_id}, using defaults")
+                pass  # Debug output removed
                 user_preferences = _get_default_preferences()
             
             # Get user's dismissed items with error handling
             try:
                 dismissed_items = get_user_dismissed_items(user_id)
-                print(f"🚫 Excluding {len(dismissed_items)} dismissed items")
+                # Debug: 🚫 Excluding {len(dismissed_items} dismissed items")
             except Exception as dismissed_error:
-                print(f"[WARNING] Error getting dismissed items: {dismissed_error}")
+                pass  # Debug output removed
                 dismissed_items = set()
             
             # Generate recommendations with comprehensive error handling
@@ -5193,14 +5161,12 @@ def get_personalized_recommendations():
             # Check if we have sufficient recommendations
             total_recs = sum(len(recs) for recs in recommendations.values() if isinstance(recs, list))
             if total_recs == 0:
-                print(f"[WARNING] No recommendations generated for user {user_id} with content_type {content_type}")
+                pass  # Debug output removed
             else:
-                print(f"[SUCCESS] Generated {total_recs} total recommendations")
-                
+                pass  # Debug output removed
         except Exception as generation_error:
-            print(f"[ERROR] Error generating recommendations: {generation_error}")
-            import traceback
-            traceback.print_exc()
+            pass  # Debug output removed
+            pass  # Exception traceback removed
             
             # Return empty recommendations with error info
             recommendations = {
@@ -5211,8 +5177,7 @@ def get_personalized_recommendations():
             
         # Calculate generation time for monitoring
         generation_time = (datetime.now() - start_time).total_seconds()
-        print(f"[TIMER] Recommendation generation took {generation_time:.2f} seconds")
-        
+        pass  # Debug output removed
         # Create user preferences summary for frontend
         user_prefs_summary = {
             'top_genres': list(sorted(user_preferences['genre_preferences'].items(), 
@@ -5238,16 +5203,14 @@ def get_personalized_recommendations():
         # Cache the results with production-ready cache management
         cache_success = set_personalized_recommendation_cache(user_id, response_data, content_type, section)
         if cache_success:
-            print(f"[SUCCESS] Successfully cached recommendations for user {user_id}, content_type: {content_type}, section: {section}")
+            pass  # Debug output removed
         else:
-            print(f"[WARNING] Failed to cache recommendations for user {user_id}, content_type: {content_type}, section: {section}")
-        
+            pass  # Debug output removed
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"[ERROR] Error generating personalized recommendations: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return jsonify({'error': f'Failed to generate recommendations: {str(e)}'}), 500
 
 
@@ -5316,9 +5279,8 @@ def get_more_personalized_recommendations():
     except ValueError as e:
         return jsonify({'error': 'Invalid parameter format'}), 400
     except Exception as e:
-        print(f"[ERROR] Error loading more personalized recommendations: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return jsonify({'error': f'Failed to load more recommendations: {str(e)}'}), 500
 
 def _get_preferred_length_label(completion_tendencies: Dict[str, int]) -> str:
@@ -5513,8 +5475,7 @@ def submit_recommendation_feedback():
         
         # Store feedback (in a real implementation, this would go to a database)
         # For now, we'll just log it and invalidate the user's recommendation cache
-        print(f"📝 Recommendation feedback received: {feedback_data}")
-        
+        pass  # Debug output removed
         # If user marked item as not interested, add to dismissed items
         if action == 'not_interested':
             add_user_dismissed_item(user_id, item_uid)
@@ -5522,9 +5483,9 @@ def submit_recommendation_feedback():
         # Invalidate user's recommendation cache to reflect feedback
         try:
             invalidate_personalized_recommendation_cache(user_id)
-            print(f"🗑️ Invalidated recommendation cache for user {user_id}")
+            pass  # Debug output removed
         except Exception as e:
-            print(f"[WARNING] Failed to invalidate cache: {e}")
+            pass  # Debug output removed
             # Don't fail the request if cache invalidation fails
         
         # In a production system, you would:
@@ -5540,9 +5501,8 @@ def submit_recommendation_feedback():
         })
         
     except Exception as e:
-        print(f"[ERROR] Error submitting recommendation feedback: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return jsonify({'error': f'Failed to submit feedback: {str(e)}'}), 500
 
 # ===== SOCIAL FEATURES API ENDPOINTS =====
@@ -5587,7 +5547,7 @@ def get_public_user_profile(username):
                 user_info = auth_client.verify_jwt_token(auth_header)
                 viewer_id = user_info.get('user_id') or user_info.get('sub')
             except Exception as auth_error:
-                print(f"Auth error (non-fatal): {auth_error}")
+                # Debug: Auth error (non-fatal: {auth_error}")
                 pass  # Ignore auth errors for public endpoint
         
         profile = auth_client.get_user_profile_by_username(username, viewer_id)
@@ -5611,7 +5571,7 @@ def get_public_user_profile(username):
                 
                 if is_own_profile:
                     # This is the user's own profile, create it
-                    print(f"Auto-creating profile for user {username} (ID: {viewer_id})")
+                    # Debug: Auto-creating profile for user {username} (ID: {viewer_id}")
                     created_profile = auth_client.create_user_profile(
                         user_id=viewer_id,
                         username=username,
@@ -5619,21 +5579,21 @@ def get_public_user_profile(username):
                     )
                     
                     if created_profile:
-                        print(f"Profile created successfully for {username}")
+                        pass  # Debug output removed
                         # Fetch the complete profile data after creation with enhanced logging
-                        print(f"Fetching complete profile data for newly created user {username}")
+                        pass  # Debug output removed
                         profile = auth_client.get_user_profile_by_username(username, viewer_id)
                         if profile:
-                            print(f"Successfully retrieved complete profile for {username}")
+                            pass  # Debug output removed
                             return jsonify(profile)
                         else:
-                            print(f"CRITICAL: Failed to fetch created profile for {username} - this should not happen with the case-insensitive fix")
+                            pass  # Debug output removed
                     else:
                         # Profile creation failed - might already exist, try to fetch it
-                        print(f"Profile creation failed for {username}, attempting to fetch existing profile")
+                        pass  # Debug output removed
                         profile = auth_client.get_user_profile_by_username(username, viewer_id)
                         if profile:
-                            print(f"Found existing profile for {username}")
+                            pass  # Debug output removed
                             return jsonify(profile)
                         else:
                             # If username lookup fails, try direct lookup by user ID
@@ -5654,17 +5614,15 @@ def get_public_user_profile(username):
                             except Exception:
                                 pass
                             
-                            print(f"Failed to create and fetch profile for {username}")
-                    
+                            pass  # Debug output removed
             except Exception as create_error:
-                print(f"Error auto-creating profile: {create_error}")
-                import traceback
-                traceback.print_exc()
+                pass  # Debug output removed
+        pass  # Exception traceback removed
         
         return jsonify({'error': 'User not found or profile is private'}), 404
             
     except Exception as e:
-        print(f"Error getting user profile: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<username>/stats', methods=['GET'])
@@ -5690,10 +5648,11 @@ def get_public_user_stats(username):
     """
     try:
         global supabase_client
-        print(f"Debug: supabase_client type in get_public_user_stats: {type(supabase_client)}")
-        print(f"Debug: supabase_client has get_user_stats: {hasattr(supabase_client, 'get_user_stats') if supabase_client else 'None'}")
+        # Debug: supabase_client type check removed
+        # Debug: supabase_client method check removed
         if supabase_client:
-            print(f"Debug: supabase_client dir: {[attr for attr in dir(supabase_client) if 'get_user' in attr]}")
+            # Debug: supabase_client attributes check removed
+            pass
         # Get viewer ID from auth if available
         viewer_id = None
         auth_header = request.headers.get('Authorization')
@@ -5713,21 +5672,21 @@ def get_public_user_stats(username):
         
         # Additional safety check
         if supabase_client is None or not hasattr(supabase_client, 'get_user_stats'):
-            print("Error: supabase_client is None or missing get_user_stats method")
-            print("Attempting to reinitialize supabase_client...")
+            pass  # Debug output removed
+            pass  # Debug output removed
             try:
                 # Force module reload to ensure we have the latest class definition
                 import importlib
                 import supabase_client as sc_module
                 importlib.reload(sc_module)
                 supabase_client = sc_module.SupabaseClient()
-                print("[SUCCESS] SupabaseClient reinitialized successfully")
+                pass  # Debug output removed
                 if not hasattr(supabase_client, 'get_user_stats'):
-                    print("[ERROR] get_user_stats method still not found after reinitialization")
-                    print(f"Available methods: {[method for method in dir(supabase_client) if not method.startswith('_')]}")
+                    pass  # Debug output removed
+                    # Debug: Available methods: {[method for method in dir(supabase_client if not method.startswith('_')]}")
                     return jsonify({'error': 'Database service temporarily unavailable'}), 503
             except Exception as reinit_error:
-                print(f"[ERROR] Failed to reinitialize SupabaseClient: {reinit_error}")
+                pass  # Debug output removed
                 return jsonify({'error': 'Database service temporarily unavailable'}), 503
             
         # Get user statistics with caching
@@ -5751,7 +5710,7 @@ def get_public_user_stats(username):
             
         # If stats is None due to privacy settings, return empty stats
         if stats is None:
-            print(f"Stats privacy restricted for user {user_id}, returning empty stats")
+            pass  # Debug output removed
             stats = {
                 'user_id': user_id,
                 'total_anime_watched': 0,
@@ -5783,7 +5742,7 @@ def get_public_user_stats(username):
         })
             
     except Exception as e:
-        print(f"Error getting user stats: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<username>/lists', methods=['GET'])
@@ -5894,7 +5853,7 @@ def get_public_user_lists(username):
         return jsonify({'lists': enriched_lists})
             
     except Exception as e:
-        print(f"Error getting user lists: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<username>/activity', methods=['GET'])
@@ -5919,8 +5878,7 @@ def get_user_activity(username):
         500: Server Error - Database error
     """
     try:
-        print(f"🌟 DEBUG get_user_activity: Fetching activity for username: {username}")
-        
+        pass  # Debug output removed
         # Get viewer ID from auth if available
         viewer_id = None
         auth_header = request.headers.get('Authorization')
@@ -5928,20 +5886,19 @@ def get_user_activity(username):
             try:
                 user_info = auth_client.verify_jwt_token(auth_header)
                 viewer_id = user_info.get('user_id') or user_info.get('sub')
-                print(f"👤 DEBUG: Viewer ID from auth: {viewer_id}")
+                pass  # Debug output removed
             except:
-                print("[WARNING] DEBUG: No valid auth token for viewer")
+                pass  # Debug output removed
                 pass
         
         # First get user ID from username
         profile = auth_client.get_user_profile_by_username(username, viewer_id)
         if not profile:
-            print(f"[ERROR] DEBUG: Profile not found for username: {username}")
+            pass  # Debug output removed
             return jsonify({'error': 'User not found or profile is private'}), 404
             
         user_id = profile['id']
-        print(f"[SUCCESS] DEBUG: Resolved username '{username}' to user_id: {user_id}")
-        
+        pass  # Debug output removed
         # Get pagination parameters
         limit = min(int(request.args.get('limit', 20)), 50)
         offset = int(request.args.get('offset', 0))
@@ -5968,23 +5925,22 @@ def get_user_activity(username):
         
         # Use the same get_recent_user_activity function that dashboard uses
         # This ensures consistency between dashboard and profile page
-        print(f"🔍 DEBUG: Fetching activities for user_id: {user_id}, limit: {limit}")
+        pass  # Debug output removed
         activities = get_recent_user_activity(user_id, limit)
-        print(f"📊 DEBUG: Retrieved {len(activities)} activities from get_recent_user_activity")
+        # Debug: 📊 DEBUG: Retrieved {len(activities} activities from get_recent_user_activity")
         
         # Log first few activities for debugging
         if activities:
-            print(f"🎯 DEBUG: First activity: {activities[0]}")
+            pass  # Debug output removed
         else:
-            print("[WARNING] DEBUG: No activities returned from get_recent_user_activity")
-        
+            pass  # Debug output removed
         # Filter activities based on offset for pagination
         if offset > 0 and offset < len(activities):
             activities = activities[offset:]
-            print(f"📄 DEBUG: After offset filtering, {len(activities)} activities remain")
+            # Debug: 📄 DEBUG: After offset filtering, {len(activities} activities remain")
         elif offset >= len(activities):
             activities = []
-            print(f"[WARNING] DEBUG: Offset {offset} >= total activities {len(activities)}, returning empty")
+            # Debug: [WARNING] DEBUG: Offset {offset} >= total activities {len(activities}, returning empty")
         
         # Get total count from user_activity table for accurate pagination
         count_response = requests.get(
@@ -6000,24 +5956,24 @@ def get_user_activity(username):
         total_count = 0
         if count_response.status_code == 200 and count_response.headers.get('content-range'):
             content_range = count_response.headers.get('content-range', '')
-            print(f"🔢 DEBUG: content-range header: '{content_range}'")
+            pass  # Debug output removed
             if '/' in content_range:
                 count_part = content_range.split('/')[-1]
-                print(f"🔢 DEBUG: count_part: '{count_part}'")
+                pass  # Debug output removed
                 # Handle cases where count might be '*' (unknown count)
                 if count_part != '*' and count_part.isdigit():
                     total_count = int(count_part)
                 else:
                     # Fallback: use the number of activities we actually got
                     total_count = len(activities)
-                    print(f"🔢 DEBUG: Using fallback count: {total_count}")
+                    pass  # Debug output removed
             else:
                 # No proper content-range, use activities length as fallback
                 total_count = len(activities)
         else:
             # Count request failed or no content-range header, use activities length as fallback
             total_count = len(activities)
-            print(f"🔢 DEBUG: Count request failed (status: {count_response.status_code}), using fallback: {total_count}")
+            # Debug: 🔢 DEBUG: Count request failed (status: {count_response.status_code}, using fallback: {total_count}")
         
         # Debug the final response
         response_data = {
@@ -6030,15 +5986,16 @@ def get_user_activity(username):
             }
         }
         
-        print(f"📦 DEBUG: Returning {len(activities)} activities to frontend")
-        print(f"📊 DEBUG: Pagination - total: {total_count}, limit: {limit}, offset: {offset}")
+        # Debug: Returning activities to frontend
+        pass  # Debug output removed
         if activities:
-            print(f"🎯 DEBUG: Sample activity structure: {list(activities[0].keys()) if activities else 'N/A'}")
+            # Debug: Sample activity structure check removed
+            pass
         
         return jsonify(response_data)
             
     except Exception as e:
-        print(f"Error getting user activity: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/follow/<username>', methods=['POST'])
@@ -6088,7 +6045,7 @@ def toggle_follow_user(username):
             return jsonify(result), 400
             
     except Exception as e:
-        print(f"Error toggling follow: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/privacy-settings', methods=['PUT'])
@@ -6156,7 +6113,7 @@ def update_privacy_settings():
             return jsonify({'error': 'Failed to update privacy settings'}), 500
             
     except Exception as e:
-        print(f"Error updating privacy settings: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/privacy-settings', methods=['GET'])
@@ -6216,7 +6173,7 @@ def get_privacy_settings():
             return jsonify(default_settings)
             
     except Exception as e:
-        print(f"Error getting privacy settings: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/custom', methods=['POST'])
@@ -6276,7 +6233,7 @@ def create_custom_list():
             return jsonify({'error': 'Failed to create custom list'}), 500
             
     except Exception as e:
-        print(f"Error creating custom list: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/my-lists', methods=['GET'])
@@ -6354,7 +6311,7 @@ def get_my_custom_lists():
             return jsonify({'error': 'Failed to retrieve custom lists'}), 500
             
     except Exception as e:
-        print(f"Error getting user custom lists: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 # Add route to match frontend expectation
@@ -6414,7 +6371,7 @@ def get_user_lists():
             return jsonify({'error': 'Failed to retrieve custom lists'}), 500
             
     except Exception as e:
-        print(f"Error getting user custom lists from /api/auth/lists: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/debug/test-method', methods=['GET'])
@@ -6493,16 +6450,14 @@ def setup_privacy_test_data():
         import uuid
         from datetime import datetime, timedelta
         
-        print("🔧 Starting setup_privacy_test_data function")
-        
+        pass  # Debug output removed
         # Generate test user data
         test_users = {}
         test_lists = {}
         
         # JWT secret for test tokens (same as app config)
         jwt_secret = os.getenv('JWT_SECRET_KEY', 'test-jwt-secret-for-privacy-tests')
-        print(f"🔑 JWT secret configured: {jwt_secret[:15]}..." if jwt_secret else "[ERROR] No JWT secret found")
-        
+        pass  # Debug output removed
         # Define test users with different privacy settings
         user_configs = {
             'viewer': {
@@ -6543,17 +6498,15 @@ def setup_privacy_test_data():
             }
         }
         
-        print(f"👥 Creating {len(user_configs)} test users...")
+        # Debug: 👥 Creating {len(user_configs} test users...")
         
         # Create test users with real JWT tokens
         for user_type, config in user_configs.items():
             try:
-                print(f"[CONFIG] Processing user: {user_type}")
-                
+                pass  # Debug output removed
                 # Generate deterministic but unique user ID
                 user_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"privacy-test-{config['username']}"))
-                print(f"🔢 Generated user_id for {user_type}: {user_id}")
-                
+                pass  # Debug output removed
                 # Generate real JWT token for this test user
                 token_payload = {
                     'user_id': user_id,
@@ -6572,8 +6525,7 @@ def setup_privacy_test_data():
                 
                 # Create real JWT token
                 auth_token = jwt.encode(token_payload, jwt_secret, algorithm='HS256')
-                print(f"🎫 Generated JWT token for {user_type}: {auth_token[:20]}...")
-                
+                pass  # Debug output removed
                 # Store complete user data
                 test_users[user_type] = {
                     'id': user_id,
@@ -6582,12 +6534,10 @@ def setup_privacy_test_data():
                     'authToken': auth_token,
                     'privacy': config['privacy']
                 }
-                print(f"[SUCCESS] Successfully created test user: {user_type}")
-                
+                pass  # Debug output removed
             except Exception as user_error:
-                print(f"[ERROR] CRITICAL ERROR creating test user {user_type}: {user_error}")
-                import traceback
-                traceback.print_exc()
+                pass  # Debug output removed
+                pass  # Exception traceback removed
                 
                 # Create fallback user data to prevent total failure
                 fallback_user_id = f"fallback-{user_type}-{uuid.uuid4().hex[:8]}"
@@ -6600,13 +6550,12 @@ def setup_privacy_test_data():
                     'authToken': fallback_token,
                     'privacy': config['privacy']
                 }
-                print(f"🔄 Created fallback user for {user_type}")
-        
-        print(f"📊 User creation completed. Created {len(test_users)} users: {list(test_users.keys())}")
+                pass  # Debug output removed
+        # Debug: 📊 User creation completed. Created {len(test_users} users: {list(test_users.keys())}")
         
         # Validate that we have users
         if not test_users:
-            print("[WARNING] No users were created - adding emergency fallback users...")
+            pass  # Debug output removed
             test_users = {
                 'viewer': {
                     'id': 'emergency-viewer-id',
@@ -6637,10 +6586,10 @@ def setup_privacy_test_data():
                     'privacy': {'profile_visibility': 'friends_only', 'list_visibility': 'friends_only', 'activity_visibility': 'friends_only'}
                 }
             }
-            print(f"🚨 Added emergency fallback users: {list(test_users.keys())}")
+            # Debug: 🚨 Added emergency fallback users: {list(test_users.keys()}")
         
-        print(f"🎯 Final test_users object contains: {list(test_users.keys())}")
-        print(f"📝 First user sample: {list(test_users.values())[0] if test_users else 'None'}")
+        # Debug: 🎯 Final test_users object contains: {list(test_users.keys()}")
+        # Debug: 📝 First user sample: {list(test_users.values()[0] if test_users else 'None'}")
         
         response = {
             'status': 'success',
@@ -6655,13 +6604,12 @@ def setup_privacy_test_data():
             }
         }
         
-        print(f"📤 Returning response with {len(test_users)} users")
+        # Debug: 📤 Returning response with {len(test_users} users")
         return jsonify(response), 200
         
     except Exception as e:
-        print(f"💥 CRITICAL ERROR in setup_privacy_test_data: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         
         return jsonify({
             'status': 'error',
@@ -6707,8 +6655,7 @@ def cleanup_privacy_test_data():
                     # If no auth_client, just mark as successful for test purposes
                     cleanup_results['users_deleted'] += 1
             except Exception as user_cleanup_error:
-                print(f"Error cleaning up user {username}: {user_cleanup_error}")
-        
+                pass  # Debug output removed
         return jsonify({
             'status': 'success',
             'cleanup_results': cleanup_results,
@@ -6921,9 +6868,8 @@ def get_public_user_stats_by_id(user_id):
         }), 200
         
     except Exception as e:
-        print(f"Error getting public user stats: {e}")
-        import traceback
-        traceback.print_exc()
+        pass  # Debug output removed
+        pass  # Exception traceback removed
         return jsonify({'error': 'Failed to retrieve user statistics'}), 500
 
 @app.route('/api/cache/status', methods=['GET'])
@@ -6963,7 +6909,7 @@ def get_cache_status_endpoint():
         status = get_cache_status()
         return jsonify(status), 200
     except Exception as e:
-        print(f"Error getting cache status: {e}")
+        pass  # Debug output removed
         return jsonify({
             'connected': False,
             'error': str(e),
@@ -7094,7 +7040,7 @@ def discover_lists():
             return jsonify({'error': 'Authentication client not available'}), 500
             
         if not hasattr(auth_client, 'discover_lists'):
-            print(f"[ERROR] ERROR: auth_client ({type(auth_client)}) does not have discover_lists method")
+            # Debug: [ERROR] ERROR: auth_client ({type(auth_client}) does not have discover_lists method")
             return jsonify({'error': 'Lists discovery feature not available'}), 500
             
         # Get user_id from auth context if available (optional authentication)
@@ -7113,7 +7059,7 @@ def discover_lists():
         return jsonify(result)
         
     except Exception as e:
-        print(f"Error discovering lists: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/lists/<int:list_id>', methods=['GET'])
@@ -7173,7 +7119,7 @@ def get_public_list_details(list_id):
         return jsonify(result)
         
     except Exception as e:
-        print(f"Error getting public list details: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/lists/<int:list_id>/items', methods=['GET'])
@@ -7215,7 +7161,7 @@ def get_public_list_items(list_id):
         return jsonify(result)
         
     except Exception as e:
-        print(f"Error getting public list items: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/reorder', methods=['POST'])
@@ -7304,24 +7250,24 @@ def reorder_list_items(list_id):
                     }), 409
                     
             except ValueError as ve:
-                print(f"Invalid timestamp format: {ve}")
+                pass  # Debug output removed
                 return jsonify({'error': 'Invalid last_updated timestamp format. Use ISO 8601 format.'}), 400
             except Exception as ce:
-                print(f"Conflict check error: {ce}")
+                pass  # Debug output removed
                 # Continue with reorder if conflict check fails (graceful degradation)
                 pass
         
         # Check if method exists and reload if necessary
         if not hasattr(supabase_client, 'reorder_list_items'):
-            print("[WARNING] reorder_list_items method not found, attempting to reinitialize client...")
+            pass  # Debug output removed
             try:
                 import importlib
                 import supabase_client as sc_module
                 importlib.reload(sc_module)
                 supabase_client = sc_module.SupabaseClient()
-                print("[SUCCESS] SupabaseClient reinitialized successfully")
+                pass  # Debug output removed
             except Exception as e:
-                print(f"[ERROR] Failed to reinitialize SupabaseClient: {e}")
+                pass  # Debug output removed
                 return jsonify({'error': 'Method not available, please restart the server'}), 500
         
         success = supabase_client.reorder_list_items(list_id, user_id, items)
@@ -7338,7 +7284,7 @@ def reorder_list_items(list_id):
             return jsonify({'error': 'Failed to reorder list items or not authorized'}), 403
             
     except Exception as e:
-        print(f"Error reordering list items: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
@@ -7364,7 +7310,7 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
             
         return True
     except Exception as e:
-        print(f"Error invalidating recommendation cache: {e}")
+        pass  # Debug output removed
         return False
 
 # Global storage for user feedback (in production, this would be in a database)
@@ -7379,8 +7325,7 @@ def add_user_dismissed_item(user_id: str, item_uid: str):
     if user_id not in _user_dismissed_items:
         _user_dismissed_items[user_id] = set()
     _user_dismissed_items[user_id].add(item_uid)
-    print(f"📝 Added {item_uid} to dismissed items for user {user_id}")
-
+    pass  # Debug output removed
 @app.route('/api/lists/<int:list_id>/comments', methods=['GET'])
 def get_list_comments(list_id):
     """
@@ -7426,7 +7371,7 @@ def get_list_comments(list_id):
         return jsonify(result)
         
     except Exception as e:
-        print(f"Error getting list comments: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/lists/<int:list_id>/comments', methods=['POST'])
@@ -7485,7 +7430,7 @@ def create_list_comment(list_id):
         return jsonify(comment), 201
         
     except Exception as e:
-        print(f"Error creating list comment: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/search', methods=['GET'])
@@ -7517,12 +7462,12 @@ def search_users():
         
         # Check if supabase_client is available and has search_users method
         if supabase_client is None or not hasattr(supabase_client, 'search_users'):
-            print("Error: supabase_client is not ready or missing 'search_users' — reinitializing...")
+            pass  # Debug output removed
             try:
                 supabase_client = SupabaseClient()
-                print("[SUCCESS] Supabase client (with search_users) reinitialized successfully")
+                # Debug: [SUCCESS] Supabase client (with search_users reinitialized successfully")
             except Exception as init_error:
-                print(f"[ERROR] Failed to reinitialize Supabase client: {init_error}")
+                pass  # Debug output removed
                 return jsonify({
                     'error': 'Database service temporarily unavailable',
                     'users': [],
@@ -7551,7 +7496,7 @@ def search_users():
         return jsonify(result)
         
     except Exception as e:
-        print(f"Error searching users: {e}")
+        pass  # Debug output removed
         return jsonify({
             'error': 'Failed to search users',
             'users': [],
@@ -7607,7 +7552,7 @@ def get_activity_feed():
         return jsonify(result)
         
     except Exception as e:
-        print(f"Error getting activity feed: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/lists/popular', methods=['GET'])
@@ -7690,16 +7635,14 @@ def get_popular_lists():
                         'from_cache': True
                     })
         except Exception as cache_error:
-            print(f"Cache read error: {cache_error}")
-        
+            pass  # Debug output removed
         # If cache is not available or stale, trigger background calculation
         try:
             from tasks.recommendation_tasks import calculate_popular_lists
             task_result = calculate_popular_lists.delay()
-            print(f"Triggered popular lists calculation task: {task_result.id}")
+            pass  # Debug output removed
         except Exception as task_error:
-            print(f"Failed to trigger background task: {task_error}")
-        
+            pass  # Debug output removed
         # Return empty result with message about background processing
         return jsonify({
             'lists': [],
@@ -7716,7 +7659,7 @@ def get_popular_lists():
         })
         
     except Exception as e:
-        print(f"Error getting popular lists: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/recommended-lists', methods=['GET'])
@@ -7806,16 +7749,14 @@ def get_recommended_lists():
                             'from_cache': True
                         })
             except Exception as cache_error:
-                print(f"Cache read error: {cache_error}")
-        
+                pass  # Debug output removed
         # If cache is not available, stale, or force refresh requested, trigger background calculation
         try:
             from tasks.recommendation_tasks import generate_community_recommendations
             task_result = generate_community_recommendations.delay(user_id)
-            print(f"Triggered community recommendations task for user {user_id}: {task_result.id}")
+            pass  # Debug output removed
         except Exception as task_error:
-            print(f"Failed to trigger background task: {task_error}")
-        
+            pass  # Debug output removed
         # Return empty result with message about background processing
         return jsonify({
             'recommendations': [],
@@ -7832,7 +7773,7 @@ def get_recommended_lists():
         })
         
     except Exception as e:
-        print(f"Error getting recommended lists: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/notifications', methods=['GET'])
@@ -7893,7 +7834,7 @@ def get_notifications():
         return jsonify(result)
         
     except Exception as e:
-        print(f"Error getting notifications: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/notifications/<int:notification_id>/read', methods=['PATCH'])
@@ -7931,7 +7872,7 @@ def mark_notification_read(notification_id):
             return jsonify({'error': 'Failed to mark notification as read or not found'}), 404
             
     except Exception as e:
-        print(f"Error marking notification as read: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/notifications/read-all', methods=['PATCH'])
@@ -7963,7 +7904,7 @@ def mark_all_notifications_read():
             return jsonify({'error': 'Failed to mark notifications as read'}), 500
             
     except Exception as e:
-        print(f"Error marking all notifications as read: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 # =============================================================================
@@ -8047,7 +7988,7 @@ def create_review():
             return jsonify({'error': 'Failed to create review. You may have already reviewed this item.'}), 400
         
     except Exception as e:
-        print(f"Error creating review: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reviews/<item_uid>', methods=['GET'])
@@ -8100,7 +8041,7 @@ def get_reviews_for_item(item_uid):
         return jsonify(result)
         
     except Exception as e:
-        print(f"Error getting reviews: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reviews/<int:review_id>/vote', methods=['POST'])
@@ -8160,7 +8101,7 @@ def vote_on_review(review_id):
             return jsonify({'error': 'Failed to record vote. You may have already voted on this review.'}), 409
         
     except Exception as e:
-        print(f"Error voting on review: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reviews/<int:review_id>/votes', methods=['GET'])
@@ -8197,7 +8138,7 @@ def get_review_vote_stats(review_id):
         return jsonify(stats)
         
     except Exception as e:
-        print(f"Error getting review vote stats: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reviews/<int:review_id>/report', methods=['POST'])
@@ -8266,7 +8207,7 @@ def report_review(review_id):
             return jsonify({'error': 'Failed to submit report'}), 500
         
     except Exception as e:
-        print(f"Error reporting review: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reviews/<int:review_id>', methods=['PUT'])
@@ -8321,7 +8262,7 @@ def update_review(review_id):
             return jsonify({'error': 'Failed to update review. Review not found or you are not the author.'}), 404
         
     except Exception as e:
-        print(f"Error updating review: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/reviews/<int:review_id>', methods=['DELETE'])
@@ -8359,7 +8300,7 @@ def delete_review(review_id):
             return jsonify({'error': 'Failed to delete review. Review not found or you are not the author.'}), 404
         
     except Exception as e:
-        print(f"Error deleting review: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 def enhance_comment_with_moderation_cache(comment: Dict[str, Any], viewer_id: Optional[str] = None, is_moderator: bool = False) -> Dict[str, Any]:
@@ -8485,7 +8426,7 @@ def create_comment():
         auto_moderate, moderation_details = should_auto_moderate(content, 'comment')
         if auto_moderate:
             # Log the blocked content attempt
-            print(f"Auto-moderated comment from user {user_id}: {moderation_details}")
+            pass  # Debug output removed
             return jsonify({
                 'error': 'Your comment violates our community guidelines and cannot be posted.',
                 'details': 'Please review our community standards and try again with appropriate content.'
@@ -8541,10 +8482,9 @@ def create_comment():
                     }
                     
                     supabase_client.table('comment_reports').insert(auto_report_data).execute()
-                    print(f"Auto-flagged comment {comment['id']} for review: {flag_details}")
-                    
+                    pass  # Debug output removed
                 except Exception as e:
-                    print(f"Error creating auto-report for comment {comment['id']}: {e}")
+                    pass  # Debug output removed
                     # Don't fail the comment creation if reporting fails
             
             # Get user profile for response
@@ -8570,8 +8510,7 @@ def create_comment():
                         }
                         supabase_client.table('notifications').insert(notification_data).execute()
                     except Exception as e:
-                        print(f"Error sending mention notification: {e}")
-            
+                        pass  # Debug output removed
             return jsonify({
                 'message': 'Comment created successfully',
                 'comment': comment
@@ -8580,7 +8519,7 @@ def create_comment():
             return jsonify({'error': 'Failed to create comment'}), 500
             
     except Exception as e:
-        print(f"Error creating comment: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/comments/<parent_type>/<parent_id>', methods=['GET'])
@@ -8732,7 +8671,7 @@ def get_comments(parent_type, parent_id):
         }), 200
         
     except Exception as e:
-        print(f"Error fetching comments: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/comments/<int:comment_id>/replies', methods=['GET'])
@@ -8798,7 +8737,7 @@ def get_comment_replies(comment_id):
         }), 200
         
     except Exception as e:
-        print(f"Error fetching comment replies: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/comments/<int:comment_id>/react', methods=['POST'])
@@ -8893,7 +8832,7 @@ def react_to_comment(comment_id):
         }), 200
         
     except Exception as e:
-        print(f"Error reacting to comment: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/comments/<int:comment_id>', methods=['PUT'])
@@ -8971,7 +8910,7 @@ def update_comment(comment_id):
             return jsonify({'error': 'Failed to update comment'}), 500
             
     except Exception as e:
-        print(f"Error updating comment: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/comments/<int:comment_id>', methods=['DELETE'])
@@ -9025,7 +8964,7 @@ def delete_comment(comment_id):
             return jsonify({'error': 'Failed to delete comment'}), 500
             
     except Exception as e:
-        print(f"Error deleting comment: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/comments/<int:comment_id>/report', methods=['POST'])
@@ -9105,7 +9044,7 @@ def report_comment(comment_id):
             return jsonify({'error': 'Failed to report comment'}), 500
             
     except Exception as e:
-        print(f"Error reporting comment: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 
@@ -9148,7 +9087,7 @@ def require_moderator(f):
             return f(*args, **kwargs)
             
         except Exception as e:
-            print(f"Error checking moderator role: {e}")
+            pass  # Debug output removed
             return jsonify({'error': 'Permission check failed'}), 500
     
     return decorated_function
@@ -9214,7 +9153,7 @@ def get_user_reputation(user_id):
         return jsonify(reputation_data), 200
         
     except Exception as e:
-        print(f"Error getting user reputation: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<user_id>/reputation/recalculate', methods=['POST'])
@@ -9252,7 +9191,7 @@ def recalculate_user_reputation(user_id):
             return jsonify({'error': 'Failed to recalculate reputation'}), 500
             
     except Exception as e:
-        print(f"Error recalculating user reputation: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/appeals', methods=['POST'])
@@ -9331,8 +9270,7 @@ def create_appeal():
                     supabase_client.table('user_notifications').insert(notifications).execute()
                     
             except Exception as e:
-                print(f"Error creating appeal notifications: {e}")
-            
+                pass  # Debug output removed
             return jsonify({
                 'message': 'Appeal created successfully',
                 'appeal': appeal
@@ -9341,7 +9279,7 @@ def create_appeal():
             return jsonify({'error': 'Failed to create appeal'}), 500
             
     except Exception as e:
-        print(f"Error creating appeal: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/appeals', methods=['GET'])
@@ -9415,7 +9353,7 @@ def get_user_appeals():
         }), 200
         
     except Exception as e:
-        print(f"Error getting appeals: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/appeals/<int:appeal_id>', methods=['PUT'])
@@ -9475,8 +9413,7 @@ def update_appeal(appeal_id):
                     
                     supabase_client.table('user_notifications').insert(notification_data).execute()
             except Exception as e:
-                print(f"Error creating appeal resolution notification: {e}")
-            
+                pass  # Debug output removed
             # Log the moderation action
             try:
                 log_moderation_action(
@@ -9492,8 +9429,7 @@ def update_appeal(appeal_id):
                     }
                 )
             except Exception as e:
-                print(f"Error logging appeal action: {e}")
-            
+                pass  # Debug output removed
             return jsonify({
                 'message': 'Appeal updated successfully',
                 'appeal': appeal
@@ -9502,7 +9438,7 @@ def update_appeal(appeal_id):
             return jsonify({'error': 'Appeal not found'}), 404
             
     except Exception as e:
-        print(f"Error updating appeal: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/notifications', methods=['GET'])
@@ -9560,7 +9496,7 @@ def get_user_notifications():
         }), 200
         
     except Exception as e:
-        print(f"Error getting notifications: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 
@@ -9610,7 +9546,7 @@ def get_notification_preferences(user_id):
             return jsonify(default_prefs), 200
             
     except Exception as e:
-        print(f"Error getting notification preferences: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<user_id>/notification-preferences', methods=['PUT'])
@@ -9646,7 +9582,7 @@ def update_notification_preferences(user_id):
             return jsonify({'error': 'Failed to update preferences'}), 500
             
     except Exception as e:
-        print(f"Error updating notification preferences: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 # ================================
@@ -9836,7 +9772,7 @@ def get_moderation_stats():
         return jsonify(stats), 200
         
     except Exception as e:
-        print(f"Error fetching moderation stats: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/moderation/reports', methods=['GET'])
@@ -10037,7 +9973,7 @@ def get_moderation_reports():
         }), 200
         
     except Exception as e:
-        print(f"Error getting moderation reports: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/moderation/reports/<int:report_id>', methods=['PUT'])
@@ -10184,7 +10120,7 @@ def update_moderation_report(report_id):
         }), 200
         
     except Exception as e:
-        print(f"Error updating moderation report: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/moderation/audit-log', methods=['GET'])
@@ -10282,7 +10218,7 @@ def get_moderation_audit_log():
         }), 200
         
     except Exception as e:
-        print(f"Error getting moderation audit log: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 def log_moderation_action(moderator_id: str, action_type: str, target_type: str, 
@@ -10311,8 +10247,7 @@ def log_moderation_action(moderator_id: str, action_type: str, target_type: str,
         supabase_client.table('moderation_audit_log').insert(log_data).execute()
         
     except Exception as e:
-        print(f"Error logging moderation action: {e}")
-
+        pass  # Debug output removed
 @app.route('/api/auth/notifications/stream')
 def notification_stream():
     """
@@ -10406,14 +10341,14 @@ def notification_stream():
                     time.sleep(30)
                     
                 except Exception as e:
-                    print(f"Error in notification stream for user {user_id}: {e}")
+                    pass  # Debug output removed
                     # Send error event and close connection
                     yield f"data: {json.dumps({'type': 'error', 'message': 'Connection error'})}\n\n"
                     break
                     
         except GeneratorExit:
             # Client disconnected, cleanup
-            print(f"Notification stream closed for user {user_id}")
+            pass  # Debug output removed
             return
     
     return Response(
@@ -10446,7 +10381,7 @@ def get_custom_list_details_route(list_id):
 
         return jsonify(result), 200
     except Exception as e:
-        print(f"Error retrieving custom list details: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>', methods=['PUT'])
@@ -10482,7 +10417,7 @@ def update_custom_list_route(list_id):
             return jsonify({'error': 'Failed to update list or list not found'}), 404
             
     except Exception as e:
-        print(f"Error updating custom list: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/items', methods=['GET', 'POST'])
@@ -10529,7 +10464,7 @@ def get_custom_list_items_route(list_id):
         items = supabase_client.get_custom_list_items(list_id)
         return jsonify(items), 200
     except Exception as e:
-        print(f"Error handling custom list items: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>', methods=['DELETE'])
@@ -10586,8 +10521,7 @@ def delete_custom_list(list_id):
             params={'list_id': f'eq.{list_id}'}
         )
         if response.status_code not in [200, 204]:
-            print(f"Warning: Failed to delete list items: {response.status_code}")
-        
+            pass  # Debug output removed
         # Delete list comments
         response = requests.delete(
             f"{supabase_client.base_url}/rest/v1/list_comments",
@@ -10595,8 +10529,7 @@ def delete_custom_list(list_id):
             params={'list_id': f'eq.{list_id}'}
         )
         if response.status_code not in [200, 204]:
-            print(f"Warning: Failed to delete list comments: {response.status_code}")
-        
+            pass  # Debug output removed
         # Delete list followers
         response = requests.delete(
             f"{supabase_client.base_url}/rest/v1/list_followers",
@@ -10604,8 +10537,7 @@ def delete_custom_list(list_id):
             params={'list_id': f'eq.{list_id}'}
         )
         if response.status_code not in [200, 204]:
-            print(f"Warning: Failed to delete list followers: {response.status_code}")
-        
+            pass  # Debug output removed
         # Finally delete the list itself
         response = requests.delete(
             f"{supabase_client.base_url}/rest/v1/custom_lists",
@@ -10614,13 +10546,13 @@ def delete_custom_list(list_id):
         )
         
         if response.status_code not in [200, 204]:
-            print(f"Failed to delete list: {response.status_code} - {response.text}")
+            pass  # Debug output removed
             return jsonify({'error': 'Failed to delete list'}), 500
             
         return jsonify({'message': 'List deleted successfully'}), 200
         
     except Exception as e:
-        print(f"Error deleting custom list: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/duplicate', methods=['POST'])
@@ -10737,7 +10669,7 @@ def duplicate_custom_list(list_id):
         }), 201
         
     except Exception as e:
-        print(f"Error duplicating custom list: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/items/batch', methods=['POST'])
@@ -10819,7 +10751,7 @@ def add_items_to_list_batch(list_id):
         }), 200
         
     except Exception as e:
-        print(f"Error adding items to list: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/items/<int:item_id>', methods=['PUT'])
@@ -10865,11 +10797,10 @@ def update_list_item(list_id, item_id):
         
         # Check if supabase_client is available
         if supabase_client is None:
-            print("Error: supabase_client is None")
+            pass  # Debug output removed
             return jsonify({'error': 'Database client not initialized'}), 500
         
-        print(f"Updating list item - list_id: {list_id}, item_id: {item_id}, user_id: {user_id}, data: {data}")
-        
+        pass  # Debug output removed
         # Temporary workaround: Direct database update since update_list_item method has loading issues
         # First verify list ownership
         list_check = requests.get(
@@ -10894,8 +10825,7 @@ def update_list_item(list_id, item_id):
             filtered_data['position'] = data['position']
         
         # Skip personal_rating and status as they don't exist in custom_list_items table
-        print(f"Filtered update data: {filtered_data}")
-        
+        pass  # Debug output removed
         # Update the custom_list_items table with only valid fields
         update_response = requests.patch(
             f"{supabase_client.base_url}/rest/v1/custom_list_items",
@@ -10907,9 +10837,8 @@ def update_list_item(list_id, item_id):
             json=filtered_data
         )
         
-        print(f"Update response status: {update_response.status_code}")
-        print(f"Update response body: {update_response.text}")
-        
+        pass  # Debug output removed
+        pass  # Debug output removed
         success = update_response.status_code == 200
         
         if success:
@@ -10921,7 +10850,7 @@ def update_list_item(list_id, item_id):
             return jsonify({'error': 'Failed to update item or not authorized'}), 403
             
     except Exception as e:
-        print(f"Error updating list item: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/items/<int:item_id>', methods=['DELETE'])
@@ -10967,7 +10896,7 @@ def remove_item_from_list(list_id, item_id):
         return jsonify({'message': 'Item removed successfully'}), 200
         
     except Exception as e:
-        print(f"Error removing item from list: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/batch-operations', methods=['POST'])
@@ -11075,7 +11004,8 @@ def execute_batch_operation(list_id):
             )
         except Exception as log_error:
             # Don't fail the operation if logging fails
-            print(f"Failed to log batch operation: {str(log_error)}")
+            # Debug: Failed to log batch operation
+            pass
         
         # Return result
         status_code = 200 if result.get('success') else 400
@@ -11083,7 +11013,7 @@ def execute_batch_operation(list_id):
         return jsonify(result), status_code
         
     except Exception as e:
-        print(f"Error executing batch operation: {str(e)}")
+        # Debug: Error executing batch operation: {str(e}")
         return jsonify({
             "success": False,
             "error": f"Failed to execute batch operation: {str(e)}",
@@ -11133,7 +11063,7 @@ def get_filter_presets():
         return jsonify(all_presets), 200
         
     except Exception as e:
-        print(f"Error fetching filter presets: {str(e)}")
+        # Debug: Error fetching filter presets: {str(e}")
         return jsonify({'error': 'Failed to fetch filter presets'}), 500
 
 @app.route('/api/auth/filter-presets', methods=['POST'])
@@ -11181,7 +11111,7 @@ def create_filter_preset():
             return jsonify({'error': 'Failed to create filter preset'}), 500
             
     except Exception as e:
-        print(f"Error creating filter preset: {str(e)}")
+        # Debug: Error creating filter preset: {str(e}")
         return jsonify({'error': 'Failed to create filter preset'}), 500
 
 @app.route('/api/auth/filter-presets/<preset_id>/use', methods=['POST'])
@@ -11202,7 +11132,7 @@ def use_filter_preset(preset_id):
         return jsonify({'success': True}), 200
         
     except Exception as e:
-        print(f"Error updating filter preset usage: {str(e)}")
+        # Debug: Error updating filter preset usage: {str(e}")
         return jsonify({'error': 'Failed to update usage count'}), 500
 
 @app.route('/api/auth/filter-presets/<preset_id>', methods=['DELETE'])
@@ -11225,7 +11155,7 @@ def delete_filter_preset(preset_id):
         return jsonify({'success': True}), 200
         
     except Exception as e:
-        print(f"Error deleting filter preset: {str(e)}")
+        # Debug: Error deleting filter preset: {str(e}")
         return jsonify({'error': 'Failed to delete filter preset'}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/analytics', methods=['GET'])
@@ -11269,7 +11199,7 @@ def get_list_analytics(list_id):
         return jsonify(analytics), 200
         
     except Exception as e:
-        print(f"Error fetching list analytics: {str(e)}")
+        # Debug: Error fetching list analytics: {str(e}")
         return jsonify({'error': 'Failed to fetch analytics'}), 500
 
 def calculate_list_analytics(list_id: str, user_id: str) -> dict:
@@ -11333,7 +11263,7 @@ def calculate_list_analytics(list_id: str, user_id: str) -> dict:
         return analytics
         
     except Exception as e:
-        print(f"Error calculating list analytics: {str(e)}")
+        # Debug: Error calculating list analytics: {str(e}")
         return {'error': 'Failed to calculate analytics'}
 
 def _calculate_completion_stats(items: list) -> dict:
@@ -11645,7 +11575,7 @@ def follow_list(list_id):
         }), 200
         
     except Exception as e:
-        print(f"Error toggling list follow: {e}")
+        pass  # Debug output removed
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/metrics/export', methods=['GET'])

@@ -137,9 +137,9 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities = [] }) => {
               <span className="activity-time">{getTimeAgo(groupedActivity.created_at)}</span>
             </div>
             <div className="activity-group-items">
-              {groupedActivity.items.slice(0, 3).map((item) => (
+              {groupedActivity.items.slice(0, 3).map((item, index) => (
                 <Link
-                  key={item.item_uid}
+                  key={`${item.item_uid}-${index}`}
                   to={`/item/${item.item_uid}`}
                   className="grouped-item-link"
                 >
@@ -179,8 +179,8 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities = [] }) => {
 
   // Memoize virtual grid render function
   const renderVirtualItem = useMemo(() => 
-    (activity: UserActivity | GroupedActivity) => (
-      <ActivityItem key={activity.id} activity={activity} />
+    (activity: UserActivity | GroupedActivity, index: number) => (
+      <ActivityItem key={`${activity.id}-${index}`} activity={activity} />
     ), []
   );
 
@@ -208,8 +208,8 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities = [] }) => {
       ) : (
         // Use regular rendering for small lists
         <div className="activity-list">
-          {processedActivities.map((activity) => (
-            <ActivityItem key={activity.id} activity={activity} />
+          {processedActivities.map((activity, index) => (
+            <ActivityItem key={`${activity.id}-${index}`} activity={activity} />
           ))}
         </div>
       )}

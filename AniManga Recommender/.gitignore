@@ -66,6 +66,7 @@ backend/tests_integration/SETUP.md
 
 backend/app.log
 
+backend/.data_cache
 
 
 .env

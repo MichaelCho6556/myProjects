@@ -26,7 +26,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, AuthError } from "@supabase/supabase-js";
-import { authApi } from "../lib/supabase";
+import { authApi, supabase } from "../lib/supabase";
 
 /**
  * Authentication context interface defining all available authentication methods and state.
@@ -150,24 +150,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Initialize authentication state and set up real-time listeners
   useEffect(() => {
-    // Get initial session from Supabase
-    authApi
-      .getCurrentUser()
-      .then(({ data: { user } }) => {
-        setUser(user);
-        setLoading(false);
-      })
-      .catch(() => {
-        // Handle error gracefully - set loading to false and user to null
+    // Get initial session with token validation from Supabase
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session?.access_token) {
+          setUser(null);
+        } else {
+          setUser(session.user);
+        }
+      } catch (error) {
         setUser(null);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    initializeAuth();
 
     // Listen for authentication state changes (login/logout across tabs)
     const {
       data: { subscription },
     } = authApi.onAuthStateChange((_event: any, session: any) => {
-      setUser(session?.user ?? null);
+      // Only set user if session has valid access token
+      if (session?.access_token) {
+        setUser(session.user);
+      } else {
+        setUser(null);
+      }
       setLoading(false);
     });
 

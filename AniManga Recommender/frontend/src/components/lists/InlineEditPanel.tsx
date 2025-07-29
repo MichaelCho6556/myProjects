@@ -131,7 +131,6 @@ export const InlineEditPanel: React.FC<InlineEditPanelProps> = ({ item, onSave, 
         const mergedData = { ...existingData, ...userItemData };
         localStorage.setItem(storageKey, JSON.stringify(mergedData));
 
-        console.log("Personal tracking data saved locally:", mergedData);
 
         // Also update the item in the parent component's state for immediate UI feedback
         const updatedItemData: Partial<ListItem> = {

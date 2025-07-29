@@ -35,16 +35,6 @@ export const UserProfilePage: React.FC = () => {
     followUser 
   } = useUserProfile(username || "");
 
-  // Debug logging
-  React.useEffect(() => {
-    console.log('🎯 UserProfilePage Debug:', {
-      username,
-      activitiesLoading,
-      activitiesError,
-      activitiesCount: activities?.length || 0,
-      activities: activities
-    });
-  }, [username, activities, activitiesLoading, activitiesError]);
 
   // Redirect if no username provided (moved to useEffect to prevent infinite loops)
   useEffect(() => {

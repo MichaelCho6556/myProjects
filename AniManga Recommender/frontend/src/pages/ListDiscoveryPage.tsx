@@ -244,6 +244,10 @@ export const ListDiscoveryPage: React.FC = () => {
 
         if (filters.search) params.set("search", filters.search);
         if (filters.tags.length > 0) params.set("tags", filters.tags.join(","));
+        if (filters.contentType && filters.contentType !== 'all') params.set('contentType', filters.contentType);
+        if (filters.privacy && filters.privacy !== 'all') params.set('privacy', filters.privacy);
+        if (filters.itemCount && filters.itemCount !== 'all') params.set('itemCount', filters.itemCount);
+        if (filters.followerCount && filters.followerCount !== 'all') params.set('followerCount', filters.followerCount);
 
         // Use authenticated API if user is logged in, otherwise use public fetch
         let result;
@@ -269,9 +273,21 @@ export const ListDiscoveryPage: React.FC = () => {
               }
             );
             if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              // If token is invalid/expired, fallback to anonymous request
+              if (response.status === 401) {
+                const anonResponse = await fetch(
+                  `${API_BASE_URL}/api/lists/discover?${params.toString()}`
+                );
+                if (!anonResponse.ok) {
+                  throw new Error(`HTTP ${anonResponse.status}: ${anonResponse.statusText}`);
+                }
+                result = await anonResponse.json();
+              } else {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+            } else {
+              result = await response.json();
             }
-            result = await response.json();
           } else {
             // Fallback to anonymous request
             const response = await fetch(
@@ -396,28 +412,61 @@ export const ListDiscoveryPage: React.FC = () => {
       return;
     }
 
-    try {
-      // Convert string listId to integer for backend API
-      const numericListId = parseInt(listId, 10);
-      if (isNaN(numericListId)) {
-        throw new Error("Invalid list ID");
-      }
-      
-      const response = await post(`/api/auth/lists/${numericListId}/follow`);
+    // Find the current list to get the username and current follow status
+    const currentList = lists.find(list => list.id === listId);
+    if (!currentList || !currentList.username) {
+      setError("List or username not found");
+      return;
+    }
 
-      // Update the list in the local state to reflect the new follow status
+    // Note: This now tracks whether we're following the USER who created the list
+    const wasFollowing = currentList.isFollowing;
+    const username = currentList.username;
+
+    try {
+      // Optimistic update - update UI immediately for better UX
+      // Update all lists by this user
       setLists((prevLists) =>
         prevLists.map((list) =>
-          list.id === listId
+          list.username === username
             ? {
                 ...list,
-                isFollowing: response.is_following,
-                followersCount: response.followers_count,
+                isFollowing: !(wasFollowing ?? false),
+                // Note: followersCount is for the list, not the user
+                // We keep it unchanged as it reflects list followers
+              }
+            : list
+        )
+      );
+
+      // Call the user follow endpoint instead of list follow
+      const response = await post(`/api/auth/follow/${username}`);
+
+      // Update all lists by this user with actual response data
+      setLists((prevLists) =>
+        prevLists.map((list) =>
+          list.username === username
+            ? {
+                ...list,
+                isFollowing: response.is_following ?? false,
+                // Keep list follower count unchanged
               }
             : list
         )
       );
     } catch (error: any) {
+      // Revert optimistic update on error
+      setLists((prevLists) =>
+        prevLists.map((list) =>
+          list.username === username
+            ? {
+                ...list,
+                isFollowing: wasFollowing ?? false,
+              }
+            : list
+        )
+      );
+
       // TODO: Replace with proper error logging service (e.g., Sentry)
       // You could add a toast notification here for better UX
       setError(
@@ -425,7 +474,7 @@ export const ListDiscoveryPage: React.FC = () => {
           "Failed to update follow status. Please try again."
       );
     }
-  }, [user, post, setLists, setError]);
+  }, [user, post, setLists, setError, lists]);
 
   const handleRetry = useCallback(() => {
     setError(null);

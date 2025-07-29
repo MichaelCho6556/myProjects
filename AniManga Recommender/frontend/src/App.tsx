@@ -11,6 +11,8 @@ import UserListsPage from "./pages/lists/UserListsPage";
 import { MyCustomListsPage } from "./pages/lists/MyCustomListsPage";
 import { CustomListDetailPage } from "./pages/lists/CustomListDetailPage";
 import { UserProfilePage } from "./pages/UserProfilePage";
+import { UserFollowersPage } from "./pages/UserFollowersPage";
+import { UserFollowingPage } from "./pages/UserFollowingPage";
 import { UserSearchPage } from "./pages/UserSearchPage";
 import PrivacySettingsPage from "./pages/PrivacySettingsPage";
 
@@ -44,6 +46,8 @@ const App: React.FC = () => {
                 <Route path="/my-lists" element={<MyCustomListsPage />} />
                 <Route path="/lists/:listId" element={<CustomListDetailPage />} />
                 <Route path="/users/:username" element={<UserProfilePage />} />
+                <Route path="/users/:username/followers" element={<UserFollowersPage />} />
+                <Route path="/users/:username/following" element={<UserFollowingPage />} />
                 <Route path="/search/users" element={<UserSearchPage />} />
                 <Route path="/settings/privacy" element={<PrivacySettingsPage />} />
 

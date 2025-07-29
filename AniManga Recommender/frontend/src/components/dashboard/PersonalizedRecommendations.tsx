@@ -290,7 +290,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
         setRemovedItems((prev) => new Set([...Array.from(prev), itemUid]));
 
         // Show success message
-        console.log(`✅ Marked ${itemUid} as not interested`);
       } catch (err: any) {
         logger.error("Error submitting feedback", {
           error: err?.message || "Unknown error",
@@ -325,7 +324,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
         // Show loading state immediately
         setAddingToList((prev) => new Set([...Array.from(prev), itemUid]));
 
-        console.log(`📝 Adding ${itemTitle} (${itemUid}) to ${status}...`);
 
         // Add item to user's list using the correct endpoint
         await makeAuthenticatedRequest(`/api/auth/user-items/${itemUid}`, {
@@ -353,7 +351,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           }),
         });
 
-        console.log(`✅ Successfully added ${itemTitle} to ${status}`);
 
         // Show success state
         setRecentlyAdded((prev) => new Set([...Array.from(prev), itemUid]));
@@ -372,7 +369,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
 
         // Auto-refresh recommendations after successful addition
         setTimeout(() => {
-          console.log("🔄 Auto-refreshing recommendations after add...");
           fetchRecommendations();
         }, 800); // Increased delay to ensure backend processing
       } catch (err: any) {
@@ -406,9 +402,7 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
   const handleCompletedWithRating = useCallback(
     async (itemUid: string, rating: number, notes: string, sectionType: string) => {
       try {
-        const itemTitle = showRatingModal.itemTitle;
 
-        console.log(`📝 Adding ${itemTitle} (${itemUid}) to completed with rating ${rating}...`);
 
         // Add item to user's list as completed with rating and notes
         await makeAuthenticatedRequest(`/api/auth/user-items/${itemUid}`, {
@@ -439,7 +433,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
           }),
         });
 
-        console.log(`✅ Successfully added ${itemTitle} to completed with rating ${rating}`);
 
         // Close modal first for better UX
         setShowRatingModal({ show: false, itemUid: "", itemTitle: "", sectionType: "" });
@@ -452,7 +445,6 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
 
         // Auto-refresh recommendations after successful addition
         setTimeout(() => {
-          console.log("🔄 Auto-refreshing recommendations after completed add...");
           fetchRecommendations();
         }, 800);
 

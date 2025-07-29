@@ -25,9 +25,7 @@ export const ListGridCard: React.FC<ListGridCardProps> = memo(({
   isAuthenticated = true
 }) => {
   const { user } = useAuth();
-  const [isFollowing, setIsFollowing] = useState(list.isFollowing || false);
   const [isLoading, setIsLoading] = useState(false);
-  const [followersCount, setFollowersCount] = useState(list.followersCount || 0);
 
   // Check if current user is the owner of the list
   const isOwner = user?.id === list.userId;
@@ -41,17 +39,13 @@ export const ListGridCard: React.FC<ListGridCardProps> = memo(({
     setIsLoading(true);
     try {
       await onToggleFollow();
-      const newFollowingState = !isFollowing;
-      setIsFollowing(newFollowingState);
-      setFollowersCount(prev => newFollowingState ? prev + 1 : Math.max(0, prev - 1));
     } catch (error) {
       logger.error('Failed to toggle follow state in ListGridCard', {
         listId: list.id,
         listTitle: list.title,
-        isFollowing,
+        isFollowing: list.isFollowing,
         error: error instanceof Error ? error.message : 'Unknown error'
       }, error instanceof Error ? error : undefined);
-      setFollowersCount(list.followersCount || 0);
     } finally {
       setIsLoading(false);
     }
@@ -161,7 +155,7 @@ export const ListGridCard: React.FC<ListGridCardProps> = memo(({
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-1">
                   <HeartIcon className="w-3.5 h-3.5" />
-                  {followersCount}
+                  {list.followersCount}
                 </span>
                 <span className="text-xs">{formatRelativeTime(list.updatedAt)}</span>
               </div>
@@ -175,7 +169,11 @@ export const ListGridCard: React.FC<ListGridCardProps> = memo(({
           <div className="px-4 pb-4">
             <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
               {/* Creator */}
-              <div className="flex items-center gap-2 flex-1 min-w-0">
+              <Link 
+                to={`/users/${list.username}`}
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity"
+              >
                 <div className={`w-8 h-8 rounded-full ${generateAvatarColor(list.username)} 
                                flex items-center justify-center text-white text-sm font-bold flex-shrink-0`}>
                   {list.username.charAt(0).toUpperCase()}
@@ -183,21 +181,22 @@ export const ListGridCard: React.FC<ListGridCardProps> = memo(({
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
                   {list.username}
                 </span>
-              </div>
+              </Link>
 
-              {/* Follow Button */}
+              {/* Follow Button - Follows the user who created this list */}
               <div className="flex-shrink-0">
                 {!isOwner && isAuthenticated ? (
                   <button
                     onClick={handleFollowClick}
                     disabled={isLoading}
+                    title={list.isFollowing ? `Unfollow @${list.username}` : `Follow @${list.username}`}
                     className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                      isFollowing
+                      list.isFollowing
                         ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
                         : 'bg-blue-600 text-white hover:bg-blue-700'
                     } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    {isLoading ? '...' : isFollowing ? 'Following' : 'Follow'}
+                    {isLoading ? '...' : list.isFollowing ? 'Following' : 'Follow'}
                   </button>
                 ) : !isOwner && !isAuthenticated ? (
                   <Link

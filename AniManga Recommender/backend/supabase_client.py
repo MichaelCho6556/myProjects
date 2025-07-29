@@ -743,7 +743,6 @@ class SupabaseClient:
         if include_relations and len(df) > 0:
             df = self._process_relations(df)
         
-        print(f"✅ DataFrame ready: {len(df):,} items with {df.shape[1]} columns")
         return df
     
     def _process_relations(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1107,14 +1106,12 @@ class SupabaseClient:
             relationships. Use standard pagination methods for user-facing operations.
         """
         
-        print(f"📊 Fetching ALL items with OPTIMIZED relation loading (batch_size={page_size})")
         
         all_items = []
         offset = 0
         
         # Pre-load ALL reference data once (much faster than per-batch)
         if not hasattr(self, '_lookup_cache'):
-            print("📖 Pre-loading ALL reference data...")
             self._lookup_cache = {
                 'media_types': self._get_lookup_dict('media_types'),
                 'genres': self._get_lookup_dict('genres'),
@@ -1123,10 +1120,8 @@ class SupabaseClient:
                 'studios': self._get_lookup_dict('studios'),
                 'authors': self._get_lookup_dict('authors'),
             }
-            print(f"✅ Reference data cached: {sum(len(cache) for cache in self._lookup_cache.values())} total entries")
         
         # Pre-load ALL relation mappings once (major performance boost)
-        print("🔗 Loading all relation mappings...")
         all_relations = {
             'item_genres': self._get_all_relations('item_genres'),
             'item_themes': self._get_all_relations('item_themes'),
@@ -1135,7 +1130,6 @@ class SupabaseClient:
             'item_authors': self._get_all_relations('item_authors'),
         }
         total_relations = sum(len(relations) for relations in all_relations.values())
-        print(f"✅ Cached {total_relations:,} total relations")
         
         batch_number = 0
         while True:
@@ -1153,11 +1147,9 @@ class SupabaseClient:
             all_items.extend(items)
             offset += page_size
             
-            print(f"   ✅ Batch {batch_number}: {len(items)} items (total: {len(all_items)})")
             
             # If we got less than page_size, we've reached the end
             if len(items) < page_size:
-                print(f"   🏁 Reached end of data (last batch had {len(items)} items)")
                 break
                 
             # Safety check - don't fetch more than 100k items to avoid memory issues
@@ -1165,7 +1157,6 @@ class SupabaseClient:
                 print(f"⚠️  Reached safety limit of 100k items")
                 break
         
-        print(f"🚀 OPTIMIZED loading complete! Total items: {len(all_items)} (processed {batch_number} batches)")
         return all_items
 
     def _get_all_relations(self, table_name: str) -> List[Dict]:
@@ -1188,7 +1179,6 @@ class SupabaseClient:
                 batch = response.json()
                 
                 if not batch:
-                    print(f"   ✅ {table_name}: No more data at offset {offset}")
                     break
                     
                 all_relations.extend(batch)
@@ -1205,7 +1195,6 @@ class SupabaseClient:
                 print(f"⚠️  Error loading {table_name} at offset {offset}: {e}")
                 break
         
-        print(f"   ✅ {table_name}: Total loaded: {len(all_relations)} relations")
         return all_relations
 
     def _build_relations_from_cache(self, items: List[Dict], all_relations: Dict[str, List[Dict]]) -> None:
@@ -1405,7 +1394,6 @@ class SupabaseClient:
         Since: 1.0.0
         """
         try:
-            print(f"🔄 Supabase update for user {user_id}, item {item_uid}")
             print(f"📥 Input data: {status_data}")
             
             # First, check if record exists
@@ -1485,7 +1473,6 @@ class SupabaseClient:
             print(f"📨 Response text: {response.text}")
             
             if response.status_code in [200, 201, 204]:
-                print(f"✅ Successfully updated user item!")
                 return {'success': True, 'data': response.json() if response.content else {}}
             else:
                 print(f"❌ Supabase error: {response.status_code} - {response.text}")
@@ -1817,7 +1804,6 @@ class SupabaseClient:
                 return {'lists': [], 'total': 0, 'page': page, 'limit': limit, 'has_more': False}
             
             lists = response.json()
-            print(f"Successfully fetched {len(lists)} custom lists for user {user_id}")
             
             # Transform the data to match frontend expectations
             transformed_lists = []
@@ -1885,9 +1871,7 @@ class SupabaseClient:
                             total_str = content_range.split('/')[-1]
                             if total_str and total_str != '*':
                                 followers_count = int(total_str)
-                    print(f"List {list_item['id']} has {followers_count} followers")
                 except Exception as e:
-                    print(f"Error calculating followers count for list {list_item['id']}: {e}")
                     followers_count = 0
                 
                 transformed_list = {
@@ -2037,7 +2021,6 @@ class SupabaseClient:
             # Verify ownership
             existing_list = self.get_custom_list_details(list_id)
             if not existing_list or existing_list.get('userId') != user_id:
-                print(f"User {user_id} does not own list {list_id}")
                 return None
                 
             # Prepare update data
@@ -2350,7 +2333,6 @@ class SupabaseClient:
             # First verify user has permission to modify this list
             list_details = self.get_custom_list_details(list_id)
             if not list_details or list_details['userId'] != user_id:
-                print(f"User {user_id} does not have permission to modify list {list_id}")
                 return False
             
             # Get current items count to determine starting position
@@ -2450,7 +2432,6 @@ class SupabaseClient:
             # First verify user has permission to modify this list
             list_details = self.get_custom_list_details(list_id)
             if not list_details or list_details['userId'] != user_id:
-                print(f"User {user_id} does not have permission to modify list {list_id}")
                 return False
             
             # Remove the item
@@ -2623,7 +2604,6 @@ class SupabaseClient:
                 stats = stats_response.json()[0]
                 # Check if we have essential stats, if not trigger real-time calculation
                 if not stats.get('favorite_genres') or stats.get('total_anime_watched') is None:
-                    print(f"Stats incomplete for user {user_id}, falling back to real-time calculation")
                     # Import here to avoid circular imports
                     from app import calculate_user_statistics_realtime
                     fresh_stats = calculate_user_statistics_realtime(user_id)
@@ -2631,7 +2611,6 @@ class SupabaseClient:
                         stats.update(fresh_stats)
             else:
                 # No cached stats, use real-time calculation
-                print(f"No cached stats for user {user_id}, using real-time calculation")
                 from app import calculate_user_statistics_realtime
                 stats = calculate_user_statistics_realtime(user_id) or {}
             
@@ -2768,6 +2747,274 @@ class SupabaseClient:
             logger = logging.getLogger(__name__)
             logger.error(f"Error in batch list count query: {e}", exc_info=True)
             return {str(list_id): 0 for list_id in list_ids}
+    
+    def get_user_followers(self, user_id: str, viewer_id: str = None, page: int = 1, limit: int = 20) -> dict:
+        """
+        Get paginated list of followers for a given user.
+        
+        Args:
+            user_id (str): ID of the user whose followers to retrieve
+            viewer_id (str, optional): ID of the viewing user for follow status
+            page (int): Page number (default: 1)
+            limit (int): Items per page (default: 20, max: 50)
+            
+        Returns:
+            dict: Paginated followers data with user details and follow status
+        """
+        try:
+            limit = min(limit, 50)
+            offset = (page - 1) * limit
+            
+            # Get followers first without join
+            followers_response = requests.get(
+                f"{self.base_url}/rest/v1/user_follows",
+                headers={**self.headers, 'Prefer': 'count=exact'},
+                params={
+                    'following_id': f'eq.{user_id}',
+                    'select': 'follower_id,created_at',
+                    'order': 'created_at.desc',
+                    'offset': offset,
+                    'limit': limit
+                }
+            )
+            
+            if followers_response.status_code != 200:
+                logger.error(f"Error fetching followers: {followers_response.status_code}")
+                return {
+                    'followers': [],
+                    'total': 0,
+                    'page': page,
+                    'limit': limit,
+                    'has_more': False
+                }
+            
+            followers_data = followers_response.json()
+            total = int(followers_response.headers.get('Content-Range', '0-0/0').split('/')[-1])
+            
+            # Extract follower IDs
+            follower_ids = [follow['follower_id'] for follow in followers_data]
+            
+            if not follower_ids:
+                return {
+                    'followers': [],
+                    'total': total,
+                    'page': page,
+                    'limit': limit,
+                    'has_more': False
+                }
+            
+            # Get user profiles for followers
+            profiles_response = requests.get(
+                f"{self.base_url}/rest/v1/user_profiles",
+                headers=self.headers,
+                params={
+                    'id': f'in.({",".join(follower_ids)})',
+                    'select': 'id,username,display_name,avatar_url'
+                }
+            )
+            
+            if profiles_response.status_code != 200:
+                print(f"[ERROR] Profiles API error: {profiles_response.text}")
+                return {
+                    'followers': [],
+                    'total': 0,
+                    'page': page,
+                    'limit': limit,
+                    'has_more': False
+                }
+            
+            profiles = profiles_response.json()
+            profiles_dict = {profile['id']: profile for profile in profiles}
+            
+            # Build followers list
+            followers = []
+            for follow in followers_data:
+                follower_id = follow['follower_id']
+                profile = profiles_dict.get(follower_id)
+                if profile:
+                    follower = {
+                        'id': profile['id'],
+                        'username': profile['username'],
+                        'display_name': profile.get('display_name'),
+                        'avatar_url': profile.get('avatar_url'),
+                        'followed_at': follow['created_at'],
+                        'is_following': False,
+                        'is_mutual': False
+                    }
+                    followers.append(follower)
+            
+            # If viewer is authenticated, check follow relationships
+            if viewer_id and follower_ids:
+                # Check which followers the viewer is following
+                viewer_following_response = requests.get(
+                    f"{self.base_url}/rest/v1/user_follows",
+                    headers=self.headers,
+                    params={
+                        'follower_id': f'eq.{viewer_id}',
+                        'following_id': f'in.({','.join(follower_ids)})',
+                        'select': 'following_id'
+                    }
+                )
+                
+                if viewer_following_response.status_code == 200:
+                    viewer_following = set(f['following_id'] for f in viewer_following_response.json())
+                    
+                    # Update follow status for each follower
+                    for follower in followers:
+                        if follower['id'] in viewer_following:
+                            follower['is_following'] = True
+                            # Check if mutual (viewer follows them and they follow user)
+                            if viewer_id == user_id:
+                                follower['is_mutual'] = True
+                            else:
+                                # Check if the follower follows the viewer back
+                                mutual_check = requests.get(
+                                    f"{self.base_url}/rest/v1/user_follows",
+                                    headers=self.headers,
+                                    params={
+                                        'follower_id': f'eq.{follower["id"]}',
+                                        'following_id': f'eq.{viewer_id}',
+                                        'select': 'id'
+                                    }
+                                )
+                                if mutual_check.status_code == 200 and mutual_check.json():
+                                    follower['is_mutual'] = True
+            
+            return {
+                'followers': followers,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'has_more': offset + limit < total
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting user followers: {e}")
+            return {
+                'followers': [],
+                'total': 0,
+                'page': page,
+                'limit': limit,
+                'has_more': False
+            }
+    
+    def get_user_following(self, user_id: str, viewer_id: str = None, page: int = 1, limit: int = 20) -> dict:
+        """
+        Get paginated list of users that the specified user is following.
+        
+        Args:
+            user_id (str): ID of the user whose following list to retrieve
+            viewer_id (str, optional): ID of the viewing user for follow status
+            page (int): Page number (default: 1)
+            limit (int): Items per page (default: 20, max: 50)
+            
+        Returns:
+            dict: Paginated following data with user details and follow status
+        """
+        try:
+            limit = min(limit, 50)
+            offset = (page - 1) * limit
+            
+            # Get following with user details
+            following_response = requests.get(
+                f"{self.base_url}/rest/v1/user_follows",
+                headers={**self.headers, 'Prefer': 'count=exact'},
+                params={
+                    'follower_id': f'eq.{user_id}',
+                    'select': 'following_id,created_at,user_profiles!user_follows_following_id_fkey(id,username,display_name,avatar_url)',
+                    'order': 'created_at.desc',
+                    'offset': offset,
+                    'limit': limit
+                }
+            )
+            
+            if following_response.status_code != 200:
+                logger.error(f"Error fetching following: {following_response.status_code}")
+                return {
+                    'following': [],
+                    'total': 0,
+                    'page': page,
+                    'limit': limit,
+                    'has_more': False
+                }
+            
+            following_data = following_response.json()
+            total = int(following_response.headers.get('Content-Range', '0-0/0').split('/')[-1])
+            
+            # Process following and check if viewer follows them
+            following = []
+            following_ids = []
+            
+            for follow in following_data:
+                user_profile = follow.get('user_profiles', {})
+                if user_profile:
+                    followed_user = {
+                        'id': user_profile['id'],
+                        'username': user_profile['username'],
+                        'display_name': user_profile.get('display_name'),
+                        'avatar_url': user_profile.get('avatar_url'),
+                        'followed_at': follow['created_at'],
+                        'is_following': False,
+                        'is_mutual': False
+                    }
+                    following.append(followed_user)
+                    following_ids.append(user_profile['id'])
+            
+            # If viewer is authenticated, check follow relationships
+            if viewer_id and following_ids:
+                # Check which following users the viewer is also following
+                viewer_following_response = requests.get(
+                    f"{self.base_url}/rest/v1/user_follows",
+                    headers=self.headers,
+                    params={
+                        'follower_id': f'eq.{viewer_id}',
+                        'following_id': f'in.({','.join(following_ids)})',
+                        'select': 'following_id'
+                    }
+                )
+                
+                if viewer_following_response.status_code == 200:
+                    viewer_following = set(f['following_id'] for f in viewer_following_response.json())
+                    
+                    # Update follow status for each following
+                    for followed in following:
+                        if followed['id'] in viewer_following:
+                            followed['is_following'] = True
+                            # Check if mutual
+                            if viewer_id == user_id:
+                                # If viewing own following list, all are following back
+                                followed['is_mutual'] = True  
+                            else:
+                                # Check if they follow the viewer back
+                                mutual_check = requests.get(
+                                    f"{self.base_url}/rest/v1/user_follows",
+                                    headers=self.headers,
+                                    params={
+                                        'follower_id': f'eq.{followed["id"]}',
+                                        'following_id': f'eq.{viewer_id}',
+                                        'select': 'id'
+                                    }
+                                )
+                                if mutual_check.status_code == 200 and mutual_check.json():
+                                    followed['is_mutual'] = True
+            
+            return {
+                'following': following,
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'has_more': offset + limit < total
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting user following: {e}")
+            return {
+                'following': [],
+                'total': 0,
+                'page': page,
+                'limit': limit,
+                'has_more': False
+            }
 
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
@@ -3129,7 +3376,6 @@ class SupabaseAuthClient:
         Since: 1.0.0
         """
         try:
-            print(f"Creating user profile with username: '{username}' for user_id: {user_id}")
             data = {
                 'id': user_id,
                 'username': username,
@@ -3144,15 +3390,12 @@ class SupabaseAuthClient:
             
             if response.status_code in [200, 201]:
                 created_profile = response.json()
-                print(f"Successfully created profile for user {user_id} with username '{username}'")
                 return created_profile
             elif response.status_code == 409:
                 # Duplicate key error - profile already exists, try to fetch it
-                print(f"Profile already exists for user {user_id}, attempting to fetch existing profile")
                 try:
                     existing_profile = self.get_user_profile_by_id(user_id)
                     if existing_profile:
-                        print(f"Successfully fetched existing profile for user {user_id}")
                         print(f"Existing profile username field: '{existing_profile.get('username')}'")
                         
                         # Check if username field is missing, empty, or contains email format when we expect plain username
@@ -3177,7 +3420,6 @@ class SupabaseAuthClient:
                                 )
                                 
                                 if update_response.status_code in [200, 204]:
-                                    print(f"Successfully updated username for user {user_id}")
                                     # Fetch the updated profile
                                     updated_profile = self.get_user_profile_by_id(user_id)
                                     if updated_profile:
@@ -3424,7 +3666,6 @@ class SupabaseAuthClient:
             dict: User profile data filtered by privacy settings
         """
         try:
-            print(f"Looking up profile for username: '{username}'")
             
             # First attempt: exact case match
             response = requests.get(
@@ -3436,7 +3677,6 @@ class SupabaseAuthClient:
                 }
             )
             
-            print(f"Exact match query status: {response.status_code}, found: {len(response.json()) if response.status_code == 200 else 0} profiles")
             
             # If exact match fails, try case-insensitive match
             if response.status_code != 200 or not response.json():
@@ -3475,16 +3715,13 @@ class SupabaseAuthClient:
             # Check if viewer is following this user
             is_following = False
             if viewer_id and viewer_id != user_id:
+                follow_url = f"{self.base_url}/rest/v1/user_follows?follower_id=eq.{viewer_id}&following_id=eq.{user_id}&select=id"
                 follow_response = requests.get(
-                    f"{self.base_url}/rest/v1/user_follows",
-                    headers=self.headers,
-                    params={
-                        'follower_id': f'eq.{viewer_id}',
-                        'following_id': f'eq.{user_id}',
-                        'select': 'id'
-                    }
+                    follow_url,
+                    headers=self.headers
                 )
-                is_following = bool(follow_response.json())
+                if follow_response.status_code == 200 and follow_response.json():
+                    is_following = True
             
             # Apply privacy filtering
             is_self = viewer_id == user_id
@@ -3664,7 +3901,7 @@ class SupabaseAuthClient:
         except Exception as e:
             print(f"Error getting privacy settings: {e}")
             return None
-
+    
     def update_privacy_settings(self, user_id: str, settings: dict) -> dict:
         """
         Update user privacy settings.
@@ -3763,7 +4000,9 @@ class SupabaseAuthClient:
             return False
 
     def discover_lists(self, search: str = None, tags: List[str] = None, 
-                    sort_by: str = 'updated_at', page: int = 1, limit: int = 20, user_id: str = None) -> dict:
+                    sort_by: str = 'updated_at', page: int = 1, limit: int = 20, user_id: str = None,
+                    content_type: str = None, privacy: str = None, item_count: str = None, 
+                    follower_count: str = None) -> dict:
         """
         Discover public custom lists with search and filtering.
         
@@ -3773,6 +4012,11 @@ class SupabaseAuthClient:
             sort_by (str): Sort field (updated_at, created_at, title)
             page (int): Page number for pagination
             limit (int): Items per page
+            user_id (str, optional): User ID for follow status
+            content_type (str, optional): Filter by content type (anime, manga, mixed)
+            privacy (str, optional): Filter by privacy level (public, friends_only)
+            item_count (str, optional): Filter by size (small, medium, large)
+            follower_count (str, optional): Filter by popularity (popular, trending, viral)
             
         Returns:
             dict: Lists data with pagination info
@@ -3801,6 +4045,13 @@ class SupabaseAuthClient:
                 'order': f'{db_sort_by}.desc'
             }
             
+            # Apply privacy filter if specified (override default public filter)
+            if privacy and privacy != 'all':
+                if privacy == 'public':
+                    params['privacy'] = 'eq.public'
+                elif privacy == 'friends_only':
+                    params['privacy'] = 'eq.friends_only'
+            
             # For quality_score sorting, use pre-calculated database values
             if sort_by == 'quality_score':
                 params['order'] = 'quality_score.desc'
@@ -3822,8 +4073,13 @@ class SupabaseAuthClient:
             
             lists = response.json()
             
-            # Get total count for pagination
+            # Get total count for pagination (apply same privacy filter)
             count_params = {'privacy': 'eq.public', 'select': 'count'}
+            if privacy and privacy != 'all':
+                if privacy == 'public':
+                    count_params['privacy'] = 'eq.public'
+                elif privacy == 'friends_only':
+                    count_params['privacy'] = 'eq.friends_only'
             if search:
                 count_params['or'] = f'title.ilike.%{search}%,description.ilike.%{search}%'
                 
@@ -3918,21 +4174,31 @@ class SupabaseAuthClient:
                         list_follower_counts[list_id] += 1
             
             # Get follow status for authenticated user if user_id is provided
-            user_following_lists = set()
+            # Check if current user follows the LIST CREATORS (not the lists themselves)
+            user_following_creators = set()
             if user_id and lists:
+                # Get unique creator IDs from all lists
+                creator_ids = list(set(lst['user_id'] for lst in lists))
+                
+                print(f"[DEBUG discover_lists] Checking follow status for user_id={user_id}, creator_ids={creator_ids}")
+                
                 following_response = requests.get(
-                    f"{self.base_url}/rest/v1/list_followers",
+                    f"{self.base_url}/rest/v1/user_follows",
                     headers=self.headers,
                     params={
-                        'user_id': f'eq.{user_id}',
-                        'list_id': f'in.({",".join(map(str, list_ids))})',
-                        'select': 'list_id'
+                        'follower_id': f'eq.{user_id}',
+                        'following_id': f'in.({",".join(creator_ids)})',
+                        'select': 'following_id'
                     }
                 )
                 
+                print(f"[DEBUG discover_lists] Follow status response: {following_response.status_code}")
+                
                 if following_response.status_code == 200:
                     following_data = following_response.json()
-                    user_following_lists = set(follow['list_id'] for follow in following_data)
+                    print(f"[DEBUG discover_lists] Following data: {following_data}")
+                    user_following_creators = set(follow['following_id'] for follow in following_data)
+                    print(f"[DEBUG discover_lists] User is following creators: {user_following_creators}")
             
             # Get user profiles for all lists
             user_profiles_map = {}
@@ -3991,8 +4257,9 @@ class SupabaseAuthClient:
                         
                         # Extract media type from the joined media_types table
                         media_type = None
-                        if item.get('items') and item['items'].get('media_types'):
-                            media_type = item['items']['media_types']['name']
+                        items_data = item.get('items')
+                        if items_data and isinstance(items_data, dict) and items_data.get('media_types'):
+                            media_type = items_data['media_types']['name']
                         
                         if list_id not in list_content_types:
                             list_content_types[list_id] = {'anime': 0, 'manga': 0}
@@ -4049,7 +4316,7 @@ class SupabaseAuthClient:
                 list_item['tags'] = list_tags_map.get(list_id, [])
                 list_item['item_count'] = list_item_counts.get(list_id, 0)
                 list_item['followers_count'] = list_follower_counts.get(list_id, 0)
-                list_item['is_following'] = list_id in user_following_lists
+                list_item['is_following'] = list_item['user_id'] in user_following_creators
                 
                 # Calculate content_type
                 content_stats = list_content_types.get(list_id, {'anime': 0, 'manga': 0})
@@ -4071,7 +4338,42 @@ class SupabaseAuthClient:
                 
                 # Also maintain backward compatibility with preview_images for any existing code
                 list_item['preview_images'] = [item.get('imageUrl') for item in preview_items if item.get('imageUrl')]
+            
+            # Apply additional filters after content_type calculation
+            filtered_lists = []
+            for list_item in lists:
+                # Filter by content type
+                if content_type and content_type != 'all':
+                    if list_item.get('content_type') != content_type:
+                        continue
                 
+                # Filter by item count ranges
+                if item_count and item_count != 'all':
+                    item_count_val = list_item.get('item_count', 0)
+                    if item_count == 'small' and item_count_val > 10:
+                        continue
+                    elif item_count == 'medium' and (item_count_val <= 10 or item_count_val > 50):
+                        continue
+                    elif item_count == 'large' and item_count_val <= 50:
+                        continue
+                
+                # Filter by follower count ranges
+                if follower_count and follower_count != 'all':
+                    followers_count_val = list_item.get('followers_count', 0)
+                    if follower_count == 'popular' and followers_count_val < 10:
+                        continue
+                    elif follower_count == 'trending' and followers_count_val < 50:
+                        continue
+                    elif follower_count == 'viral' and followers_count_val < 100:
+                        continue
+                
+                filtered_lists.append(list_item)
+            
+            # Update lists to the filtered version
+            lists = filtered_lists
+            
+            # Apply quality score calculation and user profile info to filtered lists
+            for list_item in lists:
                 # Use pre-calculated quality score from database if available, otherwise calculate
                 if list_item.get('quality_score') is not None:
                     # Use pre-calculated quality score from database for better performance
@@ -4137,11 +4439,17 @@ class SupabaseAuthClient:
                 # Sort by the new quality score algorithm
                 lists.sort(key=lambda x: x['quality_score'], reverse=True)
             
+            # Update total count to reflect filtering
+            total_filtered = len(lists)
+            
             # Limit results to requested amount after filtering
             lists = lists[:limit]
             
-            # Adjust total count to reflect filtered results (approximate)
-            if len(lists) < limit and page == 1:
+            # Adjust total count to reflect filtered results
+            if content_type or item_count or follower_count:
+                # When filters are applied, use the filtered count
+                total = total_filtered
+            elif len(lists) < limit and page == 1:
                 # If we got fewer than requested on first page, that's the total
                 total = len(lists)
             
@@ -5049,119 +5357,110 @@ class SupabaseAuthClient:
             List[Dict]: List of custom lists data
         """
         try:
-            params = {
-                'user_id': f'eq.{user_id}',
-                'select': 'id,title,description,created_at,updated_at,privacy,is_collaborative',
-                'order': 'updated_at.desc'
-            }
+            # Build the URL with filters as URL parameters
+            url = f"{self.base_url}/rest/v1/custom_lists"
+            filters = [f"user_id=eq.{user_id}"]
             
             if privacy is not None:
-                params['privacy'] = f'eq.{privacy}'
+                filters.append(f"privacy=eq.{privacy}")
             
             if not include_collaborative:
-                params['is_collaborative'] = 'eq.false'
+                filters.append("is_collaborative=eq.false")
+            
+            # Combine filters
+            if filters:
+                url += "?" + "&".join(filters)
+                # Add select and order as URL parameters with & since we already have ?
+                url += f"&select=id,title,description,created_at,updated_at,privacy,is_collaborative"
+                url += "&order=updated_at.desc"
+            else:
+                # No filters, so start with ?
+                url += "?select=id,title,description,created_at,updated_at,privacy,is_collaborative"
+                url += "&order=updated_at.desc"
                 
+            logger.info(f"Fetching user lists with URL: {url}")
             response = requests.get(
-                f"{self.base_url}/rest/v1/custom_lists",
+                url,
                 headers=self.headers,
-                params=params,
                 timeout=10
             )
             
             if response.status_code == 200:
                 return response.json()
             else:
-                logger.error(f"Error fetching user lists: HTTP {response.status_code}")
+                logger.error(f"Error fetching user lists: HTTP {response.status_code}, Response: {response.text}")
                 return []
                 
         except Exception as e:
             logger.error(f"Error in get_user_lists: {e}")
             return []
 
+
 def require_auth(f):
     """
-    Decorator to require authentication for API routes.
-    Uses local JWT verification for integration testing compatibility.
+    Authentication decorator for Flask routes.
+    
+    This decorator verifies that the request contains a valid JWT token
+    in the Authorization header and extracts user information for use
+    in the decorated function.
+    
+    Usage:
+        @app.route('/api/protected-endpoint')
+        @require_auth
+        def protected_function():
+            user_id = g.current_user.get('user_id')
+            # ... function logic
+    
+    Args:
+        f: The Flask route function to protect
+        
+    Returns:
+        Decorated function that requires authentication
+        
+    Sets:
+        g.current_user: Dictionary containing user info from JWT token
+        g.user_id: User ID extracted from token for convenience
     """
+    from functools import wraps
+    
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        from flask import current_app
+        from flask import request, jsonify, g
         
-        auth_header = request.headers.get('Authorization')
-        
-        if not auth_header:
-            return jsonify({'error': 'No authorization header'}), 401
+        # Check for Authorization header
+        if 'Authorization' not in request.headers:
+            return jsonify({'error': 'Authorization token required'}), 401
         
         try:
-            # Extract token from header
-            token = auth_header
-            if token.startswith('Bearer '):
-                token = token[7:]
+            # Extract token from Bearer header
+            auth_header = request.headers['Authorization']
+            if not auth_header.startswith('Bearer '):
+                print(f"[DEBUG] Invalid auth header format: {auth_header[:20]}...")
+                return jsonify({'error': 'Invalid authorization header format'}), 401
             
-            # For testing, use the app's local verify_token function
-            # For production, use Supabase Auth verification
-            if current_app.config.get('TESTING', False):
-                # Use local JWT verification for testing
-                from app import verify_token
-                user_info = verify_token(token)
-                
-                if not user_info:
-                    return jsonify({'error': 'Invalid or expired token'}), 401
-                
-                # Ensure user_id is set correctly for compatibility
-                if 'user_id' not in user_info and 'sub' in user_info:
-                    user_info['user_id'] = user_info['sub']
-                    
-            else:
-                # Use Supabase Auth verification for production
-                auth_client = SupabaseAuthClient(
-                    os.getenv('SUPABASE_URL'),
-                    os.getenv('SUPABASE_KEY'),
-                    os.getenv('SUPABASE_SERVICE_KEY')
-                )
-                user_info = auth_client.verify_jwt_token(token)
-                
-                if not user_info:
-                    return jsonify({'error': 'Invalid or expired token'}), 401
+            token = auth_header.replace('Bearer ', '')
+            print(f"[DEBUG] Processing token: {token[:20]}...")
             
-            # Validate user_info is properly structured
-            if not isinstance(user_info, dict):
-                return jsonify({'error': 'Authentication data invalid'}), 401
+            # Import verify_token here to avoid circular imports
+            from app import verify_token
             
+            # Verify and decode the token
+            user_info = verify_token(token)
+            if not user_info:
+                print("[DEBUG] Token verification returned None")
+                return jsonify({'error': 'Invalid or expired token'}), 401
+            
+            print(f"[DEBUG] Token verified successfully. User info keys: {list(user_info.keys())}")
+            
+            # Set user info in Flask global context
             g.current_user = user_info
+            g.user_id = user_info.get('user_id') or user_info.get('sub')
+            print(f"[DEBUG] Set g.user_id = {g.user_id}")
             
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 401
+            # Call the original function
+            return f(*args, **kwargs)
+            
         except Exception as e:
-            return jsonify({'error': 'Authentication failed'}), 401
-        
-        return f(*args, **kwargs)
+            return jsonify({'error': 'Authentication failed', 'details': str(e)}), 401
     
     return decorated_function
-
-
-# Usage example for your existing code:
-def load_data_and_tfidf_rest_api():
-    """
-    Replacement for your current load_data_and_tfidf() function
-    Uses REST API instead of CSV files
-    """
-    
-    client = SupabaseClient()
-    
-    # Get data as DataFrame (replaces pd.read_csv)
-    df = client.items_to_dataframe(include_relations=True)
-    
-    if len(df) == 0:
-        print("No data available")
-        return None, None, None, None
-    
-    # Your existing pandas processing code goes here
-    # Filter NSFW content
-    if 'sfw' in df.columns:
-        df = df[df['sfw'] == True].copy()
-    
-    # Create combined_text_features column for TF-IDF
-    # (Your existing text processing logic)
-    
-    return df, None, None, None  # Return what your existing function returns 
