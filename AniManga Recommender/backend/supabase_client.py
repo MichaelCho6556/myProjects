@@ -581,7 +581,7 @@ class SupabaseClient:
             data = response.json()
             return {item['id']: item['name'] for item in data}
         except Exception as e:
-            print(f"⚠️  Error loading {table_name}: {e}")
+            logger.warning(f"Error loading {table_name}: {e}")
             return {}
     
     def _get_relations(self, table_name: str) -> List[Dict]:
@@ -590,7 +590,7 @@ class SupabaseClient:
             response = self._make_request('GET', table_name, params={'limit': 10000})
             return response.json()
         except Exception as e:
-            print(f"⚠️  Error loading {table_name}: {e}")
+            logger.warning(f"Error loading {table_name}: {e}")
             return []
     
     def get_filtered_items(self, filters: Dict[str, Any], limit: int = 1000) -> List[Dict]:
@@ -739,10 +739,10 @@ class SupabaseClient:
         if (SupabaseClient._items_dataframe_cache is not None and 
             SupabaseClient._cache_timestamp is not None and
             (time.time() - SupabaseClient._cache_timestamp) < SupabaseClient._cache_max_age):
-            print("📦 Using cached items DataFrame")
+            logger.info("Using cached items DataFrame")
             return SupabaseClient._items_dataframe_cache.copy()
         
-        print("🔄 Loading fresh data from Supabase...")
+        logger.info("Loading fresh data from Supabase...")
         
         if include_relations and not lazy_load:
             # Use pagination to get ALL items with pre-loaded relations (slow)
@@ -1743,10 +1743,28 @@ class SupabaseClient:
         Returns:
             dict: User's lists with pagination info
         """
+        # Import cache helpers
+        try:
+            from utils.cache_helpers import get_user_lists_from_cache, set_user_lists_in_cache
+        except ImportError:
+            # If cache helpers not available, proceed without caching
+            get_user_lists_from_cache = lambda *args, **kwargs: None
+            set_user_lists_in_cache = lambda *args, **kwargs: False
+        
         try:
             # Validate and limit page size
             limit = min(limit, 50)
             offset = (page - 1) * limit
+            
+            # Try to get from cache first
+            cached_data = get_user_lists_from_cache(user_id, page, limit)
+            if cached_data:
+                logger.debug("Cache hit for user lists", extra={
+                    "event": "cache_hit",
+                    "cache_type": "user_lists",
+                    "page": page
+                })
+                return cached_data
             
             # Try the optimized RPC function first
             response = requests.post(
@@ -1760,7 +1778,7 @@ class SupabaseClient:
             )
             
             if response.status_code != 200:
-                print(f"Optimized function not available or failed: {response.status_code}")
+                logger.warning(f"Optimized function not available or failed: {response.status_code}")
                 # Fallback to the original method
                 return self._get_user_custom_lists_fallback(user_id, page, limit)
             
@@ -1812,9 +1830,9 @@ class SupabaseClient:
                 }
                 transformed_lists.append(transformed_list)
             
-            print(f"Successfully fetched {len(transformed_lists)} lists using optimized query")
+            logger.info(f"Fetched {len(transformed_lists)} lists using optimized query")
             
-            return {
+            result = {
                 'data': transformed_lists,
                 'total': total,
                 'page': page,
@@ -1822,8 +1840,13 @@ class SupabaseClient:
                 'has_more': (page * limit) < total
             }
             
+            # Cache the result
+            set_user_lists_in_cache(user_id, result, page, limit)
+            
+            return result
+            
         except Exception as e:
-            print(f"Error in optimized get_user_custom_lists: {e}")
+            logger.error(f"Optimized list fetch failed: {e}")
             # Fallback to original implementation
             return self._get_user_custom_lists_fallback(user_id, page, limit)
     
@@ -1847,6 +1870,14 @@ class SupabaseClient:
                 - limit: Items per page
                 - has_more: Whether there are more pages
         """
+        # Import cache helpers
+        try:
+            from utils.cache_helpers import get_user_lists_from_cache, set_user_lists_in_cache
+        except ImportError:
+            # If cache helpers not available, proceed without caching
+            get_user_lists_from_cache = lambda *args, **kwargs: None
+            set_user_lists_in_cache = lambda *args, **kwargs: False
+            
         try:
             # Validate and limit page size
             limit = min(limit, 50)
@@ -1988,6 +2019,10 @@ class SupabaseClient:
                 'limit': limit,
                 'has_more': (page * limit) < total
             }
+            
+            # Cache the result
+            set_user_lists_in_cache(user_id, result, page, limit)
+            
             print(f"Returning custom lists result: {len(transformed_lists)} lists, total: {total}")
             return result
             
@@ -2077,6 +2112,14 @@ class SupabaseClient:
             tags = list_data.get('tags', [])
             if tags:
                 self._handle_list_tags(list_id, tags)
+            
+            # Invalidate user lists cache after creating a new list
+            try:
+                from utils.cache_helpers import invalidate_user_lists_cache
+                invalidate_user_lists_cache(user_id)
+                logger.info("Invalidated lists cache after creating new list")
+            except ImportError:
+                pass  # Cache helpers not available
             
             return created_list
             
@@ -2175,7 +2218,16 @@ class SupabaseClient:
                 if tags:
                     self._handle_list_tags(list_id, tags)
             
-            print(f"Successfully updated list {list_id}")
+            logger.info(f"Successfully updated list {list_id}")
+            
+            # Invalidate caches after updating a list
+            try:
+                from utils.cache_helpers import invalidate_list_cache
+                invalidate_list_cache(list_id, user_id)
+                logger.info(f"Invalidated caches for list {list_id} after update")
+            except ImportError:
+                pass  # Cache helpers not available
+            
             return updated_list
             
         except Exception as e:
@@ -4249,7 +4301,7 @@ class SupabaseAuthClient:
                 # Get unique creator IDs from all lists
                 creator_ids = list(set(lst['user_id'] for lst in lists))
                 
-                print(f"[DEBUG discover_lists] Checking follow status for user_id={user_id}, creator_ids={creator_ids}")
+                logger.debug("Checking follow status for discover lists")
                 
                 following_response = requests.get(
                     f"{self.base_url}/rest/v1/user_follows",
@@ -4261,13 +4313,13 @@ class SupabaseAuthClient:
                     }
                 )
                 
-                print(f"[DEBUG discover_lists] Follow status response: {following_response.status_code}")
+                logger.debug(f"Follow status response: {following_response.status_code}")
                 
                 if following_response.status_code == 200:
                     following_data = following_response.json()
-                    print(f"[DEBUG discover_lists] Following data: {following_data}")
+                    logger.debug(f"Following data retrieved: {len(following_data)} records")
                     user_following_creators = set(follow['following_id'] for follow in following_data)
-                    print(f"[DEBUG discover_lists] User is following creators: {user_following_creators}")
+                    logger.debug(f"User is following {len(user_following_creators)} creators")
             
             # Get user profiles for all lists
             user_profiles_map = {}
@@ -5504,11 +5556,11 @@ def require_auth(f):
             # Extract token from Bearer header
             auth_header = request.headers['Authorization']
             if not auth_header.startswith('Bearer '):
-                print(f"[DEBUG] Invalid auth header format: {auth_header[:20]}...")
+                logger.debug(f"Invalid auth header format: {auth_header[:20]}...")
                 return jsonify({'error': 'Invalid authorization header format'}), 401
             
             token = auth_header.replace('Bearer ', '')
-            print(f"[DEBUG] Processing token: {token[:20]}...")
+            logger.debug(f"Processing token: {token[:20]}...")
             
             # Import verify_token here to avoid circular imports
             from app import verify_token
@@ -5516,15 +5568,15 @@ def require_auth(f):
             # Verify and decode the token
             user_info = verify_token(token)
             if not user_info:
-                print("[DEBUG] Token verification returned None")
+                logger.debug("Token verification returned None")
                 return jsonify({'error': 'Invalid or expired token'}), 401
             
-            print(f"[DEBUG] Token verified successfully. User info keys: {list(user_info.keys())}")
+            logger.debug(f"Token verified successfully. User info keys: {list(user_info.keys())}")
             
             # Set user info in Flask global context
             g.current_user = user_info
             g.user_id = user_info.get('user_id') or user_info.get('sub')
-            print(f"[DEBUG] Set g.user_id = {g.user_id}")
+            logger.debug("User ID set in request context")
             
             # Call the original function
             return f(*args, **kwargs)

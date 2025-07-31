@@ -69,4 +69,5 @@ backend/app.log
 backend/.data_cache
 
 
-.env
+.env# Ignore external projects
+Project-Bug-Finder/

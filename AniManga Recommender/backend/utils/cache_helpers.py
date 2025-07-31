@@ -45,6 +45,8 @@ CACHE_TTL_HOURS = {
     'toxicity_analysis': 24,  # Cache toxicity analysis for 24 hours
     'moderation_stats': 2,    # Cache moderation stats for 2 hours
     'content_moderation': 12, # Cache moderation status for 12 hours
+    'custom_lists': 1,        # Cache user's custom lists for 1 hour
+    'list_details': 2,        # Cache individual list details for 2 hours
 }
 
 class RedisCache:
@@ -698,3 +700,265 @@ def get_moderation_cache_summary() -> Dict[str, Any]:
             summary['error'] = str(e)
     
     return summary
+
+# ==========================================
+# CUSTOM LISTS CACHE FUNCTIONS
+# ==========================================
+
+def get_user_lists_from_cache(user_id: str, page: int = 1, limit: int = 20) -> Optional[Dict[str, Any]]:
+    """
+    Get user's custom lists from cache
+    
+    Args:
+        user_id: User ID to fetch lists for
+        page: Page number for pagination
+        limit: Items per page
+        
+    Returns:
+        Dict with lists data or None if not cached
+    """
+    cache = get_cache()
+    key = f"user_lists:{user_id}:page_{page}_limit_{limit}"
+    
+    data = cache.get(key)
+    if data:
+        logger.debug(f"Cache hit for user lists: {user_id} (page {page})")
+        return data
+    
+    logger.debug(f"Cache miss for user lists: {user_id} (page {page})")
+    return None
+
+def set_user_lists_in_cache(user_id: str, lists_data: Dict[str, Any], page: int = 1, limit: int = 20) -> bool:
+    """
+    Store user's custom lists in cache
+    
+    Args:
+        user_id: User ID
+        lists_data: Lists data dictionary containing lists array and pagination info
+        page: Page number
+        limit: Items per page
+        
+    Returns:
+        True if successfully cached
+    """
+    cache = get_cache()
+    key = f"user_lists:{user_id}:page_{page}_limit_{limit}"
+    
+    # Add timestamp
+    lists_data['cached_at'] = datetime.utcnow().isoformat()
+    lists_data['cache_key'] = key
+    
+    # Cache for 1 hour (lists change less frequently than user stats)
+    return cache.set(key, lists_data, ttl_hours=1)
+
+def invalidate_user_lists_cache(user_id: str) -> bool:
+    """
+    Invalidate all cached pages of user's custom lists
+    
+    Args:
+        user_id: User ID to invalidate lists cache for
+        
+    Returns:
+        True if successful
+    """
+    cache = get_cache()
+    
+    # We need to invalidate all possible page combinations
+    # In practice, we'll invalidate the most common ones
+    for page in range(1, 6):  # First 5 pages
+        for limit in [10, 20, 50]:  # Common limit values
+            key = f"user_lists:{user_id}:page_{page}_limit_{limit}"
+            cache.delete(key)
+    
+    logger.info(f"Invalidated custom lists cache for user: {user_id}")
+    return True
+
+def get_list_details_from_cache(list_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Get custom list details from cache
+    
+    Args:
+        list_id: List ID to fetch details for
+        
+    Returns:
+        Dict with list details or None if not cached
+    """
+    cache = get_cache()
+    key = f"list_details:{list_id}"
+    
+    data = cache.get(key)
+    if data:
+        logger.debug(f"Cache hit for list details: {list_id}")
+        return data
+    
+    logger.debug(f"Cache miss for list details: {list_id}")
+    return None
+
+def set_list_details_in_cache(list_id: int, list_data: Dict[str, Any]) -> bool:
+    """
+    Store custom list details in cache
+    
+    Args:
+        list_id: List ID
+        list_data: List details dictionary
+        
+    Returns:
+        True if successfully cached
+    """
+    cache = get_cache()
+    key = f"list_details:{list_id}"
+    
+    # Add timestamp
+    list_data['cached_at'] = datetime.utcnow().isoformat()
+    
+    # Cache for 2 hours
+    return cache.set(key, list_data, ttl_hours=2)
+
+def invalidate_list_cache(list_id: int, user_id: Optional[str] = None) -> bool:
+    """
+    Invalidate cache for a specific list and optionally the user's lists cache
+    
+    Args:
+        list_id: List ID to invalidate
+        user_id: Optional user ID to also invalidate their lists cache
+        
+    Returns:
+        True if successful
+    """
+    cache = get_cache()
+    
+    # Delete list details cache
+    cache.delete(f"list_details:{list_id}")
+    
+    # If user_id provided, invalidate their lists cache too
+    if user_id:
+        invalidate_user_lists_cache(user_id)
+    
+    logger.info(f"Invalidated cache for list: {list_id}")
+    return True
+
+def warm_lists_cache_for_user(user_id: str, lists_data: Dict[str, Any], page: int = 1, limit: int = 20) -> bool:
+    """
+    Pre-warm lists cache for a user (called by background tasks)
+    
+    Args:
+        user_id: User ID
+        lists_data: Pre-calculated lists data
+        page: Page number
+        limit: Items per page
+        
+    Returns:
+        True if successful
+    """
+    return set_user_lists_in_cache(user_id, lists_data, page, limit)
+
+# ==========================================
+# USER PROFILE CACHE FUNCTIONS
+# ==========================================
+
+def get_user_profile_full_from_cache(cache_key: str) -> Optional[Dict[str, Any]]:
+    """
+    Get complete user profile data from cache
+    
+    Args:
+        cache_key: Cache key for the profile (e.g., "profile_full:username" or "profile_full:username:viewer_id")
+        
+    Returns:
+        Dict with complete profile data or None if not cached
+    """
+    cache = get_cache()
+    data = cache.get(cache_key)
+    
+    if data:
+        logger.debug(f"Cache hit for user profile: {cache_key}")
+        return data
+    
+    logger.debug(f"Cache miss for user profile: {cache_key}")
+    return None
+
+def set_user_profile_full_cache(cache_key: str, profile_data: Dict[str, Any]) -> bool:
+    """
+    Cache complete user profile data
+    
+    Args:
+        cache_key: Cache key for the profile
+        profile_data: Complete profile data including stats, lists, activities
+        
+    Returns:
+        True if successfully cached
+    """
+    cache = get_cache()
+    
+    # Add timestamp
+    profile_data['cached_at'] = datetime.utcnow().isoformat()
+    
+    # Cache for 1 hour - profiles change less frequently than activities
+    return cache.set(cache_key, profile_data, ttl_hours=1)
+
+def invalidate_user_profile_cache(username: str, user_id: Optional[str] = None) -> bool:
+    """
+    Invalidate all cached variations of a user's profile
+    
+    Args:
+        username: Username to invalidate cache for
+        user_id: Optional user ID for more thorough invalidation
+        
+    Returns:
+        True if successful
+    """
+    cache = get_cache()
+    
+    # Delete base profile cache
+    cache.delete(f"profile_full:{username}")
+    
+    # If we have user_id, also invalidate viewer-specific caches
+    # This is a simplified approach - in production you might track viewers
+    if user_id:
+        # Invalidate stats cache
+        cache.delete(f"user_stats:{user_id}")
+        # Invalidate lists cache
+        invalidate_user_lists_cache(user_id)
+    
+    logger.info(f"Invalidated profile cache for user: {username}")
+    return True
+
+def get_user_profile_from_cache(username: str, viewer_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Get individual user profile data from cache (not the full data)
+    
+    Args:
+        username: Username to fetch profile for
+        viewer_id: Optional viewer ID for personalized data
+        
+    Returns:
+        Dict with profile data or None if not cached
+    """
+    cache = get_cache()
+    key = f"user_profile:{username}"
+    if viewer_id:
+        key += f":{viewer_id}"
+    
+    return cache.get(key)
+
+def set_user_profile_cache(username: str, profile_data: Dict[str, Any], viewer_id: Optional[str] = None) -> bool:
+    """
+    Cache individual user profile data
+    
+    Args:
+        username: Username
+        profile_data: Profile data
+        viewer_id: Optional viewer ID
+        
+    Returns:
+        True if successfully cached
+    """
+    cache = get_cache()
+    key = f"user_profile:{username}"
+    if viewer_id:
+        key += f":{viewer_id}"
+    
+    # Add timestamp
+    profile_data['cached_at'] = datetime.utcnow().isoformat()
+    
+    # Cache for 2 hours
+    return cache.set(key, profile_data, ttl_hours=2)
