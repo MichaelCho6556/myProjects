@@ -1,0 +1,73 @@
+# Set default behavior to automatically normalize line endings.
+* text=auto eol=lf
+
+# Force LF line endings for source code files
+*.py text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.sass text eol=lf
+*.html text eol=lf
+*.xml text eol=lf
+*.svg text eol=lf
+
+# Configuration files
+.env* text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+Dockerfile text eol=lf
+Makefile text eol=lf
+*.dockerfile text eol=lf
+
+# Windows specific files should use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files - treat as binary to avoid corruption
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.ttf binary
+*.eot binary
+*.woff binary
+*.woff2 binary
+*.pyc binary
+*.pyo binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+
+# Jupyter notebooks
+*.ipynb text eol=lf
+
+# Documentation
+README* text eol=lf
+LICENSE* text eol=lf
+CHANGELOG* text eol=lf
+AUTHORS* text eol=lf
+CONTRIBUTORS* text eol=lf
+
+# Note: After adding this file, team members should run:
+# git rm --cached -r .
+# git reset --hard
+# git add .
+# This will re-normalize all files according to these rules

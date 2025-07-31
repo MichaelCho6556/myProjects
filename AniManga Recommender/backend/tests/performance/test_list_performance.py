@@ -23,7 +23,12 @@ def test_list_performance():
     client = SupabaseClient()
     
     # Test user ID - you'll need to replace this with a real user ID from your database
-    test_user_id = "YOUR_TEST_USER_ID_HERE"  # Replace with actual user ID
+    test_user_id = os.getenv('TEST_USER_ID', 'YOUR_TEST_USER_ID_HERE')  # Replace with actual user ID or set in .env
+    
+    if test_user_id == 'YOUR_TEST_USER_ID_HERE':
+        print("\n❌ ERROR: Please set TEST_USER_ID in your .env file")
+        print("   You need a valid user ID that has some custom lists")
+        return
     
     print("=" * 60)
     print("Testing List Fetching Performance")

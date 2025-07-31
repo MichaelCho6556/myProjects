@@ -48,15 +48,34 @@ export function useUserProfile(username: string) {
       } catch (authError) {
       }
 
-      // Fetch profile data using public API (but with auth if available for auto-creation)
-      const profileResponse = await fetch(`${API_BASE_URL}/api/users/${username}/profile`, {
+      // Use the new unified endpoint to fetch all data in one request
+      const unifiedResponse = await fetch(`${API_BASE_URL}/api/users/${username}/profile-full?activity_limit=20`, {
         headers
       });
-      if (!profileResponse.ok) {
-        throw new Error(`HTTP ${profileResponse.status}`);
+      
+      if (!unifiedResponse.ok) {
+        if (unifiedResponse.status === 404) {
+          throw new Error("User not found");
+        }
+        throw new Error(`HTTP ${unifiedResponse.status}`);
       }
-      const rawProfile = await profileResponse.json();
-
+      
+      const unifiedData = await unifiedResponse.json();
+      
+      // Check if cache metadata indicates this is cached data
+      if (unifiedData.cache_metadata?.cache_hit) {
+        logger.debug("Profile data served from cache", {
+          context: "useUserProfile",
+          username,
+          cached_at: unifiedData.cache_metadata.cached_at
+        });
+      }
+      
+      // Extract profile data
+      const rawProfile = unifiedData.profile;
+      if (!rawProfile) {
+        throw new Error("No profile data received");
+      }
 
       // Transform backend response to frontend format
       const transformedProfile: UserProfile = {
@@ -77,81 +96,47 @@ export function useUserProfile(username: string) {
 
       setProfile(transformedProfile);
 
-      // Fetch stats data if available using public API (with auth if available)
-      try {
-        const statsResponse = await fetch(`${API_BASE_URL}/api/users/${username}/stats`, {
-          headers
-        });
+      // Extract stats data from unified response
+      if (unifiedData.stats) {
+        const rawStats = unifiedData.stats;
         
-        if (statsResponse.ok) {
-          const response = await statsResponse.json();
-          
-          // Check if response has new format with cache metadata
-          let rawStats;
-          if (response && response.stats && typeof response.stats === 'object') {
-            // New format with cache metadata
-            rawStats = response.stats;
-            setStatsCacheHit(response.cache_hit || false);
-            setStatsLastUpdated(response.last_updated || undefined);
-            setStatsUpdating(response.updating || false);
-          } else {
-            // Old format - direct stats object
-            rawStats = response;
-            // Clear cache metadata for old format
-            setStatsCacheHit(undefined);
-            setStatsLastUpdated(undefined);
-            setStatsUpdating(false);
-          }
-          
+        // Clear cache metadata since we're using unified endpoint
+        setStatsCacheHit(unifiedData.cache_metadata?.cache_hit || false);
+        setStatsLastUpdated(unifiedData.cache_metadata?.cached_at || undefined);
+        setStatsUpdating(false);
 
-          if (rawStats && typeof rawStats === 'object') {
-            // Ensure favorite_genres is always an array
-            const favoriteGenres = Array.isArray(rawStats.favorite_genres) 
-              ? rawStats.favorite_genres 
-              : [];
-            
-            const transformedStats: UserStats = {
-              totalAnime:
-                (rawStats.total_anime_watched || 0) +
-                (rawStats.status_counts?.watching || 0) +
-                (rawStats.status_counts?.on_hold || 0) +
-                (rawStats.status_counts?.dropped || 0) +
-                (rawStats.status_counts?.plan_to_watch || 0),
-              completedAnime: rawStats.total_anime_watched || rawStats.status_counts?.completed || 0,
-              totalManga:
-                (rawStats.total_manga_read || 0) + 
-                (rawStats.status_counts?.reading || 0) + 
-                (rawStats.status_counts?.plan_to_read || 0),
-              completedManga: rawStats.total_manga_read || 0,
-              totalHoursWatched: rawStats.total_hours_watched || 0,
-              totalChaptersRead: rawStats.total_chapters_read || 0,
-              favoriteGenres: favoriteGenres,
-              averageRating: rawStats.average_score || 0,
-              completionRate: rawStats.completion_rate || 0,
-              currentStreak: rawStats.current_streak_days || 0,
-              longestStreak: rawStats.longest_streak_days || 0,
-              ratingDistribution: rawStats.rating_distribution || undefined,
-            };
-            
-            setStats(transformedStats);
-          } else {
-            // Set default empty stats if no data returned
-            setStats({
-              totalAnime: 0,
-              completedAnime: 0,
-              totalManga: 0,
-              completedManga: 0,
-              totalHoursWatched: 0,
-              totalChaptersRead: 0,
-              favoriteGenres: [],
-              averageRating: 0,
-              completionRate: 0,
-              currentStreak: 0,
-              longestStreak: 0,
-            });
-          }
-        } else if (statsResponse.status === 404) {
-          // User has no stats yet or stats are private - set default empty stats
+        if (rawStats && typeof rawStats === 'object') {
+          // Ensure favorite_genres is always an array
+          const favoriteGenres = Array.isArray(rawStats.favorite_genres) 
+            ? rawStats.favorite_genres 
+            : [];
+          
+          const transformedStats: UserStats = {
+            totalAnime:
+              (rawStats.total_anime_watched || 0) +
+              (rawStats.status_counts?.watching || 0) +
+              (rawStats.status_counts?.on_hold || 0) +
+              (rawStats.status_counts?.dropped || 0) +
+              (rawStats.status_counts?.plan_to_watch || 0),
+            completedAnime: rawStats.total_anime_watched || rawStats.status_counts?.completed || 0,
+            totalManga:
+              (rawStats.total_manga_read || 0) + 
+              (rawStats.status_counts?.reading || 0) + 
+              (rawStats.status_counts?.plan_to_read || 0),
+            completedManga: rawStats.total_manga_read || 0,
+            totalHoursWatched: rawStats.total_hours_watched || 0,
+            totalChaptersRead: rawStats.total_chapters_read || 0,
+            favoriteGenres: favoriteGenres,
+            averageRating: rawStats.average_score || 0,
+            completionRate: rawStats.completion_rate || 0,
+            currentStreak: rawStats.current_streak_days || 0,
+            longestStreak: rawStats.longest_streak_days || 0,
+            ratingDistribution: rawStats.rating_distribution || undefined,
+          };
+          
+          setStats(transformedStats);
+        } else {
+          // Set default empty stats if no data returned
           setStats({
             totalAnime: 0,
             completedAnime: 0,
@@ -165,10 +150,8 @@ export function useUserProfile(username: string) {
             currentStreak: 0,
             longestStreak: 0,
           });
-        } else {
-          throw new Error(`HTTP ${statsResponse.status}`);
         }
-      } catch (statsError) {
+      } else {
         // Set default empty stats on error
         setStats({
           totalAnime: 0,
@@ -185,84 +168,39 @@ export function useUserProfile(username: string) {
         });
       }
 
-      // Fetch public lists data if available using public API (with auth if available)
-      try {
-        const listsResponse = await fetch(`${API_BASE_URL}/api/users/${username}/lists`, {
-          headers
-        });
+      // Extract lists data from unified response
+      if (unifiedData.lists) {
+        const rawLists = unifiedData.lists;
         
-        if (listsResponse.ok) {
-          const rawLists = await listsResponse.json();
-          
-          if (rawLists && rawLists.lists && Array.isArray(rawLists.lists)) {
-            // Validate each list object has required properties
-            const validLists = rawLists.lists.filter((list: any) => 
-              list && 
-              typeof list.id !== 'undefined' && 
-              typeof list.title === 'string'
-            );
-            setPublicLists(validLists);
-          } else {
-            setPublicLists([]);
-          }
-        } else if (listsResponse.status === 404) {
-          // User has no public lists - set empty array
+        if (rawLists && rawLists.lists && Array.isArray(rawLists.lists)) {
+          // Validate each list object has required properties
+          const validLists = rawLists.lists.filter((list: any) => 
+            list && 
+            typeof list.id !== 'undefined' && 
+            typeof list.title === 'string'
+          );
+          setPublicLists(validLists);
+        } else {
           setPublicLists([]);
-        } else {
-          throw new Error(`Lists API returned HTTP ${listsResponse.status}`);
         }
-      } catch (listsError) {
-        const errorMessage = listsError instanceof Error ? listsError.message : 'Failed to fetch lists';
-        setListsError(new Error(errorMessage));
+      } else {
         setPublicLists([]);
-      } finally {
-        setListsLoading(false);
       }
+      setListsLoading(false);
 
-      // Fetch user activities if available using public API (with auth if available)
-      try {
-        const activitiesUrl = `${API_BASE_URL}/api/users/${username}/activity?limit=20`;
+      // Extract activities data from unified response
+      if (unifiedData.activities) {
+        const rawActivities = unifiedData.activities;
         
-        const activitiesResponse = await fetch(activitiesUrl, {
-          headers
-        });
-        
-        
-        if (activitiesResponse.ok) {
-          const rawActivities = await activitiesResponse.json();
-          
-          if (rawActivities && rawActivities.activities && Array.isArray(rawActivities.activities)) {
-            setActivities(rawActivities.activities);
-          } else {
-            setActivities([]);
-          }
-        } else if (activitiesResponse.status === 404) {
-          // User has no activities or they're private - set empty array
-          setActivities([]);
+        if (rawActivities && rawActivities.activities && Array.isArray(rawActivities.activities)) {
+          setActivities(rawActivities.activities);
         } else {
-          const errorText = await activitiesResponse.text();
-          logger.error("Activities API error", {
-            error: `Status: ${activitiesResponse.status}, Body: ${errorText}`,
-            context: "useUserProfile",
-            operation: "fetchProfile",
-            username: username,
-            status: activitiesResponse.status
-          });
-          throw new Error(`Activities API returned HTTP ${activitiesResponse.status}`);
+          setActivities([]);
         }
-      } catch (activitiesError) {
-        logger.error("Activities fetch error", {
-          error: activitiesError instanceof Error ? activitiesError.message : 'Failed to fetch activities',
-          context: "useUserProfile",
-          operation: "fetchProfile",
-          username: username
-        });
-        const errorMessage = activitiesError instanceof Error ? activitiesError.message : 'Failed to fetch activities';
-        setActivitiesError(new Error(errorMessage));
+      } else {
         setActivities([]);
-      } finally {
-        setActivitiesLoading(false);
       }
+      setActivitiesLoading(false);
     } catch (err: any) {
       if (err.response?.status === 404) {
         setError(new Error("User not found"));

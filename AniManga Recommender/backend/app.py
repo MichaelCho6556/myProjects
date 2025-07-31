@@ -106,9 +106,21 @@ def sanitize_input(data):
         return data
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"], 
-     allow_headers=["Content-Type", "Authorization"], 
+
+# Configure CORS with environment-based origins
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+    # Production URLs will be added via ALLOWED_ORIGINS env variable
+    # Example: ALLOWED_ORIGINS=https://animanga.com,https://www.animanga.com
+]
+
+CORS(app, origins=ALLOWED_ORIGINS,
+     allow_headers=["Content-Type", "Authorization"],
      supports_credentials=True)
+
+# Note: CORS headers are already handled by Flask-CORS extension above
+# No need for duplicate after_request handler
 
 # Configure structured logging
 logging.basicConfig(
@@ -300,12 +312,9 @@ try:
     
     if base_url and api_key and service_key:
         auth_client = SupabaseAuthClient(base_url, api_key, service_key)
-        pass  # Debug output removed
     else:
-        pass  # Debug output removed
         auth_client = None
 except Exception as e:
-    pass  # Debug output removed
     supabase_client = None
     auth_client = None
 
@@ -391,7 +400,6 @@ def parse_list_cols_on_load(df: pd.DataFrame) -> pd.DataFrame:
                 df_copy[col] = df_copy[col].apply(parse_list_string)
             except Exception as e:
                 # If there's an error in any row processing, fall back to empty lists for all values
-                pass  # Debug output removed
                 df_copy[col] = df_copy[col].apply(lambda x: [])
     
     return df_copy
@@ -481,7 +489,6 @@ def load_data_and_tfidf_from_supabase() -> None:
         df_processed, tfidf_vectorizer_global, tfidf_matrix_global, uid_to_idx = cached_data
         
     except Exception as e:
-        pass  # Debug output removed
         # Initialize empty globals to prevent further errors
         df_processed = pd.DataFrame()
         tfidf_vectorizer_global = None
@@ -1327,9 +1334,8 @@ def get_recommendations(item_uid):
             "recommendations": related_mapped  # Field name kept for API compatibility
         })
     except Exception as e:
-        # Debug: [ERROR] Related items error: {str(e}")
-        pass  # Exception traceback removed
-        return jsonify({"error": f"Could not generate related items: {str(e)}"}), 500
+        logger.error(f"Related items error: {e}")
+        return jsonify({"error": "Could not generate related items"}), 500
 
 @app.route('/api/auth/profile', methods=['GET'])
 @require_auth
@@ -1404,7 +1410,8 @@ def get_user_profile():
             return jsonify({'error': 'Profile not found'}), 404
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/profile', methods=['PUT'])
 @require_auth
@@ -1494,12 +1501,19 @@ def update_user_profile():
         profile = auth_client.update_user_profile(user_id, updates)
         
         if profile:
+            # Invalidate profile cache after update
+            from utils.cache_helpers import invalidate_user_profile_cache
+            username = profile.get('username')
+            if username:
+                invalidate_user_profile_cache(username, user_id)
+            
             return jsonify(profile)
         else:
             return jsonify({'error': 'Failed to update profile'}), 400
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
     
 
 @app.route('/api/auth/dashboard', methods=['GET'])
@@ -1645,8 +1659,6 @@ def get_user_dashboard():
         
         return jsonify(dashboard_data)
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
         return jsonify({'error': 'Failed to load dashboard data'}), 500
 
 @app.route('/api/auth/user-items', methods=['GET'])
@@ -1786,8 +1798,8 @@ def get_user_items():
         })
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/user-items/<item_uid>', methods=['POST', 'PUT'])
 @require_auth
@@ -2001,9 +2013,7 @@ def update_user_item_status(item_uid):
             return jsonify({'error': 'Failed to update item status'}), 400
             
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/user-items/<item_uid>', methods=['DELETE'])
 @require_auth
@@ -2082,7 +2092,8 @@ def remove_user_item(item_uid):
             return jsonify({'error': 'Failed to remove item'}), 400
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/user-items/by-status/<status>', methods=['GET'])
 @require_auth
@@ -2164,7 +2175,6 @@ def get_user_items_by_status_route(status):
         items = get_user_items_by_status(user_id, status)
         return jsonify({'items': items, 'count': len(items)})
     except Exception as e:
-        pass  # Debug output removed
         return jsonify({'error': 'Failed to get items'}), 500
 
 @app.route('/api/auth/verify-token', methods=['GET'])
@@ -2334,7 +2344,6 @@ def get_user_statistics():
         return jsonify(stats)
         
     except Exception as e:
-        pass  # Debug output removed
         return jsonify({'error': 'Failed to calculate statistics'}), 500
 
 @app.route('/api/auth/force-refresh-stats', methods=['POST'])
@@ -2447,8 +2456,8 @@ def force_refresh_statistics():
             return jsonify({'error': 'Failed to update statistics'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/cleanup-orphaned-items', methods=['POST'])
 @require_auth
@@ -2525,7 +2534,6 @@ def cleanup_orphaned_user_items():
             
             if not anime_exists and not manga_exists:
                 orphaned_items.append(item)
-                pass  # Debug output removed
             else:
                 valid_items.append(item)
         
@@ -2543,7 +2551,6 @@ def cleanup_orphaned_user_items():
             
             if delete_response.status_code == 204:
                 removed_count += 1
-                pass  # Debug output removed
         # Invalidate all caches to force complete refresh
         invalidate_all_user_caches(user_id)
         
@@ -2555,8 +2562,8 @@ def cleanup_orphaned_user_items():
         })
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 #helper functions
 def get_user_statistics(user_id: str) -> dict:
@@ -2610,7 +2617,6 @@ def get_user_statistics(user_id: str) -> dict:
         # Try Redis cache first (fastest)
         redis_stats = get_user_stats_from_cache(user_id)
         if redis_stats:
-            pass  # Debug output removed
             return redis_stats
         
         # Try database cache second
@@ -2646,7 +2652,6 @@ def get_user_statistics(user_id: str) -> dict:
         return get_default_user_statistics()
         
     except Exception as e:
-        pass  # Debug output removed
         return get_default_user_statistics()
 
 def get_cached_user_statistics(user_id: str) -> dict:
@@ -2689,7 +2694,6 @@ def get_cached_user_statistics(user_id: str) -> dict:
                 return data[0]
         return None
     except Exception as e:
-        pass  # Debug output removed
         return None
 
 def is_cache_fresh(cached_stats: dict, max_age_minutes: int = 5) -> bool:
@@ -2715,7 +2719,7 @@ def is_cache_fresh(cached_stats: dict, max_age_minutes: int = 5) -> bool:
         >>> cached_data = get_cached_user_statistics(user_id)
         >>> if cached_data and is_cache_fresh(cached_data, max_age_minutes=10):
         ...     return cached_data  # Use cached data
-        >>> else:
+        ... else:
         ...     return calculate_fresh_statistics(user_id)  # Recalculate
         
     Note:
@@ -2732,10 +2736,8 @@ def is_cache_fresh(cached_stats: dict, max_age_minutes: int = 5) -> bool:
         age = now - updated_at
         
         is_fresh = age < timedelta(minutes=max_age_minutes)
-        pass  # Debug output removed
         return is_fresh
     except Exception as e:
-        pass  # Debug output removed
         return False
 
 def update_user_statistics_cache(user_id: str, stats: dict):
@@ -2808,14 +2810,11 @@ def update_user_statistics_cache(user_id: str, stats: dict):
         )
         
         if response.status_code in [200, 201]:
-            pass  # Debug output removed
             return True
         else:
-            pass  # Debug output removed
             return False
             
     except Exception as e:
-        pass  # Debug output removed
         return False
 
 def invalidate_user_statistics_cache(user_id: str):
@@ -2871,7 +2870,6 @@ def invalidate_user_statistics_cache(user_id: str):
         performance. Cache will be automatically rebuilt on next statistics access.
     """
     try:
-        pass  # Debug output removed
         # Check if we're in test mode
         if hasattr(auth_client, 'db'):
             # Test mode: delete directly from database
@@ -2882,7 +2880,6 @@ def invalidate_user_statistics_cache(user_id: str):
                 )
                 return True
             except Exception as e:
-                pass  # Debug output removed
                 return False
         else:
             # Production mode: make HTTP request
@@ -2894,7 +2891,6 @@ def invalidate_user_statistics_cache(user_id: str):
             
             return response.status_code in [200, 204]
     except Exception as e:
-        pass  # Debug output removed
         return False
 
 def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
@@ -2940,7 +2936,6 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
         recommendations on the next API call.
     """
     try:
-        pass  # Debug output removed
         cache_key = f"personalized_recommendations:{user_id}"
         success = False
         
@@ -2949,18 +2944,15 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
             try:
                 redis_client.delete(cache_key)
                 success = True
-                pass  # Debug output removed
             except Exception as e:
-                pass  # Debug output removed
+                pass  # Redis not available
         # Clear in-memory cache
         if cache_key in _recommendation_cache:
             del _recommendation_cache[cache_key]
             success = True
-            pass  # Debug output removed
         return success
         
     except Exception as e:
-        pass  # Debug output removed
         return False
 
 def invalidate_all_user_caches(user_id: str) -> bool:
@@ -2982,13 +2974,8 @@ def invalidate_all_user_caches(user_id: str) -> bool:
         recs_success = invalidate_personalized_recommendation_cache(user_id)
         
         success = stats_success and recs_success
-        if success:
-            pass  # Debug output removed
-        else:
-            pass  # Debug output removed
         return success
     except Exception as e:
-        pass  # Debug output removed
         return False
 
 def get_default_user_statistics() -> dict:
@@ -3073,7 +3060,6 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
             )
             
             if response.status_code != 200:
-                pass  # Debug output removed
                 return get_default_user_statistics()
             
             user_items = response.json()
@@ -3088,13 +3074,11 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
         
         for item in completed_items:
             media_type = get_item_media_type(item['item_uid'])
-            pass  # Debug output removed
             if media_type == 'anime':
                 anime_count += 1
             elif media_type == 'manga':
                 manga_count += 1
         
-        pass  # Debug output removed
         # Count items by status
         status_counts = {
             'watching': 0,
@@ -3156,14 +3140,11 @@ def calculate_user_statistics_realtime(user_id: str) -> dict:
         
         return stats
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
         return {}
 
 def get_recent_user_activity(user_id: str, limit: int = 10) -> list:
     """Get user's recent activity"""
     try:
-        pass  # Debug output removed
         response = requests.get(
             f"{auth_client.base_url}/rest/v1/user_activity",
             headers=auth_client.headers,
@@ -3174,7 +3155,6 @@ def get_recent_user_activity(user_id: str, limit: int = 10) -> list:
             }
         )
         
-        pass  # Debug output removed
         if response.status_code == 200:
             activities = response.json()
             # Debug: 📋 DEBUG: Found {len(activities} raw activities from user_activity table")
@@ -3184,16 +3164,9 @@ def get_recent_user_activity(user_id: str, limit: int = 10) -> list:
                 item_details = get_item_details_simple(activity['item_uid'])
                 activity['item'] = item_details
                 
-            if activities:
-                pass  # Debug output removed
-            return activities
-        else:
-            pass  # Debug output removed
-            pass  # Debug output removed
-        return []
+            return activities if activities else []
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
+        logger.error(f"Error getting recent activities: {e}")
         return []
 
 def get_user_items_by_status(user_id: str, status: str, limit: int = 20) -> list:
@@ -3265,7 +3238,6 @@ def get_user_items_by_status(user_id: str, status: str, limit: int = 20) -> list
             return user_items
         return []
     except Exception as e:
-        pass  # Debug output removed
         return []
 
 def get_recently_completed(user_id: str, days: int = 30, limit: int = 10) -> list:
@@ -3294,7 +3266,6 @@ def get_recently_completed(user_id: str, days: int = 30, limit: int = 10) -> lis
             return items
         return []
     except Exception as e:
-        pass  # Debug output removed
         return []
 
 def get_quick_stats(user_id: str) -> dict:
@@ -3319,7 +3290,6 @@ def get_quick_stats(user_id: str) -> dict:
             return stats
         return {}
     except Exception as e:
-        pass  # Debug output removed
         return {}
 
 def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_data: dict = None):
@@ -3393,7 +3363,6 @@ def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_
     try:
         # Add null check for auth_client
         if auth_client is None:
-            pass  # Debug output removed
             return False
             
         # Check if we're in test mode
@@ -3415,7 +3384,6 @@ def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_
                 )
                 return True
             except Exception as e:
-                pass  # Debug output removed
                 return False
         else:
             # Production mode: make HTTP requests
@@ -3458,7 +3426,6 @@ def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_
             
             return response.status_code in [200, 201]
     except Exception as e:
-        pass  # Debug output removed
         return False
 
 def log_activity_with_error_handling(user_id: str, activity_type: str, item_uid: str, activity_data: dict = None):
@@ -3480,8 +3447,6 @@ def log_activity_with_error_handling(user_id: str, activity_type: str, item_uid:
     try:
         return log_user_activity(user_id, activity_type, item_uid, activity_data)
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
         return False
 
 def calculate_watch_time(completed_items: list) -> float:
@@ -3540,7 +3505,6 @@ def calculate_watch_time(completed_items: list) -> float:
         
         return round(total_minutes / 60.0, 1)  # Convert to hours
     except Exception as e:
-        pass  # Debug output removed
         return 0.0
 
 def calculate_chapters_read(completed_items: list) -> int:
@@ -3561,7 +3525,6 @@ def calculate_chapters_read(completed_items: list) -> int:
         
         return total_chapters
     except Exception as e:
-        pass  # Debug output removed
         return 0
 
 def get_user_favorite_genres(user_items: list) -> list:
@@ -3581,7 +3544,6 @@ def get_user_favorite_genres(user_items: list) -> list:
         sorted_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)
         return [genre for genre, count in sorted_genres[:5]]
     except Exception as e:
-        pass  # Debug output removed
         return []
 
 def calculate_current_streak(user_id: str) -> int:
@@ -3638,7 +3600,6 @@ def calculate_current_streak(user_id: str) -> int:
         
         return current_streak
     except Exception as e:
-        pass  # Debug output removed
         return 0
 
 def calculate_longest_streak(user_id: str) -> int:
@@ -3688,7 +3649,6 @@ def calculate_longest_streak(user_id: str) -> int:
         
         return longest_streak
     except Exception as e:
-        pass  # Debug output removed
         return 0
 
 def get_item_details_for_stats(item_uid: str) -> dict:
@@ -3712,7 +3672,6 @@ def get_item_details_for_stats(item_uid: str) -> dict:
                 }
         return {}
     except Exception as e:
-        pass  # Debug output removed
         return {}
 
 def calculate_user_statistics(user_id: str) -> dict:
@@ -3748,7 +3707,6 @@ def calculate_user_statistics(user_id: str) -> dict:
         
         return stats
     except Exception as e:
-        pass  # Debug output removed
         return {}
 
 def calculate_average_user_score(user_items: list) -> float:
@@ -3761,7 +3719,6 @@ def calculate_average_user_score(user_items: list) -> float:
         total_score = sum(item['rating'] for item in scored_items)
         return round(total_score / len(scored_items), 2)
     except Exception as e:
-        pass  # Debug output removed
         return 0.0
 
 def calculate_completion_rate(user_items: list) -> float:
@@ -3787,17 +3744,16 @@ def get_item_media_type(item_uid: str) -> str:
                 media_type = item_row.iloc[0].get('media_type', 'unknown')
                 # Cache the result
                 _media_type_cache[item_uid] = media_type
-                # Debug: 🔍 Item {item_uid}: media_type = {media_type} (cached")
+                # Item media type cached
                 return media_type
             else:
-                pass  # Debug output removed
+                pass  # No media type found
         else:
-            pass  # Debug output removed
+            pass  # Not in items table
         # Cache unknown results too
         _media_type_cache[item_uid] = 'unknown'
         return 'unknown'
     except Exception as e:
-        pass  # Debug output removed
         return 'unknown'
 
 # Add this to get item details for frontend calculations
@@ -3875,7 +3831,6 @@ def get_item_details_simple(item_uid: str) -> dict:
                 }
         return {}
     except Exception as e:
-        pass  # Debug output removed
         return {}
 
 # === Personalized Recommendation System =====================================
@@ -3894,9 +3849,7 @@ try:
     )
     # Test Redis connection
     redis_client.ping()
-    pass  # Debug output removed
 except Exception as e:
-    pass  # Debug output removed
     redis_client = None
 
 # In-memory cache fallback for recommendations
@@ -3949,10 +3902,8 @@ def get_personalized_recommendation_cache(user_id: str, content_type: str = 'all
                     else:
                         # Invalid cache data, remove it
                         redis_client.delete(cache_key)
-                        pass  # Debug output removed
             except Exception as redis_error:
-                pass  # Debug output removed
-                # Continue to in-memory fallback
+                pass  # Continue to in-memory fallback
         
         # Fall back to in-memory cache with the same key structure
         if hasattr(_recommendation_cache, 'get'):
@@ -3965,12 +3916,9 @@ def get_personalized_recommendation_cache(user_id: str, content_type: str = 'all
                     # Remove stale cache
                     if cache_key in _recommendation_cache:
                         del _recommendation_cache[cache_key]
-                    pass  # Debug output removed
         return None
         
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
         return None
 
 def _is_valid_cache_data(data: Dict[str, Any]) -> bool:
@@ -4045,7 +3993,6 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
         
         # Validate input data before caching
         if not _is_valid_cache_input(recommendations):
-            pass  # Debug output removed
             return False
         
         # Ensure timestamp is set
@@ -4071,10 +4018,8 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
                 pipe.execute()
                 
                 success = True
-                pass  # Debug output removed
             except Exception as redis_error:
-                pass  # Debug output removed
-                # Continue to fallback caching
+                pass  # Continue to fallback caching
         
         # Fallback caching: In-memory with manual TTL
         try:
@@ -4084,17 +4029,14 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
             
             _recommendation_cache[cache_key] = cache_data
             success = True
-            pass  # Debug output removed
             # Clean up old in-memory cache entries periodically
             _cleanup_stale_memory_cache()
             
         except Exception as memory_error:
-            pass  # Debug output removed
+            pass
         return success
         
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
         return False
 
 def _is_valid_cache_input(data: Dict[str, Any]) -> bool:
@@ -4145,7 +4087,7 @@ def _cleanup_stale_memory_cache():
             pass
             
     except Exception as e:
-        pass  # Debug output removed
+        pass
 def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: str, section: str) -> Optional[Dict[str, Any]]:
     """
     Filter cached recommendations by content type and section for production efficiency.
@@ -4200,12 +4142,10 @@ def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: st
                         if (isinstance(item, dict) and 
                             'item' in item and 
                             isinstance(item['item'], dict)):
-                            
                             item_media_type = item['item'].get('mediaType', '').lower()
                             if item_media_type == content_type.lower():
                                 filtered_items.append(item)
                     except Exception as filter_error:
-                        pass  # Debug output removed
                         continue
             
             if filtered_items:
@@ -4214,7 +4154,6 @@ def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: st
         
         # Return None if no items match the filter
         if total_filtered_items == 0:
-            pass  # Debug output removed
             return None
         
         # Create filtered response maintaining original structure
@@ -4233,12 +4172,9 @@ def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: st
             'generated_at': datetime.now().isoformat()
         })
         
-        pass  # Debug output removed
         return filtered_response
         
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
         return None
 
 def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
@@ -4393,7 +4329,6 @@ def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
                     min(10.0, avg_user_rating + score_std)
                 )
             except Exception as e:
-                pass  # Debug output removed
                 preferred_range = (6.0, 9.0)
         else:
             avg_user_rating = 7.0  # Default fallback
@@ -4414,8 +4349,6 @@ def analyze_user_preferences(user_id: str) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
         return _get_default_preferences()
 
 def _get_default_preferences() -> Dict[str, Any]:
@@ -4529,7 +4462,6 @@ def generate_personalized_recommendations(user_id: str, user_preferences: Dict[s
         return recommendations
         
     except Exception as e:
-        pass  # Debug output removed
         return {'completed_based': [], 'trending_genres': [], 'hidden_gems': []}
 
 def _get_user_items_for_recommendations(user_id: str) -> List[Dict[str, Any]]:
@@ -4542,7 +4474,6 @@ def _get_user_items_for_recommendations(user_id: str) -> List[Dict[str, Any]]:
         )
         return response.json() if response.status_code == 200 else []
     except Exception as e:
-        pass  # Debug output removed
         return []
 
 def _generate_content_based_recommendations(completed_items: List[Dict[str, Any]], 
@@ -4608,22 +4539,19 @@ def _generate_content_based_recommendations(completed_items: List[Dict[str, Any]
                 if item_data:
                     recommendations.append(item_data)
                 else:
-                    pass  # Debug output removed
+                    pass
             except Exception as item_error:
-                pass  # Debug output removed
                 continue
         
         # Production monitoring logs
         # Debug: 📊 Content-based recommendations: {len(recommendations}/{processed_count} items processed")
         # Debug:    - Skipped (excluded: {skipped_excluded}")
         # Debug:    - Skipped (content_type: {skipped_content_type}")
-        pass  # Debug output removed
         # Debug:    - Final recommendations: {len(recommendations}")
         
         return recommendations
         
     except Exception as e:
-        pass  # Debug output removed
         return []
 
 def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
@@ -4678,7 +4606,6 @@ def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
                 # Debug: 🔍 Genre '{genre}' filter: {filtered_items}/{total_items} items (content_type: {content_type}")
                 
             except Exception as filter_error:
-                pass  # Debug output removed
                 continue
             
             if genre_items.empty:
@@ -4702,7 +4629,6 @@ def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
         return recommendations[:limit]
         
     except Exception as e:
-        pass  # Debug output removed
         return []
 
 def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
@@ -4725,7 +4651,6 @@ def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
             
             # Early termination if no items match content type
             if base_df.empty:
-                pass  # Debug output removed
                 return []
             
             # Vectorized filtering for production performance
@@ -4743,7 +4668,6 @@ def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
             # Debug: 🔍 Hidden gems filter: {len(hidden_gems}/{len(base_df)} items (content_type: {content_type}, min_score: {min_score})")
             
         except Exception as filter_error:
-            pass  # Debug output removed
             return []
         
         if hidden_gems.empty:
@@ -4785,7 +4709,6 @@ def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
         return recommendations
         
     except Exception as e:
-        pass  # Debug output removed
         return []
 
 def _create_recommendation_item(df_idx: int, base_score: float, 
@@ -4823,7 +4746,6 @@ def _create_recommendation_item(df_idx: int, base_score: float,
         }
         
     except Exception as e:
-        pass  # Debug output removed
         return None
 
 def _generate_recommendation_reasoning(item_data: Dict[str, Any], 
@@ -4858,7 +4780,6 @@ def _generate_recommendation_reasoning(item_data: Dict[str, Any],
             return "Recommended for you"
             
     except Exception as e:
-        pass  # Debug output removed
         return "Recommended for you"
 
 def _get_explanation_factors(reason_type: str, item_data: Dict[str, Any], 
@@ -4899,7 +4820,6 @@ def _get_explanation_factors(reason_type: str, item_data: Dict[str, Any],
         return factors[:3]  # Limit to top 3 factors
         
     except Exception as e:
-        pass  # Debug output removed
         return ["recommendation"]
 
 @app.route('/api/auth/personalized-recommendations', methods=['GET'])
@@ -5085,9 +5005,7 @@ def get_personalized_recommendations():
             force_refresh = refresh_str in ['true', '1', 'yes', 'on']
             
             # Log request parameters for monitoring
-            pass  # Debug output removed
         except Exception as param_error:
-            pass  # Debug output removed
             return jsonify({'error': f'Parameter validation failed: {str(param_error)}'}), 400
         
         # Production-ready cache management with content type and section support
@@ -5099,7 +5017,6 @@ def get_personalized_recommendations():
             if cached_recommendations:
                 cache_hit = True
                 cached_recommendations['cache_info']['cache_hit'] = True
-                pass  # Debug output removed
                 return jsonify(cached_recommendations)
             
             # If no exact match and we're looking for 'all' content, try to find base cache
@@ -5107,7 +5024,6 @@ def get_personalized_recommendations():
             if content_type != 'all' and section == 'all':
                 base_cached = get_personalized_recommendation_cache(user_id, 'all', 'all')
                 if base_cached:
-                    pass  # Debug output removed
                     filtered_cache = _filter_cached_recommendations(base_cached, content_type, section)
                     if filtered_cache:
                         # Cache the filtered result for future requests
@@ -5118,16 +5034,10 @@ def get_personalized_recommendations():
         
         # Generate fresh recommendations with production error handling
         start_time = datetime.now()
-        pass  # Debug output removed
-        pass  # Debug output removed
-        pass  # Debug output removed
-        pass  # Debug output removed
-        pass  # Debug output removed
         try:
             # Analyze user preferences with error handling
             user_preferences = analyze_user_preferences(user_id)
             if not user_preferences:
-                pass  # Debug output removed
                 user_preferences = _get_default_preferences()
             
             # Get user's dismissed items with error handling
@@ -5135,7 +5045,6 @@ def get_personalized_recommendations():
                 dismissed_items = get_user_dismissed_items(user_id)
                 # Debug: 🚫 Excluding {len(dismissed_items} dismissed items")
             except Exception as dismissed_error:
-                pass  # Debug output removed
                 dismissed_items = set()
             
             # Generate recommendations with comprehensive error handling
@@ -5150,11 +5059,10 @@ def get_personalized_recommendations():
             # Check if we have sufficient recommendations
             total_recs = sum(len(recs) for recs in recommendations.values() if isinstance(recs, list))
             if total_recs == 0:
-                pass  # Debug output removed
+                pass
             else:
-                pass  # Debug output removed
+                pass
         except Exception as generation_error:
-            pass  # Debug output removed
             pass  # Exception traceback removed
             
             # Return empty recommendations with error info
@@ -5166,7 +5074,6 @@ def get_personalized_recommendations():
             
         # Calculate generation time for monitoring
         generation_time = (datetime.now() - start_time).total_seconds()
-        pass  # Debug output removed
         # Create user preferences summary for frontend
         user_prefs_summary = {
             'top_genres': list(sorted(user_preferences['genre_preferences'].items(), 
@@ -5191,16 +5098,10 @@ def get_personalized_recommendations():
         
         # Cache the results with production-ready cache management
         cache_success = set_personalized_recommendation_cache(user_id, response_data, content_type, section)
-        if cache_success:
-            pass  # Debug output removed
-        else:
-            pass  # Debug output removed
         return jsonify(response_data)
         
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
-        return jsonify({'error': f'Failed to generate recommendations: {str(e)}'}), 500
+        return jsonify({'error': 'Failed to generate recommendations'}), 500
 
 
 @app.route('/api/auth/personalized-recommendations/more', methods=['GET'])
@@ -5268,9 +5169,7 @@ def get_more_personalized_recommendations():
     except ValueError as e:
         return jsonify({'error': 'Invalid parameter format'}), 400
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
-        return jsonify({'error': f'Failed to load more recommendations: {str(e)}'}), 500
+        return jsonify({'error': 'Failed to load more recommendations'}), 500
 
 def _get_preferred_length_label(completion_tendencies: Dict[str, int]) -> str:
     """Convert completion tendencies to readable label"""
@@ -5464,7 +5363,6 @@ def submit_recommendation_feedback():
         
         # Store feedback (in a real implementation, this would go to a database)
         # For now, we'll just log it and invalidate the user's recommendation cache
-        pass  # Debug output removed
         # If user marked item as not interested, add to dismissed items
         if action == 'not_interested':
             add_user_dismissed_item(user_id, item_uid)
@@ -5472,12 +5370,11 @@ def submit_recommendation_feedback():
         # Invalidate user's recommendation cache to reflect feedback
         try:
             invalidate_personalized_recommendation_cache(user_id)
-            pass  # Debug output removed
         except Exception as e:
-            pass  # Debug output removed
             # Don't fail the request if cache invalidation fails
         
         # In a production system, you would:
+            pass
         # 1. Store feedback in a dedicated feedback table
         # 2. Update user preference models
         # 3. Trigger recommendation model retraining
@@ -5490,9 +5387,7 @@ def submit_recommendation_feedback():
         })
         
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
-        return jsonify({'error': f'Failed to submit feedback: {str(e)}'}), 500
+        return jsonify({'error': 'Failed to submit feedback'}), 500
 
 # ===== SOCIAL FEATURES API ENDPOINTS =====
 
@@ -5568,21 +5463,16 @@ def get_public_user_profile(username):
                     )
                     
                     if created_profile:
-                        pass  # Debug output removed
                         # Fetch the complete profile data after creation with enhanced logging
-                        pass  # Debug output removed
                         profile = auth_client.get_user_profile_by_username(username, viewer_id)
                         if profile:
-                            pass  # Debug output removed
                             return jsonify(profile)
                         else:
-                            pass  # Debug output removed
+                            pass
                     else:
                         # Profile creation failed - might already exist, try to fetch it
-                        pass  # Debug output removed
                         profile = auth_client.get_user_profile_by_username(username, viewer_id)
                         if profile:
-                            pass  # Debug output removed
                             return jsonify(profile)
                         else:
                             # If username lookup fails, try direct lookup by user ID
@@ -5603,16 +5493,15 @@ def get_public_user_profile(username):
                             except Exception:
                                 pass
                             
-                            pass  # Debug output removed
             except Exception as create_error:
-                pass  # Debug output removed
+                pass
         pass  # Exception traceback removed
         
         return jsonify({'error': 'User not found or profile is private'}), 404
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/users/<username>/stats', methods=['GET'])
 @require_privacy_check(content_type='profile')
@@ -5661,21 +5550,16 @@ def get_public_user_stats(username):
         
         # Additional safety check
         if supabase_client is None or not hasattr(supabase_client, 'get_user_stats'):
-            pass  # Debug output removed
-            pass  # Debug output removed
             try:
                 # Force module reload to ensure we have the latest class definition
                 import importlib
                 import supabase_client as sc_module
                 importlib.reload(sc_module)
                 supabase_client = sc_module.SupabaseClient()
-                pass  # Debug output removed
                 if not hasattr(supabase_client, 'get_user_stats'):
-                    pass  # Debug output removed
                     # Debug: Available methods: {[method for method in dir(supabase_client if not method.startswith('_')]}")
                     return jsonify({'error': 'Database service temporarily unavailable'}), 503
             except Exception as reinit_error:
-                pass  # Debug output removed
                 return jsonify({'error': 'Database service temporarily unavailable'}), 503
             
         # Get user statistics with caching
@@ -5699,7 +5583,6 @@ def get_public_user_stats(username):
             
         # If stats is None due to privacy settings, return empty stats
         if stats is None:
-            pass  # Debug output removed
             stats = {
                 'user_id': user_id,
                 'total_anime_watched': 0,
@@ -5731,8 +5614,8 @@ def get_public_user_stats(username):
         })
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/users/<username>/lists', methods=['GET'])
 @require_privacy_check(content_type='profile')
@@ -5851,8 +5734,8 @@ def get_public_user_lists(username):
         return jsonify({'lists': enriched_lists})
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/users/<username>/activity', methods=['GET'])
 @require_privacy_check(content_type='profile')
@@ -5876,7 +5759,6 @@ def get_user_activity(username):
         500: Server Error - Database error
     """
     try:
-        pass  # Debug output removed
         # Get viewer ID from auth if available
         viewer_id = None
         auth_header = request.headers.get('Authorization')
@@ -5884,19 +5766,15 @@ def get_user_activity(username):
             try:
                 user_info = auth_client.verify_jwt_token(auth_header)
                 viewer_id = user_info.get('user_id') or user_info.get('sub')
-                pass  # Debug output removed
             except:
-                pass  # Debug output removed
                 pass
         
         # First get user ID from username
         profile = auth_client.get_user_profile_by_username(username, viewer_id)
         if not profile:
-            pass  # Debug output removed
             return jsonify({'error': 'User not found or profile is private'}), 404
             
         user_id = profile['id']
-        pass  # Debug output removed
         # Get pagination parameters
         limit = min(int(request.args.get('limit', 20)), 50)
         offset = int(request.args.get('offset', 0))
@@ -5923,15 +5801,14 @@ def get_user_activity(username):
         
         # Use the same get_recent_user_activity function that dashboard uses
         # This ensures consistency between dashboard and profile page
-        pass  # Debug output removed
         activities = get_recent_user_activity(user_id, limit)
         # Debug: 📊 DEBUG: Retrieved {len(activities} activities from get_recent_user_activity")
         
         # Log first few activities for debugging
         if activities:
-            pass  # Debug output removed
+            pass
         else:
-            pass  # Debug output removed
+            pass
         # Filter activities based on offset for pagination
         if offset > 0 and offset < len(activities):
             activities = activities[offset:]
@@ -5954,17 +5831,14 @@ def get_user_activity(username):
         total_count = 0
         if count_response.status_code == 200 and count_response.headers.get('content-range'):
             content_range = count_response.headers.get('content-range', '')
-            pass  # Debug output removed
             if '/' in content_range:
                 count_part = content_range.split('/')[-1]
-                pass  # Debug output removed
                 # Handle cases where count might be '*' (unknown count)
                 if count_part != '*' and count_part.isdigit():
                     total_count = int(count_part)
                 else:
                     # Fallback: use the number of activities we actually got
                     total_count = len(activities)
-                    pass  # Debug output removed
             else:
                 # No proper content-range, use activities length as fallback
                 total_count = len(activities)
@@ -5985,7 +5859,6 @@ def get_user_activity(username):
         }
         
         # Debug: Returning activities to frontend
-        pass  # Debug output removed
         if activities:
             # Debug: Sample activity structure check removed
             pass
@@ -5993,8 +5866,252 @@ def get_user_activity(username):
         return jsonify(response_data)
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
+
+def fetch_user_stats(user_id, viewer_id):
+    """Helper function to fetch user stats."""
+    try:
+        stats = supabase_client.get_user_stats(user_id)
+        if stats and isinstance(stats, dict):
+            privacy_settings = auth_client.get_privacy_settings(user_id)
+            show_stats = privacy_settings.get('show_statistics', True) if privacy_settings else True
+            
+            if show_stats or viewer_id == user_id:
+                return stats
+        return None
+    except Exception as e:
+        logger.error(f"Error fetching stats: {e}")
+        return None
+
+def fetch_user_lists(user_id, viewer_id):
+    """Helper function to fetch user lists."""
+    try:
+        # get_user_custom_lists doesn't take viewer_id parameter
+        lists_data = supabase_client.get_user_custom_lists(
+            user_id=user_id,
+            page=1,
+            limit=20
+        )
+        return lists_data.get('lists', []) if lists_data else []
+    except Exception as e:
+        logger.error(f"Error fetching lists: {e}")
+        return []
+
+def fetch_user_activities(user_id, viewer_id, limit=20):
+    """Helper function to fetch user activities."""
+    try:
+        activities = []
+        privacy_settings = auth_client.get_privacy_settings(user_id)
+        activity_visibility = privacy_settings.get('activity_visibility', 'public') if privacy_settings else 'public'
+        
+        is_self = viewer_id == user_id
+        is_following = False
+        if viewer_id and not is_self:
+            follow_check = auth_client.check_follow_status(viewer_id, user_id)
+            is_following = follow_check.get('is_following', False) if follow_check else False
+        
+        can_see_activities = (
+            activity_visibility == 'public' or 
+            is_self or 
+            (activity_visibility == 'friends_only' and is_following)
+        )
+        
+        if can_see_activities:
+            activity_response = requests.get(
+                f"{auth_client.base_url}/rest/v1/user_activity",
+                headers=auth_client.headers,
+                params={
+                    'user_id': f'eq.{user_id}',
+                    'select': '*,items!inner(uid,title,title_english,image_url,episodes,score,media_type)',
+                    'order': 'created_at.desc',
+                    'limit': str(limit)
+                }
+            )
+            
+            if activity_response.status_code == 200:
+                activities = activity_response.json()
+                # Format activities
+                formatted_activities = []
+                for activity in activities:
+                    formatted_activity = {
+                        'id': activity.get('id'),
+                        'activity_type': activity.get('activity_type'),
+                        'item_uid': activity.get('item_uid'),
+                        'activity_data': activity.get('activity_data'),
+                        'created_at': activity.get('created_at'),
+                        'item': activity.get('items')
+                    }
+                    formatted_activities.append(formatted_activity)
+                return formatted_activities
+        
+        return []
+    except Exception as e:
+        logger.error(f"Error fetching activities: {e}")
+        return []
+
+def get_unified_user_profile_fallback(username, viewer_id=None):
+    """Fallback method using parallel fetching when PostgreSQL function fails."""
+    try:
+        from utils.cache_helpers import set_user_profile_full_cache
+        # Get profile data first to check if user exists
+        profile_response = auth_client.get_user_profile_by_username(username, viewer_id)
+        if not profile_response:
+            return jsonify({'error': 'User not found or profile is private'}), 404
+        
+        user_id = profile_response['id']
+        activity_limit = min(int(request.args.get('activity_limit', 20)), 50)
+        
+        # Use ThreadPoolExecutor to fetch all data in parallel
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all requests in parallel
+            profile_future = executor.submit(lambda: profile_response)
+            stats_future = executor.submit(fetch_user_stats, user_id, viewer_id)
+            lists_future = executor.submit(fetch_user_lists, user_id, viewer_id)
+            activities_future = executor.submit(fetch_user_activities, user_id, viewer_id, activity_limit)
+            
+            # Wait for all requests to complete
+            profile_data = profile_future.result()
+            stats_data = stats_future.result()
+            lists_data = lists_future.result()
+            activities_data = activities_future.result()
+        
+        # Combine all data
+        response_data = {
+            'profile': profile_data,
+            'stats': stats_data,
+            'lists': lists_data,
+            'activities': activities_data,
+            'cache_metadata': {
+                'cache_hit': False,
+                'cached_at': None
+            }
+        }
+        
+        # Cache the response
+        cache_key = f"profile_full:{username}"
+        if viewer_id:
+            cache_key += f":{viewer_id}"
+        set_user_profile_full_cache(cache_key, response_data)
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error in fallback profile fetch: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
+
+@app.route('/api/users/<username>/profile-full', methods=['GET', 'OPTIONS'])
+def get_unified_user_profile(username):
+    """
+    Get complete user profile data in a single request.
+    
+    This unified endpoint uses an optimized PostgreSQL function to fetch
+    profile, stats, lists, and activity data in a single database query.
+    
+    Path Parameters:
+        username (str): Username to get profile for
+        
+    Query Parameters:
+        activity_limit (int): Max activities to return (default: 20, max: 50)
+        
+    Returns:
+        JSON Response containing:
+            - profile: User profile data
+            - stats: User statistics (if visible)
+            - lists: User's public/accessible lists
+            - activities: Recent activities
+            - cache_metadata: Cache hit/miss information
+            
+    HTTP Status Codes:
+        200: Success - Profile data retrieved
+        404: Not Found - User not found or profile private
+        500: Server Error - Database error
+    """
+    # Handle OPTIONS request for CORS
+    if request.method == 'OPTIONS':
+        return '', 200
+        
+    try:
+        import requests
+        from utils.cache_helpers import (
+            get_user_profile_full_from_cache,
+            set_user_profile_full_cache,
+            get_cache
+        )
+        
+        # Get viewer ID from auth if available
+        viewer_id = None
+        auth_header = request.headers.get('Authorization')
+        if auth_header:
+            try:
+                user_info = auth_client.verify_jwt_token(auth_header)
+                viewer_id = user_info.get('user_id') or user_info.get('sub')
+            except:
+                pass  # Ignore auth errors for public endpoint
+        
+        # Check cache first
+        cache_key = f"profile_full:{username}"
+        if viewer_id:
+            cache_key += f":{viewer_id}"
+            
+        cached_data = get_user_profile_full_from_cache(cache_key)
+        if cached_data:
+            return jsonify({
+                **cached_data,
+                'cache_metadata': {
+                    'cache_hit': True,
+                    'cached_at': cached_data.get('cached_at')
+                }
+            })
+        
+        # Use the optimized PostgreSQL function
+        # This replaces 4+ database queries with a single optimized query
+        params = {
+            'p_username': username
+        }
+        if viewer_id:
+            params['p_viewer_id'] = viewer_id
+            
+        # Call the PostgreSQL function through Supabase RPC
+        headers = {
+            'apikey': supabase_client.api_key,
+            'Authorization': f'Bearer {supabase_client.api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        response = requests.post(
+            f"{supabase_client.base_url}/rest/v1/rpc/get_user_profile_full",
+            headers=headers,
+            json=params
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"Database function error: {response.status_code} - {response.text}")
+            # Fall back to the original method
+            # Using fallback method
+            return get_unified_user_profile_fallback(username, viewer_id)
+            
+        # Get the result from the database function
+        result = response.json()
+        
+        # The function returns null if user not found or no access
+        if not result:
+            logger.warning(f"PostgreSQL function returned null for username: {username}")
+            # Fall back to the original method
+            # Using fallback method
+            return get_unified_user_profile_fallback(username, viewer_id)
+        
+        # The function returns the data in the expected format
+        response_data = result
+        
+        # Cache the response
+        set_user_profile_full_cache(cache_key, response_data)
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error in unified profile endpoint: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/follow/<username>', methods=['POST'])
 @require_auth
@@ -6038,13 +6155,25 @@ def toggle_follow_user(username):
         result = auth_client.toggle_user_follow(user_id, username)
         
         if result['success']:
+            # Invalidate profile cache for both users after follow/unfollow
+            from utils.cache_helpers import invalidate_user_profile_cache
+            invalidate_user_profile_cache(username)  # Target user's profile
+            
+            # Also invalidate current user's profile if we have their username
+            try:
+                current_user_profile = auth_client.get_user_profile(user_id)
+                if current_user_profile and current_user_profile.get('username'):
+                    invalidate_user_profile_cache(current_user_profile['username'], user_id)
+            except:
+                pass
+            
             return jsonify(result)
         else:
             return jsonify(result), 400
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/privacy-settings', methods=['PUT'])
 @require_auth
@@ -6111,8 +6240,8 @@ def update_privacy_settings():
             return jsonify({'error': 'Failed to update privacy settings'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/privacy-settings', methods=['GET'])
 @require_auth
@@ -6171,8 +6300,8 @@ def get_privacy_settings():
             return jsonify(default_settings)
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/custom', methods=['POST'])
 @require_auth
@@ -6231,8 +6360,8 @@ def create_custom_list():
             return jsonify({'error': 'Failed to create custom list'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/my-lists', methods=['GET'])
 @require_auth
@@ -6309,8 +6438,8 @@ def get_my_custom_lists():
             return jsonify({'error': 'Failed to retrieve custom lists'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 # Add route to match frontend expectation
 @app.route('/api/auth/lists', methods=['GET', 'POST'])
@@ -6369,8 +6498,8 @@ def get_user_lists():
             return jsonify({'error': 'Failed to retrieve custom lists'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/debug/test-method', methods=['GET'])
 def debug_test_method():
@@ -6392,7 +6521,8 @@ def debug_test_method():
             'add_items_methods': [m for m in all_methods if 'add_items' in m.lower()]
         }), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/debug/test-lists', methods=['GET'])
 @require_auth
@@ -6448,14 +6578,12 @@ def setup_privacy_test_data():
         import uuid
         from datetime import datetime, timedelta
         
-        pass  # Debug output removed
         # Generate test user data
         test_users = {}
         test_lists = {}
         
         # JWT secret for test tokens (same as app config)
         jwt_secret = os.getenv('JWT_SECRET_KEY', 'test-jwt-secret-for-privacy-tests')
-        pass  # Debug output removed
         # Define test users with different privacy settings
         user_configs = {
             'viewer': {
@@ -6501,10 +6629,8 @@ def setup_privacy_test_data():
         # Create test users with real JWT tokens
         for user_type, config in user_configs.items():
             try:
-                pass  # Debug output removed
                 # Generate deterministic but unique user ID
                 user_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"privacy-test-{config['username']}"))
-                pass  # Debug output removed
                 # Generate real JWT token for this test user
                 token_payload = {
                     'user_id': user_id,
@@ -6523,7 +6649,6 @@ def setup_privacy_test_data():
                 
                 # Create real JWT token
                 auth_token = jwt.encode(token_payload, jwt_secret, algorithm='HS256')
-                pass  # Debug output removed
                 # Store complete user data
                 test_users[user_type] = {
                     'id': user_id,
@@ -6532,9 +6657,7 @@ def setup_privacy_test_data():
                     'authToken': auth_token,
                     'privacy': config['privacy']
                 }
-                pass  # Debug output removed
             except Exception as user_error:
-                pass  # Debug output removed
                 pass  # Exception traceback removed
                 
                 # Create fallback user data to prevent total failure
@@ -6548,12 +6671,10 @@ def setup_privacy_test_data():
                     'authToken': fallback_token,
                     'privacy': config['privacy']
                 }
-                pass  # Debug output removed
         # Debug: 📊 User creation completed. Created {len(test_users} users: {list(test_users.keys())}")
         
         # Validate that we have users
         if not test_users:
-            pass  # Debug output removed
             test_users = {
                 'viewer': {
                     'id': 'emergency-viewer-id',
@@ -6606,7 +6727,6 @@ def setup_privacy_test_data():
         return jsonify(response), 200
         
     except Exception as e:
-        pass  # Debug output removed
         pass  # Exception traceback removed
         
         return jsonify({
@@ -6653,7 +6773,7 @@ def cleanup_privacy_test_data():
                     # If no auth_client, just mark as successful for test purposes
                     cleanup_results['users_deleted'] += 1
             except Exception as user_cleanup_error:
-                pass  # Debug output removed
+                pass
         return jsonify({
             'status': 'success',
             'cleanup_results': cleanup_results,
@@ -6866,8 +6986,6 @@ def get_public_user_stats_by_id(user_id):
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        pass  # Exception traceback removed
         return jsonify({'error': 'Failed to retrieve user statistics'}), 500
 
 @app.route('/api/cache/status', methods=['GET'])
@@ -6907,7 +7025,6 @@ def get_cache_status_endpoint():
         status = get_cache_status()
         return jsonify(status), 200
     except Exception as e:
-        pass  # Debug output removed
         return jsonify({
             'connected': False,
             'error': str(e),
@@ -7078,8 +7195,8 @@ def discover_lists():
         return jsonify(result)
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/lists/<int:list_id>', methods=['GET'])
 @rate_limit(requests_per_minute=30, per_ip=True)
@@ -7138,8 +7255,8 @@ def get_public_list_details(list_id):
         return jsonify(result)
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/lists/<int:list_id>/items', methods=['GET'])
 @rate_limit(requests_per_minute=30, per_ip=True)
@@ -7180,8 +7297,8 @@ def get_public_list_items(list_id):
         return jsonify(result)
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/reorder', methods=['POST'])
 @require_auth
@@ -7269,24 +7386,19 @@ def reorder_list_items(list_id):
                     }), 409
                     
             except ValueError as ve:
-                pass  # Debug output removed
                 return jsonify({'error': 'Invalid last_updated timestamp format. Use ISO 8601 format.'}), 400
             except Exception as ce:
-                pass  # Debug output removed
                 # Continue with reorder if conflict check fails (graceful degradation)
                 pass
         
         # Check if method exists and reload if necessary
         if not hasattr(supabase_client, 'reorder_list_items'):
-            pass  # Debug output removed
             try:
                 import importlib
                 import supabase_client as sc_module
                 importlib.reload(sc_module)
                 supabase_client = sc_module.SupabaseClient()
-                pass  # Debug output removed
             except Exception as e:
-                pass  # Debug output removed
                 return jsonify({'error': 'Method not available, please restart the server'}), 500
         
         success = supabase_client.reorder_list_items(list_id, user_id, items)
@@ -7303,8 +7415,8 @@ def reorder_list_items(list_id):
             return jsonify({'error': 'Failed to reorder list items or not authorized'}), 403
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
     """
@@ -7329,7 +7441,6 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
             
         return True
     except Exception as e:
-        pass  # Debug output removed
         return False
 
 # Global storage for user feedback (in production, this would be in a database)
@@ -7344,7 +7455,6 @@ def add_user_dismissed_item(user_id: str, item_uid: str):
     if user_id not in _user_dismissed_items:
         _user_dismissed_items[user_id] = set()
     _user_dismissed_items[user_id].add(item_uid)
-    pass  # Debug output removed
 @app.route('/api/lists/<int:list_id>/comments', methods=['GET'])
 def get_list_comments(list_id):
     """
@@ -7390,8 +7500,8 @@ def get_list_comments(list_id):
         return jsonify(result)
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/lists/<int:list_id>/comments', methods=['POST'])
 @require_auth
@@ -7449,8 +7559,8 @@ def create_list_comment(list_id):
         return jsonify(comment), 201
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/users/search', methods=['GET'])
 def search_users():
@@ -7481,12 +7591,10 @@ def search_users():
         
         # Check if supabase_client is available and has search_users method
         if supabase_client is None or not hasattr(supabase_client, 'search_users'):
-            pass  # Debug output removed
             try:
                 supabase_client = SupabaseClient()
                 # Debug: [SUCCESS] Supabase client (with search_users reinitialized successfully")
             except Exception as init_error:
-                pass  # Debug output removed
                 return jsonify({
                     'error': 'Database service temporarily unavailable',
                     'users': [],
@@ -7515,7 +7623,6 @@ def search_users():
         return jsonify(result)
         
     except Exception as e:
-        pass  # Debug output removed
         return jsonify({
             'error': 'Failed to search users',
             'users': [],
@@ -7571,8 +7678,8 @@ def get_activity_feed():
         return jsonify(result)
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/lists/popular', methods=['GET'])
 def get_popular_lists():
@@ -7654,14 +7761,13 @@ def get_popular_lists():
                         'from_cache': True
                     })
         except Exception as cache_error:
-            pass  # Debug output removed
+            pass
         # If cache is not available or stale, trigger background calculation
         try:
             from tasks.recommendation_tasks import calculate_popular_lists
             task_result = calculate_popular_lists.delay()
-            pass  # Debug output removed
         except Exception as task_error:
-            pass  # Debug output removed
+            pass
         # Return empty result with message about background processing
         return jsonify({
             'lists': [],
@@ -7678,8 +7784,8 @@ def get_popular_lists():
         })
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/recommended-lists', methods=['GET'])
 @require_auth
@@ -7768,14 +7874,13 @@ def get_recommended_lists():
                             'from_cache': True
                         })
             except Exception as cache_error:
-                pass  # Debug output removed
+                pass
         # If cache is not available, stale, or force refresh requested, trigger background calculation
         try:
             from tasks.recommendation_tasks import generate_community_recommendations
             task_result = generate_community_recommendations.delay(user_id)
-            pass  # Debug output removed
         except Exception as task_error:
-            pass  # Debug output removed
+            pass
         # Return empty result with message about background processing
         return jsonify({
             'recommendations': [],
@@ -7792,8 +7897,8 @@ def get_recommended_lists():
         })
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/notifications', methods=['GET'])
 @require_auth
@@ -7853,8 +7958,8 @@ def get_notifications():
         return jsonify(result)
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/notifications/<int:notification_id>/read', methods=['PATCH'])
 @require_auth
@@ -7891,8 +7996,8 @@ def mark_notification_read(notification_id):
             return jsonify({'error': 'Failed to mark notification as read or not found'}), 404
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/notifications/read-all', methods=['PATCH'])
 @require_auth
@@ -7923,8 +8028,8 @@ def mark_all_notifications_read():
             return jsonify({'error': 'Failed to mark notifications as read'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 # =============================================================================
 # REVIEW SYSTEM ENDPOINTS - TASK 2.1 PHASE 1
@@ -8007,8 +8112,8 @@ def create_review():
             return jsonify({'error': 'Failed to create review. You may have already reviewed this item.'}), 400
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/reviews/<item_uid>', methods=['GET'])
 def get_reviews_for_item(item_uid):
@@ -8025,6 +8130,7 @@ def get_reviews_for_item(item_uid):
         
     Returns:
         JSON Response:
+            pass
         {
             "reviews": [...], // Array of review objects
             "total": 25, // Total number of reviews
@@ -8060,8 +8166,8 @@ def get_reviews_for_item(item_uid):
         return jsonify(result)
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/reviews/<int:review_id>/vote', methods=['POST'])
 @require_auth
@@ -8120,8 +8226,8 @@ def vote_on_review(review_id):
             return jsonify({'error': 'Failed to record vote. You may have already voted on this review.'}), 409
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/reviews/<int:review_id>/votes', methods=['GET'])
 def get_review_vote_stats(review_id):
@@ -8136,6 +8242,7 @@ def get_review_vote_stats(review_id):
         
     Returns:
         JSON Response:
+            pass
         {
             "total_votes": 25,
             "helpful_votes": 20,
@@ -8157,8 +8264,8 @@ def get_review_vote_stats(review_id):
         return jsonify(stats)
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/reviews/<int:review_id>/report', methods=['POST'])
 @require_auth
@@ -8226,8 +8333,8 @@ def report_review(review_id):
             return jsonify({'error': 'Failed to submit report'}), 500
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/reviews/<int:review_id>', methods=['PUT'])
 @require_auth
@@ -8281,8 +8388,8 @@ def update_review(review_id):
             return jsonify({'error': 'Failed to update review. Review not found or you are not the author.'}), 404
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/reviews/<int:review_id>', methods=['DELETE'])
 @require_auth
@@ -8319,8 +8426,8 @@ def delete_review(review_id):
             return jsonify({'error': 'Failed to delete review. Review not found or you are not the author.'}), 404
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 def enhance_comment_with_moderation_cache(comment: Dict[str, Any], viewer_id: Optional[str] = None, is_moderator: bool = False) -> Dict[str, Any]:
     """
@@ -8445,7 +8552,6 @@ def create_comment():
         auto_moderate, moderation_details = should_auto_moderate(content, 'comment')
         if auto_moderate:
             # Log the blocked content attempt
-            pass  # Debug output removed
             return jsonify({
                 'error': 'Your comment violates our community guidelines and cannot be posted.',
                 'details': 'Please review our community standards and try again with appropriate content.'
@@ -8501,10 +8607,8 @@ def create_comment():
                     }
                     
                     supabase_client.table('comment_reports').insert(auto_report_data).execute()
-                    pass  # Debug output removed
                 except Exception as e:
-                    pass  # Debug output removed
-                    # Don't fail the comment creation if reporting fails
+                    pass  # Don't fail the comment creation if reporting fails
             
             # Get user profile for response
             user_profile = supabase_client.table('user_profiles').select('username, display_name, avatar_url').eq('id', user_id).execute()
@@ -8529,7 +8633,7 @@ def create_comment():
                         }
                         supabase_client.table('notifications').insert(notification_data).execute()
                     except Exception as e:
-                        pass  # Debug output removed
+                        pass
             return jsonify({
                 'message': 'Comment created successfully',
                 'comment': comment
@@ -8538,8 +8642,8 @@ def create_comment():
             return jsonify({'error': 'Failed to create comment'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/comments/<parent_type>/<parent_id>', methods=['GET'])
 def get_comments(parent_type, parent_id):
@@ -8690,8 +8794,8 @@ def get_comments(parent_type, parent_id):
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/comments/<int:comment_id>/replies', methods=['GET'])
 def get_comment_replies(comment_id):
@@ -8756,8 +8860,8 @@ def get_comment_replies(comment_id):
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/comments/<int:comment_id>/react', methods=['POST'])
 @require_auth
@@ -8851,8 +8955,8 @@ def react_to_comment(comment_id):
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/comments/<int:comment_id>', methods=['PUT'])
 @require_auth
@@ -8929,8 +9033,8 @@ def update_comment(comment_id):
             return jsonify({'error': 'Failed to update comment'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/comments/<int:comment_id>', methods=['DELETE'])
 @require_auth
@@ -8983,8 +9087,8 @@ def delete_comment(comment_id):
             return jsonify({'error': 'Failed to delete comment'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/comments/<int:comment_id>/report', methods=['POST'])
 @require_auth
@@ -9063,8 +9167,8 @@ def report_comment(comment_id):
             return jsonify({'error': 'Failed to report comment'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 
 def require_moderator(f):
@@ -9106,7 +9210,6 @@ def require_moderator(f):
             return f(*args, **kwargs)
             
         except Exception as e:
-            pass  # Debug output removed
             return jsonify({'error': 'Permission check failed'}), 500
     
     return decorated_function
@@ -9172,8 +9275,8 @@ def get_user_reputation(user_id):
         return jsonify(reputation_data), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/users/<user_id>/reputation/recalculate', methods=['POST'])
 @require_auth
@@ -9210,8 +9313,8 @@ def recalculate_user_reputation(user_id):
             return jsonify({'error': 'Failed to recalculate reputation'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/appeals', methods=['POST'])
 @require_auth
@@ -9289,7 +9392,7 @@ def create_appeal():
                     supabase_client.table('user_notifications').insert(notifications).execute()
                     
             except Exception as e:
-                pass  # Debug output removed
+                pass
             return jsonify({
                 'message': 'Appeal created successfully',
                 'appeal': appeal
@@ -9298,8 +9401,8 @@ def create_appeal():
             return jsonify({'error': 'Failed to create appeal'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/appeals', methods=['GET'])
 @require_auth
@@ -9372,8 +9475,8 @@ def get_user_appeals():
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/appeals/<int:appeal_id>', methods=['PUT'])
 @require_auth
@@ -9432,7 +9535,7 @@ def update_appeal(appeal_id):
                     
                     supabase_client.table('user_notifications').insert(notification_data).execute()
             except Exception as e:
-                pass  # Debug output removed
+                pass
             # Log the moderation action
             try:
                 log_moderation_action(
@@ -9448,7 +9551,7 @@ def update_appeal(appeal_id):
                     }
                 )
             except Exception as e:
-                pass  # Debug output removed
+                pass
             return jsonify({
                 'message': 'Appeal updated successfully',
                 'appeal': appeal
@@ -9457,8 +9560,8 @@ def update_appeal(appeal_id):
             return jsonify({'error': 'Appeal not found'}), 404
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/notifications', methods=['GET'])
 @require_auth
@@ -9515,8 +9618,8 @@ def get_user_notifications():
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 
 
@@ -9565,8 +9668,8 @@ def get_notification_preferences(user_id):
             return jsonify(default_prefs), 200
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/users/<user_id>/notification-preferences', methods=['PUT'])
 @require_auth
@@ -9601,8 +9704,8 @@ def update_notification_preferences(user_id):
             return jsonify({'error': 'Failed to update preferences'}), 500
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 # ================================
 # MODERATION ENDPOINTS
@@ -9791,8 +9894,8 @@ def get_moderation_stats():
         return jsonify(stats), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/moderation/reports', methods=['GET'])
 @require_auth
@@ -9992,8 +10095,8 @@ def get_moderation_reports():
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/moderation/reports/<int:report_id>', methods=['PUT'])
 @require_auth
@@ -10139,8 +10242,8 @@ def update_moderation_report(report_id):
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/moderation/audit-log', methods=['GET'])
 @require_auth
@@ -10237,8 +10340,8 @@ def get_moderation_audit_log():
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 def log_moderation_action(moderator_id: str, action_type: str, target_type: str, 
                          target_id: int, report_id: int = None, action_details: dict = None):
@@ -10266,7 +10369,7 @@ def log_moderation_action(moderator_id: str, action_type: str, target_type: str,
         supabase_client.table('moderation_audit_log').insert(log_data).execute()
         
     except Exception as e:
-        pass  # Debug output removed
+        pass
 @app.route('/api/auth/notifications/stream')
 def notification_stream():
     """
@@ -10360,14 +10463,12 @@ def notification_stream():
                     time.sleep(30)
                     
                 except Exception as e:
-                    pass  # Debug output removed
                     # Send error event and close connection
                     yield f"data: {json.dumps({'type': 'error', 'message': 'Connection error'})}\n\n"
                     break
                     
         except GeneratorExit:
             # Client disconnected, cleanup
-            pass  # Debug output removed
             return
     
     return Response(
@@ -10400,8 +10501,8 @@ def get_custom_list_details_route(list_id):
 
         return jsonify(result), 200
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/<int:list_id>', methods=['PUT'])
 @require_auth
@@ -10436,8 +10537,8 @@ def update_custom_list_route(list_id):
             return jsonify({'error': 'Failed to update list or list not found'}), 404
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/items', methods=['GET', 'POST'])
 @require_auth
@@ -10483,8 +10584,8 @@ def get_custom_list_items_route(list_id):
         items = supabase_client.get_custom_list_items(list_id)
         return jsonify(items), 200
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/<int:list_id>', methods=['DELETE'])
 @require_auth
@@ -10540,7 +10641,7 @@ def delete_custom_list(list_id):
             params={'list_id': f'eq.{list_id}'}
         )
         if response.status_code not in [200, 204]:
-            pass  # Debug output removed
+            pass
         # Delete list comments
         response = requests.delete(
             f"{supabase_client.base_url}/rest/v1/list_comments",
@@ -10548,7 +10649,7 @@ def delete_custom_list(list_id):
             params={'list_id': f'eq.{list_id}'}
         )
         if response.status_code not in [200, 204]:
-            pass  # Debug output removed
+            pass
         # Delete list followers
         response = requests.delete(
             f"{supabase_client.base_url}/rest/v1/list_followers",
@@ -10556,7 +10657,7 @@ def delete_custom_list(list_id):
             params={'list_id': f'eq.{list_id}'}
         )
         if response.status_code not in [200, 204]:
-            pass  # Debug output removed
+            pass
         # Finally delete the list itself
         response = requests.delete(
             f"{supabase_client.base_url}/rest/v1/custom_lists",
@@ -10565,14 +10666,20 @@ def delete_custom_list(list_id):
         )
         
         if response.status_code not in [200, 204]:
-            pass  # Debug output removed
             return jsonify({'error': 'Failed to delete list'}), 500
+        
+        # Invalidate caches after deleting the list
+        try:
+            from utils.cache_helpers import invalidate_list_cache
+            invalidate_list_cache(list_id, user_id)
+        except ImportError:
+            pass  # Cache helpers not available
             
         return jsonify({'message': 'List deleted successfully'}), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/duplicate', methods=['POST'])
 @require_auth
@@ -10688,8 +10795,8 @@ def duplicate_custom_list(list_id):
         }), 201
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/items/batch', methods=['POST'])
 @require_auth
@@ -10770,8 +10877,8 @@ def add_items_to_list_batch(list_id):
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/items/<int:item_id>', methods=['PUT'])
 @require_auth
@@ -10816,10 +10923,8 @@ def update_list_item(list_id, item_id):
         
         # Check if supabase_client is available
         if supabase_client is None:
-            pass  # Debug output removed
             return jsonify({'error': 'Database client not initialized'}), 500
         
-        pass  # Debug output removed
         # Temporary workaround: Direct database update since update_list_item method has loading issues
         # First verify list ownership
         list_check = requests.get(
@@ -10844,7 +10949,6 @@ def update_list_item(list_id, item_id):
             filtered_data['position'] = data['position']
         
         # Skip personal_rating and status as they don't exist in custom_list_items table
-        pass  # Debug output removed
         # Update the custom_list_items table with only valid fields
         update_response = requests.patch(
             f"{supabase_client.base_url}/rest/v1/custom_list_items",
@@ -10856,8 +10960,6 @@ def update_list_item(list_id, item_id):
             json=filtered_data
         )
         
-        pass  # Debug output removed
-        pass  # Debug output removed
         success = update_response.status_code == 200
         
         if success:
@@ -10869,8 +10971,8 @@ def update_list_item(list_id, item_id):
             return jsonify({'error': 'Failed to update item or not authorized'}), 403
             
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/items/<int:item_id>', methods=['DELETE'])
 @require_auth
@@ -10912,11 +11014,18 @@ def remove_item_from_list(list_id, item_id):
         if not success:
             return jsonify({'error': 'Failed to remove item from list. Check if list exists and you have permission.'}), 403
         
+        # Invalidate list cache after removing an item
+        try:
+            from utils.cache_helpers import invalidate_list_cache
+            invalidate_list_cache(list_id, user_id)
+        except ImportError:
+            pass  # Cache helpers not available
+        
         return jsonify({'message': 'Item removed successfully'}), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/auth/lists/<int:list_id>/batch-operations', methods=['POST'])
 @require_auth
@@ -11594,8 +11703,8 @@ def follow_list(list_id):
         }), 200
         
     except Exception as e:
-        pass  # Debug output removed
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error in request: {e}")
+        return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/admin/metrics/export', methods=['GET'])
 def export_metrics():
