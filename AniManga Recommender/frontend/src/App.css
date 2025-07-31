@@ -80,6 +80,7 @@ body {
 
 .App {
   text-align: center;
+  padding-top: 68px; /* Account for fixed navbar height */
 }
 
 .app-container {
@@ -1549,6 +1550,10 @@ input:focus-visible {
 }
 
 @media (max-width: 768px) {
+  .App {
+    padding-top: 72px; /* Account for taller mobile navbar */
+  }
+
   .item-list {
     grid-template-columns: repeat(2, minmax(200px, 1fr));
     padding: 20px 5px;
@@ -1572,6 +1577,10 @@ input:focus-visible {
 }
 
 @media (max-width: 480px) {
+  .App {
+    padding-top: 72px; /* Maintain mobile navbar height for very small screens */
+  }
+
   .item-list {
     grid-template-columns: 1fr;
     gap: 15px;

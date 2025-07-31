@@ -6,7 +6,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { UserStatsComponent } from "../components/social/UserStatsComponent";
 import { FollowButton } from "../components/social/FollowButton";
-import LoadingBanner from "../components/Loading/LoadingBanner";
+import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import { useAuth } from "../context/AuthContext";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
@@ -52,8 +52,8 @@ export const UserProfilePage: React.FC = () => {
   if (isLoading) {
     return (
       <div className="dashboard-page">
-        <div className="dashboard-container">
-          <LoadingBanner message="Loading user profile..." isVisible={true} />
+        <div className="dashboard-container" style={{ position: "relative", minHeight: "400px" }}>
+          <LoadingSpinner message="Loading user profile..." />
         </div>
       </div>
     );

@@ -41,11 +41,10 @@ from supabase_client import SupabaseClient, SupabaseAuthClient, require_auth
 import requests
 from datetime import datetime, timedelta
 import json
-import ast
-import time
 import html
-from concurrent.futures import ThreadPoolExecutor
+import time
 from typing import Dict, List, Optional, Any
+from concurrent.futures import ThreadPoolExecutor
 from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
 from utils.batchOperations import BatchOperationsManager
 from utils.cache_helpers import (
@@ -240,51 +239,46 @@ def generate_token(user_data: Dict[str, Any], expiry_hours: int = 24) -> str:
 
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
     """
-    Verify and decode JWT token.
+    Verify and decode JWT token using Supabase Auth.
     
-    Validates a JWT token and extracts the payload information,
-    handling common JWT exceptions gracefully.
+    Validates a JWT token by making a request to Supabase Auth service
+    to ensure the token is valid, not expired, and properly issued.
     
     Args:
         token (str): JWT token string to verify
         
     Returns:
-        Optional[Dict[str, Any]]: Decoded token payload if valid, None if invalid
-            Contains user_id, email, and exp (expiration) fields
+        Optional[Dict[str, Any]]: User information if valid, None if invalid
+            Contains user_id (mapped from sub), email, and other user data
             
     Example:
         >>> token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
-        >>> payload = verify_token(token)
-        >>> if payload:
-        ...     # Debug: User ID: {payload['user_id']}
+        >>> user_info = verify_token(token)
+        >>> if user_info:
+        ...     user_id = user_info['user_id']
         
     Note:
-        Returns None for expired or invalid tokens. Uses Flask app config
-        for JWT secret key, falling back to environment variable.
+        Returns None for expired or invalid tokens. Uses Supabase Auth
+        for verification instead of local JWT decoding.
     """
-    import jwt
-    from flask import current_app
-    
     try:
-        # Check if we're in a Flask request context
-        from flask import has_request_context
+        # Initialize Supabase auth client
+        auth_client = SupabaseAuthClient(
+            base_url=os.getenv('SUPABASE_URL'),
+            api_key=os.getenv('SUPABASE_KEY'),
+            service_key=os.getenv('SUPABASE_SERVICE_KEY')
+        )
         
-        # Try to get secret key from Flask app config first, then environment
-        if has_request_context() and current_app:
-            secret_key = current_app.config.get('JWT_SECRET_KEY', os.getenv('JWT_SECRET_KEY', 'test-jwt-secret'))
-            is_testing = current_app.config.get('TESTING', False)
-        else:
-            secret_key = os.getenv('JWT_SECRET_KEY', 'test-jwt-secret')
-            is_testing = False
+        # Verify token with Supabase
+        user_info = auth_client.verify_jwt_token(token)
         
-        # Decode JWT with disabled audience verification for testing compatibility
-        payload = jwt.decode(token, secret_key, algorithms=['HS256'], options={"verify_aud": False})
-        return payload
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.InvalidTokenError:
-        return None
-    except Exception:
+        # Map 'sub' to 'user_id' for consistency
+        if user_info and 'sub' in user_info and 'user_id' not in user_info:
+            user_info['user_id'] = user_info['sub']
+            
+        return user_info
+    except Exception as e:
+        print(f"[DEBUG] Token verification error: {e}")
         return None
 
 # Global variables for data and ML models
@@ -442,55 +436,50 @@ def load_data_and_tfidf_from_supabase() -> None:
         # Debug: [INFO] Data already loaded: {len(df_processed} items")
         return
 
-    try:
-        pass  # Debug output removed
-        # Use global Supabase client
+    # Import and use the data singleton for caching
+    from data_singleton import get_data_singleton
+    data_singleton = get_data_singleton()
+    
+    # Define the load function to be called by singleton if needed
+    def load_from_supabase():
         global supabase_client
         if supabase_client is None:
-            pass  # Debug output removed
             supabase_client = SupabaseClient()
         
-        # Get data as DataFrame from Supabase
-        pass  # Debug output removed
-        df_processed = supabase_client.items_to_dataframe(include_relations=True)
+        # Get data as DataFrame from Supabase with lazy loading for faster startup
+        df = supabase_client.items_to_dataframe(include_relations=True, lazy_load=True)
         
-        # Debug: [SUCCESS] Loaded DataFrame with {len(df_processed} items")
-        
-        if df_processed is None or len(df_processed) == 0:
-            pass  # Debug output removed
-            df_processed = pd.DataFrame()
-            tfidf_vectorizer_global = None
-            tfidf_matrix_global = None
-            uid_to_idx = pd.Series(dtype='int64')
-            return
+        if df is None or len(df) == 0:
+            return pd.DataFrame(), None, None, pd.Series(dtype='int64')
         
         # Create combined text features for TF-IDF (if not exists)
-        if 'combined_text_features' not in df_processed.columns:
-            pass  # Debug output removed
-            df_processed = create_combined_text_features(df_processed)
-            pass  # Debug output removed
+        if 'combined_text_features' not in df.columns:
+            df = create_combined_text_features(df)
+        
         # Fill NaN values in combined_text_features
-        df_processed['combined_text_features'] = df_processed['combined_text_features'].fillna('')
+        df['combined_text_features'] = df['combined_text_features'].fillna('')
         
         # Initialize TF-IDF vectorizer
-        if len(df_processed) > 0:
-            pass  # Debug output removed
-            tfidf_vectorizer_global = TfidfVectorizer(stop_words='english', max_features=5000)
-            tfidf_matrix_global = tfidf_vectorizer_global.fit_transform(df_processed['combined_text_features'])
+        if len(df) > 0:
+            vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
+            matrix = vectorizer.fit_transform(df['combined_text_features'])
 
             # Create UID to index mapping - check if uid column exists
-            df_processed.reset_index(drop=True, inplace=True)
-            if 'uid' in df_processed.columns:
-                uid_to_idx = pd.Series(df_processed.index, index=df_processed['uid'])
+            df.reset_index(drop=True, inplace=True)
+            if 'uid' in df.columns:
+                uid_idx = pd.Series(df.index, index=df['uid'])
             else:
-                pass  # Debug output removed
-                uid_to_idx = pd.Series(dtype='int64')
-            # Debug: [SUCCESS] TF-IDF matrix created. Final data: {len(df_processed} items")
-        else:
-            tfidf_vectorizer_global = None
-            tfidf_matrix_global = None
-            uid_to_idx = pd.Series(dtype='int64')
+                uid_idx = pd.Series(dtype='int64')
             
+            return df, vectorizer, matrix, uid_idx
+        else:
+            return df, None, None, pd.Series(dtype='int64')
+    
+    try:
+        # Try to load from singleton cache first
+        cached_data = data_singleton.load_data(load_function=load_from_supabase)
+        df_processed, tfidf_vectorizer_global, tfidf_matrix_global, uid_to_idx = cached_data
+        
     except Exception as e:
         pass  # Debug output removed
         # Initialize empty globals to prevent further errors
@@ -5764,12 +5753,21 @@ def get_public_user_lists(username):
         500: Server Error - Database error
     """
     try:
+        # Initialize auth client
+        auth_client = SupabaseAuthClient(
+            base_url=os.getenv('SUPABASE_URL'),
+            api_key=os.getenv('SUPABASE_KEY'),
+            service_key=os.getenv('SUPABASE_SERVICE_KEY')
+        )
+        
         # Get viewer ID from auth if available
         viewer_id = None
         auth_header = request.headers.get('Authorization')
         if auth_header:
             try:
-                user_info = auth_client.verify_jwt_token(auth_header)
+                # Remove 'Bearer ' prefix if present
+                token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else auth_header
+                user_info = auth_client.verify_jwt_token(token)
                 viewer_id = user_info.get('user_id') or user_info.get('sub')
             except:
                 pass
@@ -5841,7 +5839,7 @@ def get_public_user_lists(username):
                 'title': list_item['title'],
                 'description': list_item.get('description', ''),
                 'itemCount': item_count,
-                'isPublic': list_item['is_public'],
+                'isPublic': list_item.get('privacy', 'private') == 'public',
                 'isCollaborative': list_item.get('is_collaborative', False),
                 'createdAt': list_item['created_at'],
                 'updatedAt': list_item['updated_at'],

@@ -5,7 +5,6 @@ import { AuthModal } from "./Auth/AuthModal";
 import { useRealTimeNotifications } from "../hooks/useRealTimeNotifications";
 import { sanitizeInput } from "../utils/security";
 import EnhancedSearch from "./EnhancedSearch";
-import { ThemeToggle } from "./common/ThemeToggle";
 import "./Navbar.css";
 
 /**
@@ -244,11 +243,6 @@ const Navbar: React.FC = () => {
                 </div>
               </li>
             )}
-
-            {/* Theme Toggle */}
-            <li className="nav-item" role="none">
-              <ThemeToggle size="sm" className="theme-toggle-navbar" />
-            </li>
 
             {/* Authentication Section */}
             <li className="nav-item" role="none">

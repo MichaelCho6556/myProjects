@@ -88,6 +88,12 @@ class SupabaseClient:
         - SUPABASE_SERVICE_KEY: Service role key (optional, for enhanced permissions)
     """
     
+    # Class-level cache to prevent reloading data between requests
+    _items_dataframe_cache = None
+    _cache_timestamp = None
+    _cache_max_age = 3600  # 1 hour cache validity
+    _relations_cache = None  # Cache for pre-loaded relations
+    
     def __init__(self):
         """
         Initialize SupabaseClient with environment configuration.
@@ -678,7 +684,7 @@ class SupabaseClient:
         
         return items
     
-    def items_to_dataframe(self, include_relations: bool = True) -> pd.DataFrame:
+    def items_to_dataframe(self, include_relations: bool = True, lazy_load: bool = True) -> pd.DataFrame:
         """
         Convert all anime/manga items to a pandas DataFrame with comprehensive relations.
         
@@ -695,6 +701,9 @@ class SupabaseClient:
                 - studios: Animation/production studios
                 - authors: Manga authors/creators
                 Defaults to True.
+            lazy_load (bool, optional): Whether to use lazy loading for relations.
+                When True, relations are not pre-loaded, reducing startup from 2+ minutes
+                to seconds. Relations can be fetched on-demand. Defaults to True.
         
         Returns:
             pd.DataFrame: Comprehensive DataFrame containing:
@@ -726,10 +735,20 @@ class SupabaseClient:
             - This is the main function that replaces CSV-based data loading
         """
         
-        if include_relations:
-            # Use pagination to get ALL items, not just 1000
+        # Check if we have a valid cache
+        if (SupabaseClient._items_dataframe_cache is not None and 
+            SupabaseClient._cache_timestamp is not None and
+            (time.time() - SupabaseClient._cache_timestamp) < SupabaseClient._cache_max_age):
+            print("📦 Using cached items DataFrame")
+            return SupabaseClient._items_dataframe_cache.copy()
+        
+        print("🔄 Loading fresh data from Supabase...")
+        
+        if include_relations and not lazy_load:
+            # Use pagination to get ALL items with pre-loaded relations (slow)
             items = self._get_all_items_with_relations_paginated()
         else:
+            # Use fast loading without pre-loading relations
             items = self.get_all_items_paginated()
         
         if not items:
@@ -741,9 +760,31 @@ class SupabaseClient:
         
         # Process related data (flatten nested structures)
         if include_relations and len(df) > 0:
-            df = self._process_relations(df)
+            if lazy_load:
+                # Add empty relation columns for compatibility
+                for col in ['genres', 'themes', 'demographics', 'studios', 'authors']:
+                    if col not in df.columns:
+                        df[col] = [[] for _ in range(len(df))]
+                # Process media type only
+                if 'media_type' in df.columns:
+                    df = self._process_media_type_only(df)
+            else:
+                df = self._process_relations(df)
+        
+        # Cache the result
+        SupabaseClient._items_dataframe_cache = df.copy()
+        SupabaseClient._cache_timestamp = time.time()
+        print(f"✅ Data cached at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(SupabaseClient._cache_timestamp))}")
         
         return df
+    
+    @classmethod
+    def clear_cache(cls):
+        """Clear all cached data to force a fresh reload on next access"""
+        cls._items_dataframe_cache = None
+        cls._cache_timestamp = None
+        cls._relations_cache = None
+        print("🗑️  SupabaseClient cache cleared")
     
     def _process_relations(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -851,6 +892,26 @@ class SupabaseClient:
         # Drop the nested columns
         cols_to_drop = ['media_types', 'item_genres', 'item_themes', 'item_demographics', 'item_studios', 'item_authors']
         df = df.drop(columns=[col for col in cols_to_drop if col in df.columns])
+        
+        return df
+    
+    def _process_media_type_only(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Process only media type for fast loading, skip relation processing.
+        
+        Args:
+            df: DataFrame with media_type column
+            
+        Returns:
+            DataFrame with media_type processed to string
+        """
+        if 'media_type' in df.columns:
+            # Simple media type lookup
+            media_type_map = {
+                1: 'Anime',
+                2: 'Manga'
+            }
+            df['media_type'] = df['media_type'].map(media_type_map).fillna('Unknown')
         
         return df
     
@@ -1122,14 +1183,22 @@ class SupabaseClient:
             }
         
         # Pre-load ALL relation mappings once (major performance boost)
-        all_relations = {
-            'item_genres': self._get_all_relations('item_genres'),
-            'item_themes': self._get_all_relations('item_themes'),
-            'item_demographics': self._get_all_relations('item_demographics'),
-            'item_studios': self._get_all_relations('item_studios'),
-            'item_authors': self._get_all_relations('item_authors'),
-        }
-        total_relations = sum(len(relations) for relations in all_relations.values())
+        if SupabaseClient._relations_cache is None:
+            print("🔗 Loading all relation mappings (first time only)...")
+            all_relations = {
+                'item_genres': self._get_all_relations('item_genres'),
+                'item_themes': self._get_all_relations('item_themes'),
+                'item_demographics': self._get_all_relations('item_demographics'),
+                'item_studios': self._get_all_relations('item_studios'),
+                'item_authors': self._get_all_relations('item_authors'),
+            }
+            SupabaseClient._relations_cache = all_relations
+            total_relations = sum(len(relations) for relations in all_relations.values())
+            print(f"✅ Cached {total_relations} total relations")
+        else:
+            print("📦 Using cached relation mappings")
+            all_relations = SupabaseClient._relations_cache
+            total_relations = sum(len(relations) for relations in all_relations.values())
         
         batch_number = 0
         while True:
