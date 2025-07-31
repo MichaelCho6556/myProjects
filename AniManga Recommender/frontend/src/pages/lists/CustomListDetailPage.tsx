@@ -15,7 +15,7 @@ import { BatchOperationsToolbar } from "../../components/lists/BatchOperationsTo
 import { ViewModeSelector, ViewSettings } from "../../components/lists/ViewModeSelector";
 import { GroupableList } from "../../components/lists/GroupableList";
 
-import LoadingBanner from "../../components/Loading/LoadingBanner";
+import LoadingSpinner from "../../components/common/LoadingSpinner";
 import { CustomList, ListItem } from "../../types/social";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 import "./CustomListDetailPage.css";
@@ -605,7 +605,9 @@ export const CustomListDetailPage: React.FC = () => {
               <div className="h-6 bg-gray-300 dark:bg-gray-600 rounded w-24"></div>
             </div>
           </div>
-          <LoadingBanner message="Loading list details..." isVisible={true} />
+          <div style={{ position: "relative", minHeight: "400px" }}>
+            <LoadingSpinner message="Loading list details..." />
+          </div>
         </div>
       </div>
     );

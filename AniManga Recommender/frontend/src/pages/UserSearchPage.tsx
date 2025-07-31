@@ -6,7 +6,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
 import { useAuth } from "../context/AuthContext";
 import EnhancedSearch from "../components/EnhancedSearch";
-import LoadingBanner from "../components/Loading/LoadingBanner";
+import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import { FollowButton } from "../components/social/FollowButton";
 import useDocumentTitle from "../hooks/useDocumentTitle";
@@ -138,7 +138,11 @@ export const UserSearchPage: React.FC = () => {
         {/* Search Results */}
         <main className="search-results">
           {/* Loading State */}
-          {isLoading && <LoadingBanner message="Searching users..." isVisible={true} />}
+          {isLoading && (
+            <div style={{ position: "relative", minHeight: "200px" }}>
+              <LoadingSpinner message="Searching users..." />
+            </div>
+          )}
 
           {/* Error State */}
           {error && !isLoading && <ErrorFallback error={error} onRetry={performSearch} />}

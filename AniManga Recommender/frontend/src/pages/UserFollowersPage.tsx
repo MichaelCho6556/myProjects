@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import LoadingBanner from "../components/Loading/LoadingBanner";
+import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import { generateAvatarColor } from "../utils/helpers";
 import "./UserProfilePage.css";
@@ -164,8 +164,8 @@ export const UserFollowersPage: React.FC = () => {
   if (isLoading) {
     return (
       <div className="dashboard-page">
-        <div className="dashboard-container">
-          <LoadingBanner message="Loading followers..." isVisible={true} />
+        <div className="dashboard-container" style={{ position: "relative", minHeight: "400px" }}>
+          <LoadingSpinner message="Loading followers..." />
         </div>
       </div>
     );

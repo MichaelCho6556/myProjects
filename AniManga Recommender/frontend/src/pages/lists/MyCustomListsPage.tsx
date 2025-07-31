@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { CreateCustomListModal } from "../../components/lists/CreateCustomListModal";
-import LoadingBanner from "../../components/Loading/LoadingBanner";
+import LoadingSpinner from "../../components/common/LoadingSpinner";
 import ErrorFallback from "../../components/Error/ErrorFallback";
 import { CustomList } from "../../types/social";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
@@ -597,7 +597,7 @@ export const MyCustomListsPage: React.FC = () => {
               borderRadius: "12px",
             }}
           >
-            <LoadingBanner message="Loading your custom lists..." isVisible={true} />
+            <LoadingSpinner message="Loading your custom lists..." />
           </div>
         )}
 

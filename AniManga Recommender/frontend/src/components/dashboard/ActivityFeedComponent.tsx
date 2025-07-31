@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useAuthenticatedApi } from '../../hooks/useAuthenticatedApi';
 import { logger } from '../../utils/logger';
-import LoadingBanner from '../Loading/LoadingBanner';
+import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorFallback from '../Error/ErrorFallback';
 
 // Activity Types
@@ -166,8 +166,8 @@ export const ActivityFeedComponent: React.FC<ActivityFeedComponentProps> = ({
 
   if (isLoading) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
-        <LoadingBanner message="Loading activity feed..." isVisible={true} />
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6" style={{ position: "relative", minHeight: "200px" }}>
+        <LoadingSpinner message="Loading activity feed..." />
       </div>
     );
   }
