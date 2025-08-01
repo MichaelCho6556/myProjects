@@ -1,17 +1,19 @@
-# ABOUTME: This file contains Redis cache helper functions for the AniManga Recommender
+# ABOUTME: This file contains cache helper functions for the AniManga Recommender
 # ABOUTME: Provides cache operations with TTL, fallback handling, and error resilience
 """
 Cache Helper Functions for AniManga Recommender
 
-This module provides Redis cache operations with proper error handling,
+This module provides cache operations with proper error handling,
 TTL management, and fallback mechanisms for the recommendation system.
+Now uses a hybrid memory+database cache system for deployment flexibility.
 
 Key Features:
     - User statistics caching with 24-hour TTL
     - Recommendation caching with configurable TTL
     - Automatic JSON serialization/deserialization
-    - Graceful fallback on Redis connection failures
+    - Graceful fallback with two-tier caching
     - Cache warming utilities
+    - Production-ready for free-tier hosting
 """
 
 import os
@@ -19,8 +21,43 @@ import json
 import logging
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime, timedelta
-import redis
-from redis.exceptions import RedisError, ConnectionError
+
+# Configure logging early for fallback messages
+logger = logging.getLogger(__name__)
+
+# Import the new hybrid cache system
+try:
+    from .hybrid_cache import HybridCache, get_hybrid_cache, CACHE_TTL_HOURS
+except ImportError:
+    # Fallback for testing or if hybrid cache not available
+    logger.warning("Hybrid cache not available, using no-op cache")
+    class HybridCache:
+        def __init__(self): 
+            self.connected = False
+        def get(self, key): return None
+        def set(self, key, value, ttl_hours=None): return False
+        def delete(self, key): return False
+        def exists(self, key): return False
+        def setex(self, key, seconds, value): return False
+        def pipeline(self): return self
+        def execute(self): return []
+        def ping(self): return False
+        def info(self): return {'connected': False}
+    
+    def get_hybrid_cache():
+        return HybridCache()
+    
+    CACHE_TTL_HOURS = {
+        'user_stats': 24,
+        'recommendations': 4,
+        'popular_lists': 12,
+        'platform_stats': 1,
+        'toxicity_analysis': 24,
+        'moderation_stats': 2,
+        'content_moderation': 12,
+        'custom_lists': 1,
+        'list_details': 2,
+    }
 
 # Import monitoring
 try:
@@ -33,128 +70,17 @@ except ImportError:
     def record_cache_miss(cache_type: str = "default"): pass
     def get_metrics_collector(): return None
 
-# Configure logging
-logger = logging.getLogger(__name__)
-
-# Cache configuration
-CACHE_TTL_HOURS = {
-    'user_stats': 24,
-    'recommendations': 4,
-    'popular_lists': 12,
-    'platform_stats': 1,
-    'toxicity_analysis': 24,  # Cache toxicity analysis for 24 hours
-    'moderation_stats': 2,    # Cache moderation stats for 2 hours
-    'content_moderation': 12, # Cache moderation status for 12 hours
-    'custom_lists': 1,        # Cache user's custom lists for 1 hour
-    'list_details': 2,        # Cache individual list details for 2 hours
-}
-
-class RedisCache:
-    """Redis cache wrapper with automatic fallback and error handling"""
-    
-    def __init__(self):
-        """Initialize Redis connection with environment configuration"""
-        self.redis_client = None
-        self.connected = False
-        self._connect()
-    
-    def _connect(self):
-        """Establish Redis connection with retry logic"""
-        try:
-            redis_host = os.getenv('REDIS_HOST', 'localhost')
-            redis_port = int(os.getenv('REDIS_PORT', 6379))
-            redis_db = int(os.getenv('REDIS_DB', 0))
-            
-            self.redis_client = redis.Redis(
-                host=redis_host,
-                port=redis_port,
-                db=redis_db,
-                decode_responses=True,
-                socket_connect_timeout=5,
-                socket_keepalive=True,
-                socket_keepalive_options={},
-                health_check_interval=30
-            )
-            
-            # Test connection
-            self.redis_client.ping()
-            self.connected = True
-            logger.info(f"Redis cache connected: {redis_host}:{redis_port}")
-            
-        except (RedisError, ConnectionError) as e:
-            logger.warning(f"Redis connection failed: {e}")
-            self.connected = False
-    
-    def get(self, key: str) -> Optional[Any]:
-        """Get value from cache with automatic JSON deserialization"""
-        if not self.connected:
-            if MONITORING_AVAILABLE:
-                record_cache_miss("redis")
-            return None
-            
-        try:
-            value = self.redis_client.get(key)
-            if value:
-                if MONITORING_AVAILABLE:
-                    record_cache_hit("redis")
-                return json.loads(value)
-            else:
-                if MONITORING_AVAILABLE:
-                    record_cache_miss("redis")
-            return None
-        except (RedisError, json.JSONDecodeError) as e:
-            logger.error(f"Cache get error for key {key}: {e}")
-            if MONITORING_AVAILABLE:
-                record_cache_miss("redis")
-            return None
-    
-    def set(self, key: str, value: Any, ttl_hours: Optional[int] = None) -> bool:
-        """Set value in cache with automatic JSON serialization"""
-        if not self.connected:
-            return False
-            
-        try:
-            serialized = json.dumps(value, default=str)
-            if ttl_hours:
-                self.redis_client.setex(key, timedelta(hours=ttl_hours), serialized)
-            else:
-                self.redis_client.set(key, serialized)
-            return True
-        except (RedisError, json.JSONEncodeError) as e:
-            logger.error(f"Cache set error for key {key}: {e}")
-            return False
-    
-    def delete(self, key: str) -> bool:
-        """Delete key from cache"""
-        if not self.connected:
-            return False
-            
-        try:
-            self.redis_client.delete(key)
-            return True
-        except RedisError as e:
-            logger.error(f"Cache delete error for key {key}: {e}")
-            return False
-    
-    def exists(self, key: str) -> bool:
-        """Check if key exists in cache"""
-        if not self.connected:
-            return False
-            
-        try:
-            return bool(self.redis_client.exists(key))
-        except RedisError as e:
-            logger.error(f"Cache exists error for key {key}: {e}")
-            return False
+# For backward compatibility, create a RedisCache alias
+RedisCache = HybridCache
 
 # Global cache instance
 _cache = None
 
-def get_cache() -> RedisCache:
+def get_cache() -> HybridCache:
     """Get global cache instance (singleton pattern)"""
     global _cache
     if _cache is None:
-        _cache = RedisCache()
+        _cache = get_hybrid_cache()
     return _cache
 
 def get_user_stats_from_cache(user_id: str) -> Optional[Dict[str, Any]]:
@@ -344,30 +270,28 @@ def get_cache_status() -> Dict[str, Any]:
     
     status = {
         'connected': cache.connected,
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.utcnow().isoformat(),
+        'backend': 'hybrid'
     }
     
-    if cache.connected:
+    if hasattr(cache, 'get_stats'):
+        # Get hybrid cache statistics
         try:
-            info = cache.redis_client.info()
+            stats = cache.get_stats()
             status.update({
-                'used_memory_human': info.get('used_memory_human', 'N/A'),
-                'connected_clients': info.get('connected_clients', 0),
-                'total_commands_processed': info.get('total_commands_processed', 0),
-                'keyspace_hits': info.get('keyspace_hits', 0),
-                'keyspace_misses': info.get('keyspace_misses', 0),
+                'total_requests': stats.get('total_requests', 0),
+                'total_hits': stats.get('total_hits', 0),
+                'total_misses': stats.get('total_misses', 0),
+                'hit_rate': stats.get('overall_hit_rate', 0),
+                'memory_hits': stats.get('memory_hits', 0),
+                'database_hits': stats.get('database_hits', 0),
+                'promotions': stats.get('promotions', 0),
+                'memory_tier': stats.get('memory_tier', {}),
+                'database_tier': stats.get('database_tier', {})
             })
-            
-            # Calculate hit rate
-            hits = status['keyspace_hits']
-            misses = status['keyspace_misses']
-            if hits + misses > 0:
-                status['hit_rate'] = round(hits / (hits + misses) * 100, 2)
-            else:
-                status['hit_rate'] = 0
-                
-        except RedisError as e:
+        except Exception as e:
             logger.error(f"Error getting cache status: {e}")
+            status['error'] = str(e)
     
     return status
 
@@ -679,23 +603,26 @@ def get_moderation_cache_summary() -> Dict[str, Any]:
         }
     }
     
-    if cache.connected:
+    if cache.connected and hasattr(cache, 'info'):
         try:
-            # Get basic Redis info
-            info = cache.redis_client.info()
+            # Get cache info from hybrid cache
+            info = cache.info()
             summary.update({
-                'memory_usage': info.get('used_memory_human', 'N/A'),
-                'total_keys': info.get('db0', {}).get('keys', 0) if 'db0' in info else 0,
-                'hit_rate': 0
+                'backend': info.get('backend', 'hybrid'),
+                'memory_usage_mb': info.get('memory_cache', {}).get('memory_mb', 0),
+                'memory_size': info.get('memory_cache', {}).get('size', 0),
+                'hit_rate': info.get('memory_cache', {}).get('hit_rate', 0)
             })
             
-            # Calculate hit rate if available
-            hits = info.get('keyspace_hits', 0)
-            misses = info.get('keyspace_misses', 0)
-            if hits + misses > 0:
-                summary['hit_rate'] = round(hits / (hits + misses) * 100, 2)
+            # Add database cache info if available
+            if 'database_cache' in info:
+                db_info = info['database_cache']
+                summary['database_cache'] = {
+                    'connected': db_info.get('connected', False),
+                    'total_keys': db_info.get('total_keys', 0)
+                }
                 
-        except RedisError as e:
+        except Exception as e:
             logger.error(f"Error getting moderation cache summary: {e}")
             summary['error'] = str(e)
     
