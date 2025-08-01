@@ -133,6 +133,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Import and register compute endpoints blueprint
+try:
+    from compute_endpoints import compute_bp
+    app.register_blueprint(compute_bp)
+    logger.info("Compute endpoints registered successfully")
+except ImportError as e:
+    logger.warning(f"Could not import compute endpoints: {e}")
+
 # Initialize ThreadPoolExecutor for asynchronous activity logging
 executor = ThreadPoolExecutor(max_workers=2)
 
@@ -3839,18 +3847,9 @@ def get_item_details_simple(item_uid: str) -> dict:
 # and collaborative filtering with intelligent caching and performance optimization.
 # -----------------------------------------------------------------------------
 
-# Redis configuration for caching (fallback to in-memory if Redis unavailable)
-try:
-    import redis
-    redis_client = redis.Redis(
-        host=os.getenv('REDIS_HOST', 'localhost'),
-        port=int(os.getenv('REDIS_PORT', 6379)),
-        decode_responses=True
-    )
-    # Test Redis connection
-    redis_client.ping()
-except Exception as e:
-    redis_client = None
+# Cache system is now handled by hybrid_cache module
+# No need for direct Redis client initialization
+redis_client = None  # Kept for backward compatibility during transition
 
 # In-memory cache fallback for recommendations
 _recommendation_cache: Dict[str, Any] = {}
