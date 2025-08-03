@@ -752,7 +752,7 @@ class SupabaseClient:
             items = self.get_all_items_paginated()
         
         if not items:
-            print("⚠️  No items found in database")
+            print("WARNING: No items found in database")
             return pd.DataFrame()
         
         # Convert to DataFrame
@@ -774,7 +774,7 @@ class SupabaseClient:
         # Cache the result
         SupabaseClient._items_dataframe_cache = df.copy()
         SupabaseClient._cache_timestamp = time.time()
-        print(f"✅ Data cached at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(SupabaseClient._cache_timestamp))}")
+        print(f"Data cached at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(SupabaseClient._cache_timestamp))}")
         
         return df
     
@@ -784,7 +784,7 @@ class SupabaseClient:
         cls._items_dataframe_cache = None
         cls._cache_timestamp = None
         cls._relations_cache = None
-        print("🗑️  SupabaseClient cache cleared")
+        print("SupabaseClient cache cleared")
     
     def _process_relations(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -905,13 +905,38 @@ class SupabaseClient:
         Returns:
             DataFrame with media_type processed to string
         """
-        if 'media_type' in df.columns:
-            # Simple media type lookup
-            media_type_map = {
+        # First check if media_type_id exists and use it for more reliable mapping
+        if 'media_type_id' in df.columns:
+            # Use media_type_id for mapping (more reliable)
+            media_type_id_map = {
                 1: 'Anime',
                 2: 'Manga'
             }
-            df['media_type'] = df['media_type'].map(media_type_map).fillna('Unknown')
+            df['media_type'] = df['media_type_id'].map(media_type_id_map).fillna('Unknown')
+        elif 'media_type' in df.columns:
+            # Fallback to media_type column, handle both numeric and string values
+            def normalize_media_type(value):
+                if pd.isna(value) or value is None:
+                    return 'Unknown'
+                
+                # Handle numeric values
+                if isinstance(value, (int, float)):
+                    media_type_map = {
+                        1: 'Anime',
+                        2: 'Manga'
+                    }
+                    return media_type_map.get(int(value), 'Unknown')
+                
+                # Handle string values
+                value_str = str(value).lower().strip()
+                if value_str in ['anime', 'tv', 'ova', 'movie', 'special']:
+                    return 'Anime'
+                elif value_str in ['manga', 'novel', 'manhwa', 'manhua']:
+                    return 'Manga'
+                else:
+                    return 'Unknown'
+            
+            df['media_type'] = df['media_type'].apply(normalize_media_type)
         
         return df
     
@@ -1194,7 +1219,7 @@ class SupabaseClient:
             }
             SupabaseClient._relations_cache = all_relations
             total_relations = sum(len(relations) for relations in all_relations.values())
-            print(f"✅ Cached {total_relations} total relations")
+            print(f"Cached {total_relations} total relations")
         else:
             print("📦 Using cached relation mappings")
             all_relations = SupabaseClient._relations_cache
@@ -1223,7 +1248,7 @@ class SupabaseClient:
                 
             # Safety check - don't fetch more than 100k items to avoid memory issues
             if len(all_items) >= 100000:
-                print(f"⚠️  Reached safety limit of 100k items")
+                print(f"WARNING: Reached safety limit of 100k items")
                 break
         
         return all_items
@@ -1261,7 +1286,7 @@ class SupabaseClient:
                     break
                     
             except Exception as e:
-                print(f"⚠️  Error loading {table_name} at offset {offset}: {e}")
+                print(f"WARNING: Error loading {table_name} at offset {offset}: {e}")
                 break
         
         return all_relations
@@ -1513,7 +1538,7 @@ class SupabaseClient:
             # Handle start date logic for new records
             if not existing_data and status_data['status'] in ['watching', 'reading']:
                 data['start_date'] = 'now()'
-                print(f"🚀 Setting start_date for new {status_data['status']} record")
+                print(f"Setting start_date for new {status_data['status']} record")
             
             print(f"📤 Final data to send: {data}")
             
@@ -1593,11 +1618,11 @@ class SupabaseClient:
                 return existing_data[0] if existing_data else None
             else:
                 # Other error
-                print(f"⚠️  Unexpected status code {response.status_code} for {table} upsert")
+                print(f"WARNING: Unexpected status code {response.status_code} for {table} upsert")
                 return None
                 
         except Exception as e:
-            print(f"⚠️  Error upserting {table}: {e}")
+            print(f"WARNING: Error upserting {table}: {e}")
             return None
 
     def search_users(self, query: str, page: int = 1, limit: int = 20) -> dict:
