@@ -43,6 +43,7 @@ from datetime import datetime, timedelta
 import json
 import html
 import time
+import traceback
 from typing import Dict, List, Optional, Any
 from concurrent.futures import ThreadPoolExecutor
 from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
@@ -462,8 +463,9 @@ def load_data_and_tfidf_from_supabase() -> None:
         if supabase_client is None:
             supabase_client = SupabaseClient()
         
-        # Get data as DataFrame from Supabase with lazy loading for faster startup
-        df = supabase_client.items_to_dataframe(include_relations=True, lazy_load=True)
+        # Get data as DataFrame from Supabase with all relations loaded
+        # Note: This takes longer on startup but ensures all filters work properly
+        df = supabase_client.items_to_dataframe(include_relations=True, lazy_load=False)
         
         if df is None or len(df) == 0:
             return pd.DataFrame(), None, None, pd.Series(dtype='int64')
@@ -1633,6 +1635,7 @@ def get_user_dashboard():
         return jsonify({'error': 'User ID not found in token'}), 400
     
     try:
+        
         # Get user statistics with cache status
         user_stats = get_user_statistics(user_id)
         
@@ -2466,6 +2469,61 @@ def force_refresh_statistics():
     except Exception as e:
         logger.error(f"Error in request: {e}")
         return jsonify({'error': 'An error occurred processing your request'}), 500
+
+@app.route('/api/auth/users/me/analytics', methods=['GET'])
+@require_auth
+def get_user_analytics():
+    """
+    Get comprehensive analytics data for the authenticated user.
+    
+    This endpoint provides detailed analytics about the user's anime/manga collection
+    formatted for visualization in the analytics dashboard. It includes timeline data,
+    distributions, and comparative analysis.
+    
+    Query Parameters:
+        - start_date (ISO datetime): Start date for analytics period
+        - end_date (ISO datetime): End date for analytics period
+        - granularity (str): Time granularity (day, week, month, quarter, year)
+        - include_dropped (bool): Whether to include dropped items in analytics
+        - minimum_rating (int): Minimum rating threshold for filtering
+    
+    Returns:
+        JSON Response containing ListAnalyticsData structure:
+            - overview: Summary metrics (totalItems, completedItems, averageRating, etc.)
+            - ratingDistribution: Rating breakdown with counts and percentages
+            - statusBreakdown: Status distribution (watching, completed, etc.)
+            - completionTimeline: Time series data for completions
+            - additionTimeline: Time series data for additions
+            - ratingTrends: Average rating trends over time
+            - comparativeAnalysis: Period-over-period comparisons
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found'}), 400
+        
+        # Get query parameters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        granularity = request.args.get('granularity', 'month')
+        include_dropped = request.args.get('include_dropped', 'true').lower() == 'true'
+        minimum_rating = int(request.args.get('minimum_rating', 0))
+        
+        # Calculate analytics
+        analytics = calculate_user_analytics(
+            user_id,
+            start_date=start_date,
+            end_date=end_date,
+            granularity=granularity,
+            include_dropped=include_dropped,
+            minimum_rating=minimum_rating
+        )
+        
+        return jsonify(analytics), 200
+        
+    except Exception as e:
+        # Debug: Error fetching user analytics: {str(e}")
+        return jsonify({'error': 'Failed to fetch analytics'}), 500
 
 @app.route('/api/auth/cleanup-orphaned-items', methods=['POST'])
 @require_auth
@@ -5892,10 +5950,19 @@ def fetch_user_lists(user_id, viewer_id):
             page=1,
             limit=20
         )
-        return lists_data.get('lists', []) if lists_data else []
+        # Handle both 'data' (optimized) and 'lists' (fallback) keys
+        if lists_data:
+            # Return the full response object with 'lists' key for frontend compatibility
+            return {
+                'lists': lists_data.get('data', lists_data.get('lists', [])),
+                'total': lists_data.get('total', 0),
+                'page': lists_data.get('page', 1),
+                'limit': lists_data.get('limit', 20)
+            }
+        return {'lists': [], 'total': 0, 'page': 1, 'limit': 20}
     except Exception as e:
         logger.error(f"Error fetching lists: {e}")
-        return []
+        return {'lists': [], 'total': 0, 'page': 1, 'limit': 20}
 
 def fetch_user_activities(user_id, viewer_id, limit=20):
     """Helper function to fetch user activities."""
@@ -5922,7 +5989,7 @@ def fetch_user_activities(user_id, viewer_id, limit=20):
                 headers=auth_client.headers,
                 params={
                     'user_id': f'eq.{user_id}',
-                    'select': '*,items!inner(uid,title,title_english,image_url,episodes,score,media_type)',
+                    'select': '*',
                     'order': 'created_at.desc',
                     'limit': str(limit)
                 }
@@ -5930,7 +5997,8 @@ def fetch_user_activities(user_id, viewer_id, limit=20):
             
             if activity_response.status_code == 200:
                 activities = activity_response.json()
-                # Format activities
+                
+                # Format activities and fetch item data if needed
                 formatted_activities = []
                 for activity in activities:
                     formatted_activity = {
@@ -5939,15 +6007,37 @@ def fetch_user_activities(user_id, viewer_id, limit=20):
                         'item_uid': activity.get('item_uid'),
                         'activity_data': activity.get('activity_data'),
                         'created_at': activity.get('created_at'),
-                        'item': activity.get('items')
+                        'item': None  # We'll need to fetch this separately if needed
                     }
+                    
+                    # If we need item data, fetch it separately
+                    if activity.get('item_uid'):
+                        try:
+                            item_response = requests.get(
+                                f"{auth_client.base_url}/rest/v1/items",
+                                headers=auth_client.headers,
+                                params={
+                                    'uid': f'eq.{activity.get("item_uid")}',
+                                    'select': 'uid,title,title_english,image_url,episodes,score,media_type'
+                                }
+                            )
+                            if item_response.status_code == 200 and item_response.json():
+                                formatted_activity['item'] = item_response.json()[0]
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch item data for activity: {e}")
+                    
                     formatted_activities.append(formatted_activity)
-                return formatted_activities
+                
+                # Return object with 'activities' key for frontend compatibility
+                return {
+                    'activities': formatted_activities,
+                    'total': len(formatted_activities)
+                }
         
-        return []
+        return {'activities': [], 'total': 0}
     except Exception as e:
         logger.error(f"Error fetching activities: {e}")
-        return []
+        return {'activities': [], 'total': 0}
 
 def get_unified_user_profile_fallback(username, viewer_id=None):
     """Fallback method using parallel fetching when PostgreSQL function fails."""
@@ -6111,6 +6201,7 @@ def get_unified_user_profile(username):
     except Exception as e:
         logger.error(f"Error in unified profile endpoint: {e}")
         return jsonify({'error': 'An error occurred processing your request'}), 500
+
 
 @app.route('/api/auth/follow/<username>', methods=['POST'])
 @require_auth
@@ -11505,6 +11596,277 @@ def _generate_list_recommendations(items: list, user_id: str) -> list:
         {'type': 'genre_expansion', 'count': 3, 'description': 'Explore new genres based on your preferences'},
         {'type': 'completion_boost', 'count': 2, 'description': 'Items to help complete your watchlist'}
     ]
+
+def calculate_user_analytics(user_id: str, start_date=None, end_date=None, granularity='month', include_dropped=True, minimum_rating=0) -> dict:
+    """
+    Calculate comprehensive analytics for a user's entire collection.
+    
+    This function transforms user statistics into the ListAnalyticsData format
+    expected by the frontend analytics dashboard.
+    """
+    try:
+        from datetime import datetime, timedelta
+        import json
+        
+        # Get user statistics first
+        user_stats = calculate_user_statistics_realtime(user_id)
+        
+        # Get all user items with details
+        user_items_response = requests.get(
+            f"{supabase_client.base_url}/rest/v1/user_items",
+            headers=supabase_client.headers,
+            params={
+                'user_id': f'eq.{user_id}',
+                'select': '*,items!inner(uid,title,media_type,genres,episodes,score)'
+            }
+        )
+        
+        user_items = user_items_response.json() if user_items_response.status_code == 200 else []
+        
+        # Filter by date range if provided
+        if start_date:
+            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            user_items = [item for item in user_items if item.get('created_at') and 
+                         datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')) >= start_dt]
+        
+        if end_date:
+            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            user_items = [item for item in user_items if item.get('created_at') and 
+                         datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')) <= end_dt]
+        
+        # Filter by dropped status
+        if not include_dropped:
+            user_items = [item for item in user_items if item.get('status') != 'dropped']
+        
+        # Filter by minimum rating
+        if minimum_rating > 0:
+            user_items = [item for item in user_items if item.get('rating', 0) >= minimum_rating]
+        
+        # Calculate overview metrics
+        total_items = len(user_items)
+        completed_items = len([item for item in user_items if item.get('status') == 'completed'])
+        ratings = [item.get('rating', 0) for item in user_items if item.get('rating', 0) > 0]
+        average_rating = sum(ratings) / len(ratings) if ratings else 0
+        
+        # Calculate total hours watched (estimate based on episodes)
+        total_hours = 0
+        for item in user_items:
+            if item.get('status') in ['completed', 'watching'] and item.get('items'):
+                episodes = item['items'].get('episodes', 0) or 0
+                media_type = item['items'].get('media_type', 'anime')
+                # Estimate: 24 min per anime episode, 15 min per manga chapter
+                minutes_per_unit = 24 if media_type == 'anime' else 15
+                total_hours += (episodes * minutes_per_unit) / 60
+        
+        # Get streak data from user stats
+        current_streak = user_stats.get('current_streak_days', 0)
+        longest_streak = user_stats.get('longest_streak_days', 0)
+        
+        # Calculate rating distribution
+        rating_distribution = []
+        for rating in range(1, 11):
+            count = len([item for item in user_items if item.get('rating') == rating])
+            percentage = (count / total_items * 100) if total_items > 0 else 0
+            rating_distribution.append({
+                'rating': rating,
+                'count': count,
+                'percentage': round(percentage, 1)
+            })
+        
+        # Calculate status breakdown
+        status_mapping = {
+            'plan_to_watch': {'label': 'Plan to Watch', 'color': '#6B7280'},
+            'watching': {'label': 'Watching', 'color': '#3B82F6'},
+            'completed': {'label': 'Completed', 'color': '#10B981'},
+            'on_hold': {'label': 'On Hold', 'color': '#F59E0B'},
+            'dropped': {'label': 'Dropped', 'color': '#EF4444'}
+        }
+        
+        status_breakdown = []
+        for status, info in status_mapping.items():
+            count = len([item for item in user_items if item.get('status') == status])
+            percentage = (count / total_items * 100) if total_items > 0 else 0
+            status_breakdown.append({
+                'status': status,
+                'count': count,
+                'percentage': round(percentage, 1),
+                'color': info['color']
+            })
+        
+        # Calculate completion timeline
+        completion_timeline = []
+        addition_timeline = []
+        
+        # Group by time period based on granularity
+        for item in user_items:
+            created_at = item.get('created_at')
+            if created_at:
+                date_obj = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                
+                # Format date based on granularity
+                if granularity == 'day':
+                    period = date_obj.strftime('%Y-%m-%d')
+                elif granularity == 'week':
+                    period = date_obj.strftime('%Y-W%U')
+                elif granularity == 'month':
+                    period = date_obj.strftime('%Y-%m')
+                elif granularity == 'quarter':
+                    quarter = (date_obj.month - 1) // 3 + 1
+                    period = f"{date_obj.year}-Q{quarter}"
+                else:  # year
+                    period = date_obj.strftime('%Y')
+                
+                # Add to addition timeline
+                existing = next((t for t in addition_timeline if t['date'] == period), None)
+                if existing:
+                    existing['value'] += 1
+                else:
+                    addition_timeline.append({'date': period, 'value': 1})
+                
+                # Add to completion timeline if completed
+                if item.get('status') == 'completed':
+                    existing = next((t for t in completion_timeline if t['date'] == period), None)
+                    if existing:
+                        existing['value'] += 1
+                    else:
+                        completion_timeline.append({'date': period, 'value': 1})
+        
+        # Sort timelines by date
+        completion_timeline.sort(key=lambda x: x['date'])
+        addition_timeline.sort(key=lambda x: x['date'])
+        
+        # Calculate rating trends over time
+        rating_trends = []
+        period_ratings = {}
+        
+        for item in user_items:
+            if item.get('rating', 0) > 0 and item.get('created_at'):
+                date_obj = datetime.fromisoformat(item['created_at'].replace('Z', '+00:00'))
+                
+                if granularity == 'month':
+                    period = date_obj.strftime('%Y-%m')
+                else:
+                    period = date_obj.strftime('%Y-%m-%d')
+                
+                if period not in period_ratings:
+                    period_ratings[period] = []
+                period_ratings[period].append(item['rating'])
+        
+        for period, ratings in sorted(period_ratings.items()):
+            avg_rating = sum(ratings) / len(ratings)
+            rating_trends.append({'date': period, 'value': round(avg_rating, 2)})
+        
+        # Calculate comparative analysis (current vs previous period)
+        now = datetime.now()
+        if granularity == 'month':
+            period_delta = timedelta(days=30)
+        elif granularity == 'week':
+            period_delta = timedelta(days=7)
+        else:
+            period_delta = timedelta(days=365)
+        
+        current_period_start = now - period_delta
+        previous_period_start = current_period_start - period_delta
+        
+        current_period_items = [item for item in user_items if item.get('created_at') and 
+                               datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')) >= current_period_start]
+        previous_period_items = [item for item in user_items if item.get('created_at') and 
+                                previous_period_start <= datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')) < current_period_start]
+        
+        current_completions = len([item for item in current_period_items if item.get('status') == 'completed'])
+        previous_completions = len([item for item in previous_period_items if item.get('status') == 'completed'])
+        current_additions = len(current_period_items)
+        previous_additions = len(previous_period_items)
+        
+        current_ratings = [item.get('rating', 0) for item in current_period_items if item.get('rating', 0) > 0]
+        previous_ratings = [item.get('rating', 0) for item in previous_period_items if item.get('rating', 0) > 0]
+        current_avg_rating = sum(current_ratings) / len(current_ratings) if current_ratings else 0
+        previous_avg_rating = sum(previous_ratings) / len(previous_ratings) if previous_ratings else 0
+        
+        # Calculate percentage changes
+        completion_change = ((current_completions - previous_completions) / previous_completions * 100) if previous_completions > 0 else 0
+        addition_change = ((current_additions - previous_additions) / previous_additions * 100) if previous_additions > 0 else 0
+        rating_change = ((current_avg_rating - previous_avg_rating) / previous_avg_rating * 100) if previous_avg_rating > 0 else 0
+        
+        # Build the analytics response
+        analytics = {
+            'overview': {
+                'totalItems': total_items,
+                'completedItems': completed_items,
+                'averageRating': round(average_rating, 2),
+                'totalHoursWatched': round(total_hours, 1),
+                'completionRate': round((completed_items / total_items) if total_items > 0 else 0, 3),
+                'activeStreak': current_streak,
+                'longestStreak': longest_streak
+            },
+            'ratingDistribution': rating_distribution,
+            'statusBreakdown': status_breakdown,
+            'completionTimeline': completion_timeline,
+            'additionTimeline': addition_timeline,
+            'ratingTrends': rating_trends,
+            'genreDistribution': [],  # TODO: Implement genre analysis
+            'tagCloud': [],  # TODO: Implement tag analysis
+            'monthlyStats': [],  # TODO: Implement monthly stats
+            'streakAnalysis': {
+                'currentStreak': current_streak,
+                'longestStreak': longest_streak,
+                'streakHistory': []  # TODO: Implement streak history
+            },
+            'comparativeAnalysis': {
+                'previousPeriod': {
+                    'completions': previous_completions,
+                    'additions': previous_additions,
+                    'averageRating': round(previous_avg_rating, 2)
+                },
+                'percentageChanges': {
+                    'completions': round(completion_change, 1),
+                    'additions': round(addition_change, 1),
+                    'averageRating': round(rating_change, 1)
+                }
+            }
+        }
+        
+        return analytics
+        
+    except Exception as e:
+        # Debug: Error calculating user analytics: {str(e)}")
+        # Return empty analytics structure on error
+        return {
+            'overview': {
+                'totalItems': 0,
+                'completedItems': 0,
+                'averageRating': 0,
+                'totalHoursWatched': 0,
+                'completionRate': 0,
+                'activeStreak': 0,
+                'longestStreak': 0
+            },
+            'ratingDistribution': [],
+            'statusBreakdown': [],
+            'completionTimeline': [],
+            'additionTimeline': [],
+            'ratingTrends': [],
+            'genreDistribution': [],
+            'tagCloud': [],
+            'monthlyStats': [],
+            'streakAnalysis': {
+                'currentStreak': 0,
+                'longestStreak': 0,
+                'streakHistory': []
+            },
+            'comparativeAnalysis': {
+                'previousPeriod': {
+                    'completions': 0,
+                    'additions': 0,
+                    'averageRating': 0
+                },
+                'percentageChanges': {
+                    'completions': 0,
+                    'additions': 0,
+                    'averageRating': 0
+                }
+            }
+        }
 
 # Monitoring and health check endpoints
 @app.route('/api/admin/metrics', methods=['GET'])
