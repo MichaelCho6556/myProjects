@@ -63,8 +63,36 @@ from utils.cache_helpers import (
     get_content_moderation_status_from_cache,
     set_content_moderation_status_in_cache,
     get_moderation_stats_from_cache,
-    set_moderation_stats_in_cache
+    set_moderation_stats_in_cache,
+    get_recommendations_from_cache,
+    set_recommendations_in_cache
 )
+
+# Import request cache utilities for fallback strategies
+try:
+    from utils.request_cache import (
+        request_cache,
+        cached_with_fallback,
+        get_or_compute,
+        cache_for_expensive_queries,
+        cache_for_user_data,
+        get_request_cache_stats
+    )
+    from functools import lru_cache
+    from cachetools import TTLCache
+    REQUEST_CACHE_AVAILABLE = True
+except ImportError:
+    REQUEST_CACHE_AVAILABLE = False
+    logger.warning("Request cache not available, using standard caching only")
+    # Fallback decorator that does nothing
+    def request_cache(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    def cache_for_expensive_queries(func):
+        return func
+    def cache_for_user_data(func):
+        return func
 from utils.monitoring import (
     monitor_endpoint,
     get_metrics_collector,
@@ -1332,37 +1360,74 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
         return jsonify({"error": "Target item for related items not found."}), 404
     
     try:
+        num_related = request.args.get('n', 10, type=int)
+        num_related = min(num_related, 50)  # Cap at 50 for performance
+        
+        # Check cache first
+        cached_recommendations = get_recommendations_from_cache(item_uid)
+        if cached_recommendations:
+            # Filter to requested number and return
+            recommendations_data = cached_recommendations.get('recommendations', [])
+            if recommendations_data and len(recommendations_data) >= num_related:
+                return jsonify({
+                    "source_item_uid": item_uid,
+                    "source_item_title": cached_recommendations.get('source_item_title', ''),
+                    "recommendations": recommendations_data[:num_related]
+                })
+        
+        # Generate fresh recommendations
         item_idx = uid_to_idx[item_uid]
         source_title_value = df_processed.loc[item_idx, 'title']
         cleaned_source_title = None if pd.isna(source_title_value) else str(source_title_value)
         
-        source_item_vector = tfidf_matrix_global[item_idx].reshape(1, -1)
-        sim_scores_for_item = cosine_similarity(source_item_vector, tfidf_matrix_global)
-        sim_scores = list(enumerate(sim_scores_for_item[0]))
-        sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+        # Use cached computation if available
+        def compute_similarity_scores():
+            source_item_vector = tfidf_matrix_global[item_idx].reshape(1, -1)
+            sim_scores_for_item = cosine_similarity(source_item_vector, tfidf_matrix_global)
+            sim_scores = list(enumerate(sim_scores_for_item[0]))
+            return sorted(sim_scores, key=lambda x: x[1], reverse=True)
         
-        num_related = request.args.get('n', 10, type=int)
-        top_n_indices = [i[0] for i in sim_scores[1:num_related+1]]
-
-        related_items_df = df_processed.loc[top_n_indices].copy()
-        related_items_for_json = related_items_df.replace({np.nan: None})
+        # Apply request-time caching to expensive computation
+        if REQUEST_CACHE_AVAILABLE:
+            @cache_for_expensive_queries
+            def get_similarity_scores_cached(uid):
+                return compute_similarity_scores()
+            sim_scores = get_similarity_scores_cached(item_uid)
+        else:
+            sim_scores = compute_similarity_scores()
+        
+        # Get top 50 recommendations for caching (users typically request 10-20)
+        top_50_indices = [i[0] for i in sim_scores[1:51]]
+        
+        # Generate recommendations for all 50 items for caching
+        all_related_items_df = df_processed.loc[top_50_indices].copy()
+        all_related_items_for_json = all_related_items_df.replace({np.nan: None})
         
         # Use main_picture if image_url doesn't exist (for compatibility)
         columns_to_select = ['uid', 'title', 'media_type', 'score', 'genres', 'synopsis']
-        if 'image_url' in related_items_for_json.columns:
+        if 'image_url' in all_related_items_for_json.columns:
             columns_to_select.append('image_url')
-        elif 'main_picture' in related_items_for_json.columns:
+        elif 'main_picture' in all_related_items_for_json.columns:
             columns_to_select.append('main_picture')
         
-        related_list_of_dicts = related_items_for_json[columns_to_select].to_dict(orient='records')
+        all_related_list_of_dicts = all_related_items_for_json[columns_to_select].to_dict(orient='records')
         
         # Map field names for frontend compatibility
-        related_mapped = map_records_for_frontend(related_list_of_dicts)
-
+        all_related_mapped = map_records_for_frontend(all_related_list_of_dicts)
+        
+        # Cache the full 50 recommendations
+        cache_data = {
+            'source_item_uid': item_uid,
+            'source_item_title': cleaned_source_title,
+            'recommendations': all_related_mapped
+        }
+        set_recommendations_in_cache(item_uid, all_related_mapped)
+        
+        # Return only the requested number
         return jsonify({
             "source_item_uid": item_uid,
             "source_item_title": cleaned_source_title,
-            "recommendations": related_mapped  # Field name kept for API compatibility
+            "recommendations": all_related_mapped[:num_related]  # Return only requested amount
         })
     except Exception as e:
         logger.error(f"Related items error: {e}")
@@ -2653,7 +2718,19 @@ def cleanup_orphaned_user_items() -> Union[Response, Tuple[Response, int]]:
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 #helper functions
-def _get_user_statistics_data(user_id: str) -> dict:
+# Apply request-time caching to user statistics if available
+if REQUEST_CACHE_AVAILABLE:
+    @cache_for_user_data
+    def _get_user_statistics_data_cached(user_id: str) -> dict:
+        return _get_user_statistics_data_impl(user_id)
+    
+    def _get_user_statistics_data(user_id: str) -> dict:
+        return _get_user_statistics_data_cached(user_id)
+else:
+    def _get_user_statistics_data(user_id: str) -> dict:
+        return _get_user_statistics_data_impl(user_id)
+
+def _get_user_statistics_data_impl(user_id: str) -> dict:
     """
     Get comprehensive user statistics with intelligent caching and auto-invalidation.
     
@@ -3089,7 +3166,19 @@ def get_default_user_statistics() -> dict:
         'completion_rate': 0.0
     }
 
-def calculate_user_statistics_realtime(user_id: str) -> dict:
+# Apply request-time caching to expensive statistics calculation
+if REQUEST_CACHE_AVAILABLE:
+    @cache_for_expensive_queries
+    def calculate_user_statistics_realtime_cached(user_id: str) -> dict:
+        return calculate_user_statistics_realtime_impl(user_id)
+    
+    def calculate_user_statistics_realtime(user_id: str) -> dict:
+        return calculate_user_statistics_realtime_cached(user_id)
+else:
+    def calculate_user_statistics_realtime(user_id: str) -> dict:
+        return calculate_user_statistics_realtime_impl(user_id)
+
+def calculate_user_statistics_realtime_impl(user_id: str) -> dict:
     """
     Calculate comprehensive user statistics in real-time without using cache.
     
@@ -3357,7 +3446,19 @@ def get_recently_completed(user_id: str, days: int = 30, limit: int = 10) -> lis
     except Exception as e:
         return []
 
-def get_quick_stats(user_id: str) -> dict:
+# Apply request-time caching to quick stats
+if REQUEST_CACHE_AVAILABLE:
+    @cache_for_user_data
+    def get_quick_stats_cached(user_id: str) -> dict:
+        return get_quick_stats_impl(user_id)
+    
+    def get_quick_stats(user_id: str) -> dict:
+        return get_quick_stats_cached(user_id)
+else:
+    def get_quick_stats(user_id: str) -> dict:
+        return get_quick_stats_impl(user_id)
+
+def get_quick_stats_impl(user_id: str) -> dict:
     """Get quick stats for dashboard"""
     try:
         response = requests.get(
@@ -11959,6 +12060,11 @@ def get_cache_statistics() -> Union[Response, Tuple[Response, int]]:
         
         # Get comprehensive stats
         stats = hybrid_cache.get_stats()
+        
+        # Add request cache stats if available
+        if REQUEST_CACHE_AVAILABLE:
+            request_stats = get_request_cache_stats()
+            stats['request_cache'] = request_stats
         
         # Add cache health indicators
         total_requests = stats.get('total_requests', 0)

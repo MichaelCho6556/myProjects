@@ -44,6 +44,24 @@ from utils.cache_helpers import (
     set_toxicity_analysis_in_cache,
     invalidate_user_cache
 )
+
+# Import request cache utilities for performance optimization
+try:
+    from utils.request_cache import (
+        request_cache,
+        cache_for_expensive_queries,
+        get_or_compute
+    )
+    REQUEST_CACHE_AVAILABLE = True
+except ImportError:
+    REQUEST_CACHE_AVAILABLE = False
+    # Fallback decorator
+    def request_cache(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    def cache_for_expensive_queries(func):
+        return func
 from supabase_client import SupabaseClient
 
 # Configure logging
@@ -175,7 +193,24 @@ def _compute_user_stats_async(user_id: str, task_id: str):
         track_progress(task_id, 'failed', 100, {'error': str(e)})
 
 
-def _calculate_user_statistics(user_id: str, task_id: Optional[str] = None) -> Dict[str, Any]:
+# Apply request-time caching to statistics calculation if available
+if REQUEST_CACHE_AVAILABLE:
+    @cache_for_expensive_queries
+    def _calculate_user_statistics_cached(user_id: str) -> Dict[str, Any]:
+        return _calculate_user_statistics_impl(user_id, None)
+    
+    def _calculate_user_statistics(user_id: str, task_id: Optional[str] = None) -> Dict[str, Any]:
+        # If task_id is provided, we're in async mode - skip request cache
+        if task_id:
+            return _calculate_user_statistics_impl(user_id, task_id)
+        else:
+            # Use cached version for synchronous calls
+            return _calculate_user_statistics_cached(user_id)
+else:
+    def _calculate_user_statistics(user_id: str, task_id: Optional[str] = None) -> Dict[str, Any]:
+        return _calculate_user_statistics_impl(user_id, task_id)
+
+def _calculate_user_statistics_impl(user_id: str, task_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Calculate comprehensive user statistics.
     
@@ -370,15 +405,33 @@ def compute_recommendations(item_uid: str):
                     'cached': True
                 }), 200
         
-        # Generate recommendations
+        # Generate recommendations with request caching
         from models import RecommendationEngine
         
-        engine = RecommendationEngine()
-        recommendations = engine.get_content_based_recommendations(
-            item_uid,
-            top_n=limit,
-            user_id=user_id
-        )
+        # Define recommendation generation function
+        def generate_recommendations():
+            engine = RecommendationEngine()
+            return engine.get_content_based_recommendations(
+                item_uid,
+                top_n=50,  # Generate more for caching
+                user_id=user_id
+            )
+        
+        # Apply request caching if available
+        if REQUEST_CACHE_AVAILABLE and not force_refresh:
+            cache_key = f"compute_recs:{item_uid}:{user_id or 'anon'}"
+            recommendations = get_or_compute(
+                cache_key=cache_key,
+                compute_func=generate_recommendations,
+                ttl_hours=4,
+                use_request_cache=True,
+                cache_type='recommendations'
+            )
+        else:
+            recommendations = generate_recommendations()
+        
+        # Return only requested number
+        recommendations = recommendations[:limit]
         
         # Cache the results
         set_recommendations_in_cache(item_uid, recommendations, user_id)

@@ -59,6 +59,17 @@ except ImportError:
         'list_details': 2,
     }
 
+# Import request cache for fallback strategies
+try:
+    from .request_cache import get_or_compute, request_cache, cached_with_fallback
+    REQUEST_CACHE_AVAILABLE = True
+except ImportError:
+    REQUEST_CACHE_AVAILABLE = False
+    logger.info("Request cache not available, using direct hybrid cache")
+    # Fallback function that bypasses request cache
+    def get_or_compute(cache_key, compute_func, **kwargs):
+        return compute_func()
+
 # Import monitoring
 try:
     from utils.monitoring import record_cache_hit, record_cache_miss, get_metrics_collector
@@ -85,7 +96,8 @@ def get_cache() -> HybridCache:
 
 def get_user_stats_from_cache(user_id: str) -> Optional[Dict[str, Any]]:
     """
-    Get user statistics from cache
+    Get user statistics from cache with fallback chain:
+    Request cache → Hybrid cache → None
     
     Args:
         user_id: User ID to fetch stats for
@@ -93,10 +105,26 @@ def get_user_stats_from_cache(user_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Dict with user statistics or None if not cached
     """
-    cache = get_cache()
     key = f"user_stats:{user_id}"
     
-    data = cache.get(key)
+    # Use fallback chain if request cache is available
+    if REQUEST_CACHE_AVAILABLE:
+        def fetch_from_hybrid():
+            cache = get_cache()
+            return cache.get(key)
+        
+        data = get_or_compute(
+            cache_key=key,
+            compute_func=fetch_from_hybrid,
+            ttl_hours=CACHE_TTL_HOURS['user_stats'],
+            use_request_cache=True,
+            cache_type='user_stats'
+        )
+    else:
+        # Direct hybrid cache access
+        cache = get_cache()
+        data = cache.get(key)
+    
     if data:
         logger.debug(f"Cache hit for user stats: {user_id}")
         return data
@@ -126,7 +154,8 @@ def set_user_stats_in_cache(user_id: str, stats: Dict[str, Any]) -> bool:
 
 def get_recommendations_from_cache(item_uid: str, user_id: Optional[str] = None) -> Optional[List[Dict]]:
     """
-    Get recommendations from cache
+    Get recommendations from cache with fallback chain:
+    Request cache → Hybrid cache → None
     
     Args:
         item_uid: Item UID to get recommendations for
@@ -135,15 +164,30 @@ def get_recommendations_from_cache(item_uid: str, user_id: Optional[str] = None)
     Returns:
         List of recommendation dicts or None if not cached
     """
-    cache = get_cache()
-    
     # Use user-specific key if user_id provided
     if user_id:
         key = f"recommendations:{user_id}:{item_uid}"
     else:
         key = f"recommendations:{item_uid}"
     
-    data = cache.get(key)
+    # Use fallback chain if request cache is available
+    if REQUEST_CACHE_AVAILABLE:
+        def fetch_from_hybrid():
+            cache = get_cache()
+            return cache.get(key)
+        
+        data = get_or_compute(
+            cache_key=key,
+            compute_func=fetch_from_hybrid,
+            ttl_hours=CACHE_TTL_HOURS['recommendations'],
+            use_request_cache=True,
+            cache_type='recommendations'
+        )
+    else:
+        # Direct hybrid cache access
+        cache = get_cache()
+        data = cache.get(key)
+    
     if data:
         logger.debug(f"Cache hit for recommendations: {item_uid}")
         return data
