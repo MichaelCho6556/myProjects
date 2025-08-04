@@ -20,19 +20,22 @@ Version: 1.0.0
 License: MIT
 """
 
+from __future__ import annotations
+
+import json
+import logging
 import os
 import sys
-import logging
-import numpy as np
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Any
-import json
+from typing import Any, Dict, List
+
+import numpy as np
+from dotenv import load_dotenv
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from supabase_client import SupabaseClient
-from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
@@ -43,6 +46,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
 
 class QualityScoreCalculator:
     """Background job for calculating and storing quality scores."""
@@ -57,20 +61,29 @@ class QualityScoreCalculator:
         try:
             thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
             
-            # Count updates in custom_list_items table
-            response = self.supabase_client.supabase.table('custom_list_items').select(
-                'updated_at', count='exact'
-            ).eq('list_id', list_id).gte('updated_at', thirty_days_ago).execute()
+            # Count updates in custom_list_items table using direct HTTP request
+            params = {
+                'select': 'updated_at',
+                'list_id': f'eq.{list_id}',
+                'updated_at': f'gte.{thirty_days_ago}'
+            }
             
-            if response.data:
-                count = len(response.data)
-                return count / days  # Updates per day
+            response = self.supabase_client._make_request(
+                'GET', 
+                f'{self.supabase_client.base_url}/rest/v1/custom_list_items',
+                params=params
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                count: int = len(data) if data else 0
+                return float(count) / float(days)  # Updates per day
             return 0.0
         except Exception as e:
             logger.error(f"Error calculating update frequency for list {list_id}: {e}")
             return 0.0
     
-    def calculate_quality_score(self, list_data: Dict, user_reputation_map: Dict) -> float:
+    def calculate_quality_score(self, list_data: Dict[str, Any], user_reputation_map: Dict[str, float]) -> float:
         """
         Calculate quality score using production-ready weighted algorithm.
         
@@ -90,15 +103,16 @@ class QualityScoreCalculator:
             
             # Calculate update_frequency using actual item updates in the list
             try:
-                list_id = list_data['id']
+                list_id: int = list_data['id']
                 update_frequency = self.calculate_update_frequency(list_id, days=30)
                 # Normalize to 0-1 scale (assuming max of 1 update per day)
                 update_frequency = min(1.0, update_frequency)
-            except:
+            except Exception as e:
+                logger.error(f"Error calculating update frequency: {e}")
                 update_frequency = 0.0
             
             # Get user reputation and normalize
-            user_reputation_raw = user_reputation_map.get(list_data['user_id'], 0)
+            user_reputation_raw: float = user_reputation_map.get(list_data['user_id'], 0.0)
             user_reputation_normalized = min(1.0, max(0.0, user_reputation_raw / 100.0))
             
             # Calculate weighted quality score
@@ -127,14 +141,15 @@ class QualityScoreCalculator:
             List[str]: List of image URLs
         """
         try:
-            # Get top 5 items with images ordered by position
-            items_response = self.supabase_client.supabase.table('custom_list_items').select(
-                'items!inner(image_url)'
-            ).eq('list_id', list_id).order('position', desc=False).limit(5).execute()
+            # Use existing method from SupabaseClient
+            list_items = self.supabase_client.get_custom_list_items(list_id)
             
+            # Get up to 5 items with images
             preview_images = []
-            for item in items_response.data:
-                if item.get('items', {}).get('image_url'):
+            for item in list_items[:5]:  # Take first 5 items
+                if item.get('image_url'):
+                    preview_images.append(item['image_url'])
+                elif item.get('items', {}).get('image_url'):
                     preview_images.append(item['items']['image_url'])
             
             return preview_images
@@ -143,7 +158,7 @@ class QualityScoreCalculator:
             logger.error(f"Error getting preview images for list {list_id}: {e}")
             return []
     
-    def get_lists_to_update(self, hours_back: int = 24) -> List[Dict]:
+    def get_lists_to_update(self, hours_back: int = 24) -> List[Dict[str, Any]]:
         """
         Get lists that need quality score updates.
         
@@ -157,28 +172,48 @@ class QualityScoreCalculator:
             # Get lists updated in the last N hours or with missing quality scores
             cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours_back)
             
-            # Get all public lists with basic data
-            lists_response = self.supabase_client.supabase.table('custom_lists').select(
-                'id, user_id, updated_at, quality_score'
-            ).eq('privacy', 'public').gte('updated_at', cutoff_time.isoformat()).execute()
+            # Get all public lists with basic data - recent updates
+            recent_params = {
+                'select': 'id,user_id,updated_at,quality_score',
+                'privacy': 'eq.public',
+                'updated_at': f'gte.{cutoff_time.isoformat()}'
+            }
+            
+            recent_response = self.supabase_client._make_request(
+                'GET', 
+                f'{self.supabase_client.base_url}/rest/v1/custom_lists',
+                params=recent_params
+            )
             
             # Also get lists with null quality scores
-            null_scores_response = self.supabase_client.supabase.table('custom_lists').select(
-                'id, user_id, updated_at, quality_score'
-            ).eq('privacy', 'public').is_('quality_score', 'null').execute()
+            null_params = {
+                'select': 'id,user_id,updated_at,quality_score',
+                'privacy': 'eq.public',
+                'quality_score': 'is.null'
+            }
+            
+            null_response = self.supabase_client._make_request(
+                'GET', 
+                f'{self.supabase_client.base_url}/rest/v1/custom_lists',
+                params=null_params
+            )
             
             # Combine results and remove duplicates
-            all_lists = lists_response.data + null_scores_response.data
-            unique_lists = {lst['id']: lst for lst in all_lists}.values()
+            recent_lists = recent_response.json() if recent_response.status_code == 200 else []
+            null_lists = null_response.json() if null_response.status_code == 200 else []
+            
+            all_lists = recent_lists + null_lists
+            unique_lists_dict = {lst['id']: lst for lst in all_lists}
+            unique_lists = list(unique_lists_dict.values())
             
             logger.info(f"Found {len(unique_lists)} lists to update")
-            return list(unique_lists)
+            return unique_lists
             
         except Exception as e:
             logger.error(f"Error getting lists to update: {e}")
             return []
     
-    def get_list_metrics(self, list_ids: List[int]) -> Dict[int, Dict]:
+    def get_list_metrics(self, list_ids: List[int]) -> Dict[int, Dict[str, int]]:
         """
         Get item counts and follower counts for multiple lists.
         
@@ -191,26 +226,37 @@ class QualityScoreCalculator:
         try:
             metrics = {}
             
-            # Get item counts
-            item_counts = self.supabase_client.supabase.table('custom_list_items').select(
-                'list_id', count='exact'
-            ).in_('list_id', list_ids).execute()
-            
-            # Get follower counts
-            follower_counts = self.supabase_client.supabase.table('list_followers').select(
-                'list_id', count='exact'
-            ).in_('list_id', list_ids).execute()
-            
             # Initialize metrics for all lists
             for list_id in list_ids:
                 metrics[list_id] = {'item_count': 0, 'followers_count': 0}
             
-            # Update with actual counts
-            for item in item_counts.data:
-                metrics[item['list_id']]['item_count'] = item.get('count', 0)
-                
-            for follower in follower_counts.data:
-                metrics[follower['list_id']]['followers_count'] = follower.get('count', 0)
+            # Get item counts for each list individually
+            if list_ids:
+                for list_id in list_ids:
+                    try:
+                        # Get item count for this list
+                        items = self.supabase_client.get_custom_list_items(list_id)
+                        metrics[list_id]['item_count'] = len(items) if items else 0
+                        
+                        # Get follower count - using direct request since no method exists
+                        follower_params = {
+                            'select': 'user_id',
+                            'list_id': f'eq.{list_id}'
+                        }
+                        
+                        follower_response = self.supabase_client._make_request(
+                            'GET',
+                            f'{self.supabase_client.base_url}/rest/v1/list_followers',
+                            params=follower_params
+                        )
+                        
+                        if follower_response.status_code == 200:
+                            followers = follower_response.json()
+                            metrics[list_id]['followers_count'] = len(followers) if followers else 0
+                        
+                    except Exception as e:
+                        logger.warning(f"Error getting metrics for list {list_id}: {e}")
+                        continue
             
             return metrics
             
@@ -229,14 +275,31 @@ class QualityScoreCalculator:
             Dict[str, float]: Mapping of user_id to reputation_score
         """
         try:
-            reputation_response = self.supabase_client.supabase.table('user_reputation').select(
-                'user_id, reputation_score'
-            ).in_('user_id', user_ids).execute()
+            if not user_ids:
+                return {}
             
-            return {
-                rep['user_id']: rep['reputation_score'] 
-                for rep in reputation_response.data
+            # Create filter for multiple user IDs
+            user_filter = ','.join(user_ids)
+            params = {
+                'select': 'user_id,reputation_score',
+                'user_id': f'in.({user_filter})'
             }
+            
+            reputation_response = self.supabase_client._make_request(
+                'GET',
+                f'{self.supabase_client.base_url}/rest/v1/user_reputation',
+                params=params
+            )
+            
+            if reputation_response.status_code == 200:
+                reputation_data = reputation_response.json()
+                return {
+                    rep['user_id']: float(rep['reputation_score']) 
+                    for rep in reputation_data
+                    if 'user_id' in rep and 'reputation_score' in rep
+                }
+            
+            return {}
             
         except Exception as e:
             logger.error(f"Error getting user reputation: {e}")
@@ -257,14 +320,16 @@ class QualityScoreCalculator:
         try:
             update_data = {
                 'quality_score': quality_score,
-                'preview_images': json.dumps(preview_images)
+                'preview_images': json.dumps(preview_images) if preview_images else json.dumps([])
             }
             
-            result = self.supabase_client.supabase.table('custom_lists').update(
-                update_data
-            ).eq('id', list_id).execute()
+            response = self.supabase_client._make_request(
+                'PATCH',
+                f'{self.supabase_client.base_url}/rest/v1/custom_lists?id=eq.{list_id}',
+                data=update_data
+            )
             
-            return len(result.data) > 0
+            return response.status_code in [200, 204]
             
         except Exception as e:
             logger.error(f"Error updating list {list_id}: {e}")
@@ -290,8 +355,8 @@ class QualityScoreCalculator:
             return {'processed': 0, 'updated': 0, 'errors': 0}
         
         # Get metrics for all lists
-        list_ids = [lst['id'] for lst in lists_to_update]
-        user_ids = [lst['user_id'] for lst in lists_to_update]
+        list_ids: List[int] = [lst['id'] for lst in lists_to_update]
+        user_ids: List[str] = [lst['user_id'] for lst in lists_to_update]
         
         list_metrics = self.get_list_metrics(list_ids)
         user_reputation_map = self.get_user_reputation_map(user_ids)
@@ -303,7 +368,7 @@ class QualityScoreCalculator:
         
         for list_data in lists_to_update:
             try:
-                list_id = list_data['id']
+                list_id: int = list_data['id']
                 
                 # Merge list data with metrics
                 full_list_data = {
@@ -341,6 +406,7 @@ class QualityScoreCalculator:
         logger.info(f"Quality score calculation completed: {result}")
         return result
 
+
 def main():
     """Main function for running the quality score calculator."""
     try:
@@ -349,7 +415,7 @@ def main():
         # Process lists updated in the last 24 hours
         result = calculator.process_lists(hours_back=24)
         
-        print(f"Quality Score Calculator Results:")
+        print("Quality Score Calculator Results:")
         print(f"  Processed: {result['processed']}")
         print(f"  Updated: {result['updated']}")
         print(f"  Errors: {result['errors']}")
@@ -363,6 +429,7 @@ def main():
     except Exception as e:
         logger.error(f"Fatal error in quality score calculator: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

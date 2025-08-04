@@ -32,19 +32,19 @@ except ImportError:
     # Fallback for testing or if hybrid cache not available
     logger.warning("Hybrid cache not available, using no-op cache")
     class HybridCache:
-        def __init__(self): 
+        def __init__(self) -> None: 
             self.connected = False
-        def get(self, key): return None
-        def set(self, key, value, ttl_hours=None): return False
-        def delete(self, key): return False
-        def exists(self, key): return False
-        def setex(self, key, seconds, value): return False
-        def pipeline(self): return self
-        def execute(self): return []
-        def ping(self): return False
-        def info(self): return {'connected': False}
+        def get(self, key: str) -> Any: return None
+        def set(self, key: str, value: Any, ttl_hours: Optional[float] = None) -> bool: return False
+        def delete(self, key: str) -> bool: return False
+        def exists(self, key: str) -> bool: return False
+        def setex(self, key: str, seconds: int, value: Any) -> bool: return False
+        def pipeline(self) -> 'HybridCache': return self
+        def execute(self) -> List[Any]: return []
+        def ping(self) -> bool: return False
+        def info(self) -> Dict[str, Any]: return {'connected': False}
     
-    def get_hybrid_cache():
+    def get_hybrid_cache() -> HybridCache:
         return HybridCache()
     
     CACHE_TTL_HOURS = {
@@ -296,7 +296,7 @@ def get_cache_status() -> Dict[str, Any]:
     return status
 
 # For backward compatibility and testing
-def handle_cache_miss(cache_key: str, fetch_function, *args, **kwargs):
+def handle_cache_miss(cache_key: str, fetch_function: Any, *args, **kwargs) -> Any:
     """
     Generic cache miss handler with automatic caching
     

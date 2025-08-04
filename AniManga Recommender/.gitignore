@@ -70,6 +70,8 @@ backend/.data_cache
 
 DEPLOYMENT.md
 
+backend/docs/
+
 
 .env# Ignore external projects
 Project-Bug-Finder/

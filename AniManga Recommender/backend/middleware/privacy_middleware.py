@@ -41,7 +41,7 @@ def require_privacy_check(content_type: str = 'general'):
     """
     def decorator(f: Callable) -> Callable:
         @wraps(f)
-        def decorated_function(*args, **kwargs):
+        def decorated_function(*args, **kwargs) -> Any:
             try:
                 # Skip privacy check for public endpoints or if user is accessing their own data
                 if not hasattr(g, 'current_user') or not g.current_user:
@@ -438,7 +438,7 @@ def rate_limit(requests_per_minute: int = 60, per_ip: bool = True):
     """
     def decorator(f: Callable) -> Callable:
         @wraps(f)
-        def decorated_function(*args, **kwargs):
+        def decorated_function(*args, **kwargs) -> Any:
             try:
                 import time
                 
