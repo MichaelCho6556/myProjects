@@ -27,12 +27,14 @@ Version: 1.0.0
 License: MIT
 """
 
+from __future__ import annotations
+
 import os
 import requests
 import pandas as pd
 import numpy as np
 import json
-from typing import Dict, List, Optional, Any, Union, Tuple
+from typing import Dict, List, Optional, Any, Union, Tuple, Callable
 from dotenv import load_dotenv
 import time
 import logging
@@ -779,7 +781,7 @@ class SupabaseClient:
         return df
     
     @classmethod
-    def clear_cache(cls):
+    def clear_cache(cls) -> None:
         """Clear all cached data to force a fresh reload on next access"""
         cls._items_dataframe_cache = None
         cls._cache_timestamp = None
@@ -915,7 +917,7 @@ class SupabaseClient:
             df['media_type'] = df['media_type_id'].map(media_type_id_map).fillna('Unknown')
         elif 'media_type' in df.columns:
             # Fallback to media_type column, handle both numeric and string values
-            def normalize_media_type(value):
+            def normalize_media_type(value) -> str:
                 if pd.isna(value) or value is None:
                     return 'Unknown'
                 
@@ -2259,7 +2261,7 @@ class SupabaseClient:
             print(f"Error updating custom list: {e}")
             return None
     
-    def _handle_list_tags(self, list_id: int, tags: List[str]):
+    def _handle_list_tags(self, list_id: int, tags: List[str]) -> None:
         """Helper method to handle list tags."""
         try:
             for tag_name in tags:
@@ -3161,6 +3163,243 @@ class SupabaseClient:
                 'limit': limit,
                 'has_more': False
             }
+
+    # === SUPABASE SDK COMPATIBILITY LAYER ===
+    
+    @property
+    def supabase(self) -> 'SupabaseClient':
+        """
+        Compatibility property to match Supabase SDK API.
+        
+        This allows code like `client.supabase.table('name')` to work
+        by returning self, enabling the fluent interface pattern.
+        """
+        return self
+    
+    def table(self, table_name: str) -> 'SupabaseTableBuilder':
+        """
+        Create a table query builder for the specified table.
+        
+        This method mimics the official Supabase Python SDK API by returning
+        a SupabaseTableBuilder that supports method chaining for building
+        queries like: table('users').select('*').eq('id', 123).execute()
+        
+        Args:
+            table_name (str): Name of the database table to query
+            
+        Returns:
+            SupabaseTableBuilder: Query builder for fluent interface
+            
+        Example:
+            >>> result = client.table('users').select('id,name').eq('active', True).execute()
+            >>> users = result.data
+        """
+        return SupabaseTableBuilder(self, table_name)
+
+
+class SupabaseResponse:
+    """Response wrapper to match Supabase SDK API."""
+    
+    def __init__(self, data=None, error=None):
+        self.data = data
+        self.error = error
+
+
+class SupabaseTableBuilder:
+    """
+    Table query builder that mimics the official Supabase Python SDK API.
+    
+    This class provides a fluent interface for building Supabase queries that
+    are then executed using the existing SupabaseClient HTTP infrastructure.
+    """
+    
+    def __init__(self, client: 'SupabaseClient', table_name: str):
+        self.client = client
+        self.table_name = table_name
+        self._select_columns = '*'
+        self._filters = {}
+        self._update_data = None
+        self._upsert_data = None
+        self._operation = 'select'
+        self._single = False
+        self._order = None
+    
+    def select(self, columns: str = '*') -> 'SupabaseTableBuilder':
+        """Specify columns to select."""
+        self._select_columns = columns
+        self._operation = 'select'
+        return self
+    
+    def eq(self, field: str, value: Any) -> 'SupabaseTableBuilder':
+        """Add equality filter."""
+        self._filters[field] = f'eq.{value}'
+        return self
+    
+    def gte(self, field: str, value: Any) -> 'SupabaseTableBuilder':
+        """Add greater than or equal filter."""
+        self._filters[field] = f'gte.{value}'
+        return self
+    
+    def update(self, data: Dict) -> 'SupabaseTableBuilder':
+        """Set data for update operation."""
+        self._update_data = data
+        self._operation = 'update'
+        return self
+    
+    def upsert(self, data: Dict) -> 'SupabaseTableBuilder':
+        """Set data for upsert operation."""
+        self._upsert_data = data
+        self._operation = 'upsert'
+        return self
+    
+    def insert(self, data: Dict) -> 'SupabaseTableBuilder':
+        """Set data for insert operation."""
+        self._upsert_data = data
+        self._operation = 'insert'
+        return self
+    
+    def delete(self) -> 'SupabaseTableBuilder':
+        """Set operation to delete."""
+        self._operation = 'delete'
+        return self
+    
+    def single(self) -> 'SupabaseTableBuilder':
+        """Limit result to single row."""
+        self._single = True
+        return self
+    
+    def order(self, column: str, ascending: bool = True) -> 'SupabaseTableBuilder':
+        """Add order by clause."""
+        direction = 'asc' if ascending else 'desc'
+        self._order = f'{column}.{direction}'
+        return self
+    
+    def is_(self, field: str, value: Any) -> 'SupabaseTableBuilder':
+        """Add is filter (for null checks)."""
+        self._filters[field] = f'is.{value}'
+        return self
+    
+    def in_(self, field: str, values: list) -> 'SupabaseTableBuilder':
+        """Add 'in' filter."""
+        formatted_values = ','.join([str(v) for v in values])
+        self._filters[field] = f'in.({formatted_values})'
+        return self
+    
+    def lte(self, field: str, value: Any) -> 'SupabaseTableBuilder':
+        """Add less than or equal filter."""
+        self._filters[field] = f'lte.{value}'
+        return self
+    
+    def execute(self) -> SupabaseResponse:
+        """Execute the built query."""
+        try:
+            if self._operation == 'select':
+                return self._execute_select()
+            elif self._operation == 'update':
+                return self._execute_update()
+            elif self._operation == 'upsert':
+                return self._execute_upsert()
+            elif self._operation == 'insert':
+                return self._execute_insert()
+            elif self._operation == 'delete':
+                return self._execute_delete()
+            else:
+                return SupabaseResponse(data=None, error="Unknown operation")
+        except Exception as e:
+            return SupabaseResponse(data=None, error=str(e))
+    
+    def _execute_select(self) -> SupabaseResponse:
+        """Execute SELECT operation."""
+        params = {'select': self._select_columns}
+        params.update(self._filters)
+        
+        # Add order if specified
+        if self._order:
+            params['order'] = self._order
+            
+        # Add single limit if specified
+        if self._single:
+            params['limit'] = '1'
+        
+        response = self.client._make_request(
+            'GET',
+            self.table_name,
+            params=params
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            # If single was requested, return just the first item or None
+            if self._single and data:
+                data = data[0] if len(data) > 0 else None
+            return SupabaseResponse(data=data)
+        else:
+            return SupabaseResponse(data=None, error=f"HTTP {response.status_code}")
+    
+    def _execute_update(self) -> SupabaseResponse:
+        """Execute UPDATE operation."""
+        # Build filter query string
+        filter_parts = [f'{key}={value}' for key, value in self._filters.items()]
+        filter_query = '&'.join(filter_parts)
+        endpoint = f'{self.table_name}?{filter_query}' if filter_query else self.table_name
+        
+        response = self.client._make_request(
+            'PATCH',
+            endpoint,
+            data=self._update_data
+        )
+        
+        if response.status_code in [200, 204]:
+            return SupabaseResponse(data=response.json() if response.content else [])
+        else:
+            return SupabaseResponse(data=None, error=f"HTTP {response.status_code}")
+    
+    def _execute_upsert(self) -> SupabaseResponse:
+        """Execute UPSERT operation."""
+        # For upsert, we need to add the proper preference header
+        headers = {'Prefer': 'resolution=merge-duplicates'}
+        
+        # Use POST with upsert preference
+        response = self.client._make_request(
+            'POST',
+            self.table_name,
+            data=self._upsert_data
+        )
+        
+        if response.status_code in [200, 201]:
+            return SupabaseResponse(data=response.json() if response.content else [])
+        else:
+            return SupabaseResponse(data=None, error=f"HTTP {response.status_code}")
+    
+    def _execute_insert(self) -> SupabaseResponse:
+        """Execute INSERT operation."""
+        response = self.client._make_request(
+            'POST',
+            self.table_name,
+            data=self._upsert_data
+        )
+        
+        if response.status_code in [200, 201]:
+            return SupabaseResponse(data=response.json() if response.content else [])
+        else:
+            return SupabaseResponse(data=None, error=f"HTTP {response.status_code}")
+    
+    def _execute_delete(self) -> SupabaseResponse:
+        """Execute DELETE operation."""
+        # Build filter query string
+        filter_parts = [f'{key}={value}' for key, value in self._filters.items()]
+        filter_query = '&'.join(filter_parts)
+        endpoint = f'{self.table_name}?{filter_query}' if filter_query else self.table_name
+        
+        response = self.client._make_request(
+            'DELETE',
+            endpoint
+        )
+        
+        if response.status_code in [200, 204]:
+            return SupabaseResponse(data=response.json() if response.content else [])
+        else:
+            return SupabaseResponse(data=None, error=f"HTTP {response.status_code}")
 
 
 # 🆕 NEW AUTHENTICATION CLASS - ADD THIS TO THE END OF THE FILE:
@@ -5540,9 +5779,57 @@ class SupabaseAuthClient:
         except Exception as e:
             logger.error(f"Error in get_user_lists: {e}")
             return []
+    
+    def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
+        """
+        Verify JWT token (alias for verify_jwt_token for compatibility).
+        
+        Args:
+            token (str): JWT token to verify
+            
+        Returns:
+            Optional[Dict[str, Any]]: User information if token is valid, None otherwise
+        """
+        try:
+            return self.verify_jwt_token(token)
+        except Exception:
+            return None
+    
+    def check_follow_status(self, viewer_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Check if viewer is following the specified user.
+        
+        Args:
+            viewer_id (str): ID of the user checking follow status
+            user_id (str): ID of the user being checked
+            
+        Returns:
+            Optional[Dict[str, Any]]: Dictionary with 'is_following' boolean, None on error
+        """
+        try:
+            url = f"{self.base_url}/rest/v1/user_follows"
+            params = {
+                'follower_id': f'eq.{viewer_id}',
+                'following_id': f'eq.{user_id}',
+                'select': 'id'
+            }
+            
+            response = requests.get(url, headers=self.headers, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                is_following = len(data) > 0
+                return {'is_following': is_following}
+            else:
+                logger.error(f"Error checking follow status: HTTP {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error in check_follow_status: {e}")
+            return None
 
 
-def require_auth(f):
+def require_auth(f) -> Callable:
     """
     Authentication decorator for Flask routes.
     
@@ -5570,7 +5857,7 @@ def require_auth(f):
     from functools import wraps
     
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args, **kwargs) -> Any:
         from flask import request, jsonify, g
         
         # Check for Authorization header

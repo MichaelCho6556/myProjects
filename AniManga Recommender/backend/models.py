@@ -4,6 +4,8 @@ This module provides data models used by the application and tests.
 Uses dataclasses to match the Supabase client approach.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
 from datetime import datetime

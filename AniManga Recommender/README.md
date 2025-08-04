@@ -86,10 +86,10 @@ A comprehensive full-stack anime and manga recommendation platform with advanced
 - **Offline Support**: Basic functionality when network is unavailable
 - **Accessibility**: Full screen reader support and keyboard navigation
 
-### 🔄 Background Processing
-- **Celery Task Queue**: Asynchronous processing for recommendations and data updates
-- **Redis Caching**: Performance optimization for frequently accessed data
-- **Scheduled Tasks**: Automated maintenance and data synchronization
+### 🔄 Background Processing & Caching
+- **Hybrid Cache System**: Two-tier caching with in-memory LRU and database persistence
+- **Compute Endpoints**: On-demand processing for recommendations and statistics
+- **Scheduled Tasks**: External cron-based maintenance and data synchronization
 - **Batch Operations**: Efficient processing of bulk actions
 
 ## 🏗 Technical Architecture
@@ -107,14 +107,14 @@ A comprehensive full-stack anime and manga recommendation platform with advanced
 - **Python 3.10+** - Modern Python with type hints
 - **Flask 3.1.1** - Lightweight web framework with blueprints
 - **Supabase** - PostgreSQL database with real-time capabilities
-- **Celery 5.4.0** - Distributed task queue for background processing
-- **Redis 5.2.0** - Caching and message broker
+- **Hybrid Cache** - Database-backed cache with in-memory LRU layer
+- **Compute Endpoints** - Synchronous API endpoints for background tasks
 - **Scikit-learn 1.6.1** - Machine learning for recommendations
 - **PyJWT 2.10.1** - JSON Web Token handling
 
 ### Database & Infrastructure
 - **PostgreSQL** (via Supabase) - Relational database with advanced features
-- **Redis** - Caching layer and Celery broker
+- **Database Cache** - Built-in caching using PostgreSQL cache_store table
 - **Docker** - Containerization for development and deployment
 - **Nginx** - Reverse proxy and static file serving
 
@@ -129,7 +129,7 @@ A comprehensive full-stack anime and manga recommendation platform with advanced
 ### Prerequisites
 - **Node.js 16+** and **npm**
 - **Python 3.10+** and **pip**
-- **Redis Server** (for background tasks)
+- **PostgreSQL** (via Supabase)
 - **Docker** (optional, for containerized deployment)
 
 ### Option 1: Local Development Setup
@@ -159,9 +159,8 @@ pip install -r requirements.txt
 # Run the Flask server
 python app.py
 
-# In separate terminals, run background services:
-python scripts/start_worker.py      # Celery worker
-python scripts/start_scheduler.py   # Task scheduler
+# The application now uses synchronous compute endpoints
+# No separate background services needed
 ```
 
 Backend will be available at `http://localhost:5000`
@@ -191,7 +190,7 @@ docker-compose up --build
 # Access the application
 # Frontend: http://localhost:3000
 # Backend API: http://localhost:5000
-# Redis: localhost:6379
+# Database Cache: Integrated with Supabase
 ```
 
 ## 🔧 Environment Configuration
@@ -210,8 +209,9 @@ JWT_SECRET_KEY=your_super_secret_jwt_key_for_token_signing
 FLASK_ENV=development
 SECRET_KEY=your_flask_secret_key_for_sessions
 
-# Redis Configuration
-REDIS_URL=redis://localhost:6379/0
+# Cache Configuration
+CACHE_MEMORY_SIZE=1000  # Max items in memory cache
+CACHE_MEMORY_MB=100     # Max memory usage in MB
 
 # Content Moderation (optional)
 CONTENT_ANALYSIS_API_KEY=your_content_analysis_api_key
@@ -418,7 +418,7 @@ docker-compose -f docker-compose.prod.yml up -d --scale backend=3
 FLASK_ENV=production
 SUPABASE_URL=https://your-prod-project.supabase.co
 JWT_SECRET_KEY=your_ultra_secure_production_key
-REDIS_URL=redis://your-redis-server:6379/0
+# No Redis needed - using database cache
 
 # Frontend Production
 REACT_APP_API_URL=https://api.your-domain.com
@@ -440,7 +440,7 @@ REACT_APP_SUPABASE_ANON_KEY=your_production_anon_key
 # Set configuration via CLI
 heroku config:set SUPABASE_URL=https://your-project.supabase.co
 heroku config:set JWT_SECRET_KEY=your_secure_key
-heroku config:set REDIS_URL=redis://your-redis-addon
+# No Redis addon needed
 ```
 
 ## 🔧 Troubleshooting
@@ -452,11 +452,11 @@ heroku config:set REDIS_URL=redis://your-redis-addon
 # Database connection test
 python -c "from supabase_client import SupabaseClient; print('✅ Connected')"
 
-# Redis connection test
-redis-cli ping
+# Cache status check
+curl http://localhost:5000/api/admin/cache/stats
 
-# Check Celery worker status
-celery -A celery_app inspect active
+# Trigger cache cleanup
+curl -X POST http://localhost:5000/api/admin/cache/cleanup
 ```
 
 #### Frontend Issues
@@ -471,7 +471,7 @@ curl http://localhost:5000/api/items?page=1&per_page=1
 
 #### Performance Issues
 - **High Memory Usage**: Reduce `per_page` parameters, enable virtual scrolling
-- **Slow Recommendations**: Check Celery worker status, verify Redis connection
+- **Slow Recommendations**: Check cache hit rate, run cache optimization
 - **Database Queries**: Monitor Supabase dashboard for slow queries
 
 ## 📁 Project Structure
@@ -480,14 +480,17 @@ curl http://localhost:5000/api/items?page=1&per_page=1
 AniManga Recommender/
 ├── backend/
 │   ├── middleware/              # Authentication & privacy middleware
-│   ├── tasks/                   # Celery background tasks
+│   ├── compute_endpoints.py     # Synchronous compute endpoints
 │   ├── scripts/                 # Data processing and management
 │   ├── tests/                   # Comprehensive test suite
 │   ├── utils/                   # Utility functions
 │   ├── app.py                   # Main Flask application
 │   ├── models.py                # Database models & ML algorithms
 │   ├── supabase_client.py       # Database client wrapper
-│   ├── celery_app.py           # Celery configuration
+│   ├── utils/
+│   │   ├── hybrid_cache.py      # Two-tier cache implementation
+│   │   ├── database_cache.py    # Database cache layer
+│   │   └── cache_helpers.py     # Cache helper functions
 │   └── requirements.txt         # Python dependencies
 ├── frontend/
 │   ├── src/

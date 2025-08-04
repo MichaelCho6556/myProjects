@@ -27,9 +27,12 @@ Version: 1.0.0
 License: MIT
 """
 
+from __future__ import annotations
+
 # backend/app.py
-from flask import Flask, jsonify, request, g
-from flask_cors import CORS
+import ast
+from flask import Flask, jsonify, request, g, Response, make_response
+from flask_cors import CORS, cross_origin
 import os
 import logging
 import pandas as pd
@@ -44,7 +47,7 @@ import json
 import html
 import time
 import traceback
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union, Tuple
 from concurrent.futures import ThreadPoolExecutor
 from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
 
@@ -79,7 +82,7 @@ from middleware.privacy_middleware import (
 
 load_dotenv()
 
-def sanitize_input(data):
+def sanitize_input(data: Any) -> Any:
     """
     Sanitize user input to prevent XSS attacks.
     
@@ -288,9 +291,9 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         # Initialize Supabase auth client
         auth_client = SupabaseAuthClient(
-            base_url=os.getenv('SUPABASE_URL'),
-            api_key=os.getenv('SUPABASE_KEY'),
-            service_key=os.getenv('SUPABASE_SERVICE_KEY')
+            base_url=os.getenv('SUPABASE_URL', ''),
+            api_key=os.getenv('SUPABASE_KEY', ''),
+            service_key=os.getenv('SUPABASE_SERVICE_KEY', '')
         )
         
         # Verify token with Supabase
@@ -499,7 +502,16 @@ def load_data_and_tfidf_from_supabase() -> None:
     try:
         # Try to load from singleton cache first
         cached_data = data_singleton.load_data(load_function=load_from_supabase)
-        df_processed, tfidf_vectorizer_global, tfidf_matrix_global, uid_to_idx = cached_data
+        
+        if cached_data and len(cached_data) == 4:
+            df_processed, tfidf_vectorizer_global, tfidf_matrix_global, uid_to_idx = cached_data
+            # Set these as proper globals to ensure scope accessibility
+            globals()['df_processed'] = df_processed
+            globals()['tfidf_vectorizer_global'] = tfidf_vectorizer_global
+            globals()['tfidf_matrix_global'] = tfidf_matrix_global
+            globals()['uid_to_idx'] = uid_to_idx
+        else:
+            raise ValueError("Invalid cached data format")
         
     except Exception as e:
         # Initialize empty globals to prevent further errors
@@ -626,7 +638,7 @@ def create_combined_text_features(df: pd.DataFrame) -> pd.DataFrame:
     
     return df
 
-def map_field_names_for_frontend(data_dict):
+def map_field_names_for_frontend(data_dict: Any) -> Any:
     """
     Map backend field names to frontend expected field names for API compatibility.
     
@@ -686,7 +698,7 @@ def map_field_names_for_frontend(data_dict):
         return mapped_dict
     return data_dict
 
-def map_records_for_frontend(records_list):
+def map_records_for_frontend(records_list: List[Any]) -> List[Any]:
     """
     Map field names for a list of records to ensure frontend compatibility.
     
@@ -714,7 +726,7 @@ def map_records_for_frontend(records_list):
     """
     return [map_field_names_for_frontend(record) for record in records_list]
 
-def initialize_auth_client():
+def initialize_auth_client() -> SupabaseAuthClient:
     """
     Initialize the Supabase authentication client for the application.
     
@@ -754,7 +766,7 @@ def initialize_auth_client():
 # Initialize data loading flag
 _data_loading_attempted = False
 
-def ensure_data_loaded():
+def ensure_data_loaded() -> None:
     """
     Ensure anime/manga data is loaded before processing API requests.
     
@@ -804,7 +816,7 @@ if 'pytest' not in sys.modules and 'PYTEST_CURRENT_TEST' not in os.environ:
 initialize_auth_client()
 
 @app.route('/')
-def hello():
+def hello() -> str:
     """
     Health check endpoint for the AniManga Recommender API.
     
@@ -832,7 +844,7 @@ def hello():
     return f"Hello from AniManga Recommender Backend! Loaded {len(df_processed)} items from Supabase."
 
 @app.route('/api/debug')
-def debug_data():
+def debug_data() -> Union[Response, Tuple[Response, int]]:
     """Debug endpoint to check if data is loaded"""
     global df_processed
     if df_processed is None:
@@ -845,7 +857,7 @@ def debug_data():
     })
 
 @app.route('/api/items')
-def get_items():
+def get_items() -> Union[Response, Tuple[Response, int]]:
     """
     Retrieve paginated list of anime/manga items with advanced filtering and sorting.
     
@@ -931,15 +943,19 @@ def get_items():
         Field names are automatically mapped for frontend compatibility.
     """
     if df_processed is None:
-        return jsonify({"error": "Dataset not available."}), 503
+        return make_response(jsonify({"error": "Dataset not available."}), 503)
     
     if len(df_processed) == 0:
-        # Debug: [ERROR] df_processed is empty! Type: {type(df_processed}")
-        return jsonify({
-            "items": [], "page": 1, "per_page": 30,
-            "total_items": 0, "total_pages": 0, "sort_by": "score_desc",
-            "debug": "df_processed is empty"
-        })
+        # Try to reload data as fallback
+        ensure_data_loaded()
+        
+        # Check if reload worked
+        if df_processed is None or len(df_processed) == 0:
+            return jsonify({
+                "items": [], "page": 1, "per_page": 30,
+                "total_items": 0, "total_pages": 0, "sort_by": "score_desc",
+                "error": "No data available"
+            })
 
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 30, type=int)
@@ -1075,7 +1091,7 @@ def get_items():
     })
 
 @app.route('/api/distinct-values')
-def get_distinct_values():
+def get_distinct_values() -> Union[Response, Tuple[Response, int]]:
     """
     Retrieve distinct/unique values for all filterable fields in the dataset.
     
@@ -1144,10 +1160,12 @@ def get_distinct_values():
         Empty dataset returns empty arrays with appropriate status code.
     """
     if df_processed is None or len(df_processed) == 0:
-        return jsonify({
+        empty_response = jsonify({
             "genres": [], "statuses": [], "media_types": [], "themes": [],
             "demographics": [], "studios": [], "authors": []
-        }), 503 if df_processed is None else 200
+        })
+        status_code = 503 if df_processed is None else 200
+        return make_response(empty_response, status_code)
     
     try:
         def get_unique_from_lists(column_name):
@@ -1179,10 +1197,10 @@ def get_distinct_values():
             "media_types": all_media_types
         })
     except Exception as e:
-        return jsonify({"error": "Could not retrieve distinct values."}), 500
+        return make_response(jsonify({"error": "Could not retrieve distinct values."}), 500)
 
 @app.route('/api/items/<item_uid>')
-def get_item_details(item_uid):
+def get_item_details(item_uid: str) -> Union[Response, Tuple[Response, int]]:
     """
     Retrieve detailed information for a specific anime or manga item.
     
@@ -1242,7 +1260,7 @@ def get_item_details(item_uid):
     return jsonify(item_details_mapped)
 
 @app.route('/api/recommendations/<item_uid>')
-def get_recommendations(item_uid):
+def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
     """
     Generate content-based related items for a specific anime or manga item.
     
@@ -1352,7 +1370,7 @@ def get_recommendations(item_uid):
 
 @app.route('/api/auth/profile', methods=['GET'])
 @require_auth
-def get_user_profile():
+def get_user_profile() -> Union[Response, Tuple[Response, int]]:
     """
     Retrieve the authenticated user's profile information.
     
@@ -1428,7 +1446,7 @@ def get_user_profile():
 
 @app.route('/api/auth/profile', methods=['PUT'])
 @require_auth
-def update_user_profile():
+def update_user_profile() -> Union[Response, Tuple[Response, int]]:
     """
     Update the authenticated user's profile information.
     
@@ -1532,7 +1550,7 @@ def update_user_profile():
 @app.route('/api/auth/dashboard', methods=['GET'])
 @require_auth
 @monitor_endpoint("dashboard")
-def get_user_dashboard():
+def get_user_dashboard() -> Union[Response, Tuple[Response, int]]:
     """
     Retrieve comprehensive dashboard data for the authenticated user.
     
@@ -1640,7 +1658,7 @@ def get_user_dashboard():
     try:
         
         # Get user statistics with cache status
-        user_stats = get_user_statistics(user_id)
+        user_stats = _get_user_statistics_data(user_id)
         
         # Check if stats came from cache
         cache_hit = False
@@ -1677,7 +1695,7 @@ def get_user_dashboard():
 
 @app.route('/api/auth/user-items', methods=['GET'])
 @require_auth
-def get_user_items():
+def get_user_items() -> Union[Response, Tuple[Response, int]]:
     """
     Retrieve the authenticated user's complete anime/manga list with enriched item details.
     
@@ -1817,7 +1835,7 @@ def get_user_items():
 
 @app.route('/api/auth/user-items/<item_uid>', methods=['POST', 'PUT'])
 @require_auth
-def update_user_item_status(item_uid):
+def update_user_item_status(item_uid: str) -> Union[Response, Tuple[Response, int]]:
     """
     Update or create a user's tracking entry for a specific anime/manga item.
     
@@ -2031,7 +2049,7 @@ def update_user_item_status(item_uid):
 
 @app.route('/api/auth/user-items/<item_uid>', methods=['DELETE'])
 @require_auth
-def remove_user_item(item_uid):
+def remove_user_item(item_uid: str) -> Union[Response, Tuple[Response, int]]:
     """
     Remove an anime/manga item from the authenticated user's tracking list.
     
@@ -2111,7 +2129,7 @@ def remove_user_item(item_uid):
 
 @app.route('/api/auth/user-items/by-status/<status>', methods=['GET'])
 @require_auth
-def get_user_items_by_status_route(status):
+def get_user_items_by_status_route(status: str) -> Union[Response, Tuple[Response, int]]:
     """
     Retrieve user's anime/manga items filtered by a specific tracking status.
     
@@ -2193,7 +2211,7 @@ def get_user_items_by_status_route(status):
 
 @app.route('/api/auth/verify-token', methods=['GET'])
 @require_auth
-def verify_token_endpoint():
+def verify_token_endpoint() -> Union[Response, Tuple[Response, int]]:
     """
     Verify the validity of the current JWT authentication token.
     
@@ -2259,7 +2277,7 @@ def verify_token_endpoint():
 
 @app.route('/api/auth/statistics', methods=['GET'])
 @require_auth
-def get_user_statistics():
+def get_user_statistics() -> Union[Response, Tuple[Response, int]]:
     """
     Get comprehensive statistics for the authenticated user's library.
     
@@ -2362,7 +2380,7 @@ def get_user_statistics():
 
 @app.route('/api/auth/force-refresh-stats', methods=['POST'])
 @require_auth
-def force_refresh_statistics():
+def force_refresh_statistics() -> Union[Response, Tuple[Response, int]]:
     """
     Force immediate recalculation and refresh of user statistics.
     
@@ -2475,7 +2493,7 @@ def force_refresh_statistics():
 
 @app.route('/api/auth/users/me/analytics', methods=['GET'])
 @require_auth
-def get_user_analytics():
+def get_user_analytics() -> Union[Response, Tuple[Response, int]]:
     """
     Get comprehensive analytics data for the authenticated user.
     
@@ -2530,7 +2548,7 @@ def get_user_analytics():
 
 @app.route('/api/auth/cleanup-orphaned-items', methods=['POST'])
 @require_auth
-def cleanup_orphaned_user_items():
+def cleanup_orphaned_user_items() -> Union[Response, Tuple[Response, int]]:
     """
     Clean up orphaned user items that reference non-existent anime/manga.
     
@@ -2635,7 +2653,7 @@ def cleanup_orphaned_user_items():
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 #helper functions
-def get_user_statistics(user_id: str) -> dict:
+def _get_user_statistics_data(user_id: str) -> dict:
     """
     Get comprehensive user statistics with intelligent caching and auto-invalidation.
     
@@ -2672,7 +2690,7 @@ def get_user_statistics(user_id: str) -> dict:
         - Reliable: Multiple fallback layers prevent failures
         
     Example:
-        >>> stats = get_user_statistics("123e4567-e89b-12d3-a456-426614174000")
+        >>> stats = _get_user_statistics_data("123e4567-e89b-12d3-a456-426614174000")
         >>> # Example: f"User completed {stats['total_anime_watched']} anime"
         >>> # Example: f"Cache status: {'fresh' if stats else 'calculated'}"
         
@@ -2715,7 +2733,7 @@ def get_user_statistics(user_id: str) -> dict:
     except Exception as e:
         return get_default_user_statistics()
 
-def get_cached_user_statistics(user_id: str) -> dict:
+def get_cached_user_statistics(user_id: str) -> Optional[dict]:
     """
     Retrieve cached user statistics from the database.
     
@@ -2935,6 +2953,7 @@ def invalidate_user_statistics_cache(user_id: str):
         if hasattr(auth_client, 'db'):
             # Test mode: delete directly from database
             try:
+                from sqlalchemy import text
                 auth_client.db.execute(
                     text("DELETE FROM user_statistics WHERE user_id = :user_id"),
                     {'user_id': user_id}
@@ -3440,6 +3459,7 @@ def log_user_activity(user_id: str, activity_type: str, item_uid: str, activity_
             # Test mode: insert directly into database
             try:
                 import json
+                from sqlalchemy import text
                 auth_client.db.execute(
                     text("""
                         INSERT INTO user_activity (user_id, activity_type, item_uid, activity_data, created_at)
@@ -4817,7 +4837,7 @@ def _get_explanation_factors(reason_type: str, item_data: Dict[str, Any],
 
 @app.route('/api/auth/personalized-recommendations', methods=['GET'])
 @require_auth
-def get_personalized_recommendations():
+def get_personalized_recommendations() -> Union[Response, Tuple[Response, int]]:
     """
     Generate intelligent, personalized recommendations for the authenticated user.
     
@@ -5099,7 +5119,7 @@ def get_personalized_recommendations():
 
 @app.route('/api/auth/personalized-recommendations/more', methods=['GET'])
 @require_auth
-def get_more_personalized_recommendations():
+def get_more_personalized_recommendations() -> Union[Response, Tuple[Response, int]]:
     """
     Load more personalized recommendations for infinite scroll pagination.
     
@@ -5194,7 +5214,7 @@ def _calculate_completion_rate_from_prefs(user_preferences: Dict[str, Any]) -> f
 # -----------------------------------------------------------------------------
 
 @app.route('/api/admin/reload-data', methods=['POST'])
-def admin_reload_data():
+def admin_reload_data() -> Union[Response, Tuple[Response, int]]:
     """Force reload dataset from Supabase
 
     This endpoint allows tooling (e.g. the MAL discovery/import scripts) to
@@ -5220,7 +5240,7 @@ def admin_reload_data():
 
 @app.route('/api/auth/personalized-recommendations/feedback', methods=['POST'])
 @require_auth
-def submit_recommendation_feedback():
+def submit_recommendation_feedback() -> Union[Response, Tuple[Response, int]]:
     """
     Submit user feedback on personalized recommendations to improve future suggestions.
     
@@ -5386,7 +5406,7 @@ def submit_recommendation_feedback():
 
 @app.route('/api/users/<username>/profile', methods=['GET'])
 @require_privacy_check(content_type='profile')
-def get_public_user_profile(username):
+def get_public_user_profile(username) -> Union[Response, Tuple[Response, int]]:
     """
     Get user profile by username with privacy filtering.
     
@@ -5498,7 +5518,7 @@ def get_public_user_profile(username):
 
 @app.route('/api/users/<username>/stats', methods=['GET'])
 @require_privacy_check(content_type='profile')
-def get_public_user_stats(username):
+def get_public_user_stats(username) -> Union[Response, Tuple[Response, int]]:
     """
     Get user statistics by username with privacy filtering and cache metadata.
     
@@ -5556,7 +5576,7 @@ def get_public_user_stats(username):
                 return jsonify({'error': 'Database service temporarily unavailable'}), 503
             
         # Get user statistics with caching
-        stats = get_user_statistics(user_id)
+        stats = _get_user_statistics_data(user_id)
         
         # Check cache metadata
         cache_hit = False
@@ -5612,7 +5632,7 @@ def get_public_user_stats(username):
 
 @app.route('/api/users/<username>/lists', methods=['GET'])
 @require_privacy_check(content_type='profile')
-def get_public_user_lists(username):
+def get_public_user_lists(username) -> Union[Response, Tuple[Response, int]]:
     """
     Get user's accessible custom lists by username.
     Includes public lists and friends-only lists if viewer is a friend.
@@ -5732,7 +5752,7 @@ def get_public_user_lists(username):
 
 @app.route('/api/users/<username>/activity', methods=['GET'])
 @require_privacy_check(content_type='profile')
-def get_user_activity(username):
+def get_user_activity(username) -> Union[Response, Tuple[Response, int]]:
     """
     Get user's recent activity by username.
     
@@ -6026,7 +6046,7 @@ def get_unified_user_profile_fallback(username, viewer_id=None):
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/users/<username>/profile-full', methods=['GET', 'OPTIONS'])
-def get_unified_user_profile(username):
+def get_unified_user_profile(username) -> Union[Response, Tuple[Response, int]]:
     """
     Get complete user profile data in a single request.
     
@@ -6054,7 +6074,7 @@ def get_unified_user_profile(username):
     """
     # Handle OPTIONS request for CORS
     if request.method == 'OPTIONS':
-        return '', 200
+        return make_response('', 200)
         
     try:
         import requests
@@ -6141,7 +6161,7 @@ def get_unified_user_profile(username):
 
 @app.route('/api/auth/follow/<username>', methods=['POST'])
 @require_auth
-def toggle_follow_user(username):
+def toggle_follow_user(username) -> Union[Response, Tuple[Response, int]]:
     """
     Follow or unfollow a user by username.
     
@@ -6203,7 +6223,7 @@ def toggle_follow_user(username):
 
 @app.route('/api/auth/privacy-settings', methods=['PUT'])
 @require_auth
-def update_privacy_settings():
+def update_privacy_settings() -> Union[Response, Tuple[Response, int]]:
     """
     Update user privacy settings.
     
@@ -6271,7 +6291,7 @@ def update_privacy_settings():
 
 @app.route('/api/auth/privacy-settings', methods=['GET'])
 @require_auth
-def get_privacy_settings():
+def get_privacy_settings() -> Union[Response, Tuple[Response, int]]:
     """
     Get user privacy settings.
     
@@ -6331,7 +6351,7 @@ def get_privacy_settings():
 
 @app.route('/api/auth/lists/custom', methods=['POST'])
 @require_auth
-def create_custom_list():
+def create_custom_list() -> Union[Response, Tuple[Response, int]]:
     """
     Create a new custom list.
     
@@ -6391,7 +6411,7 @@ def create_custom_list():
 
 @app.route('/api/auth/lists/my-lists', methods=['GET'])
 @require_auth
-def get_my_custom_lists():
+def get_my_custom_lists() -> Union[Response, Tuple[Response, int]]:
     """
     Get the current user's custom lists with pagination.
     
@@ -6470,7 +6490,7 @@ def get_my_custom_lists():
 # Add route to match frontend expectation
 @app.route('/api/auth/lists', methods=['GET', 'POST'])
 @require_auth
-def get_user_lists():
+def get_user_lists() -> Union[Response, Tuple[Response, int]]:
     """
     Get or create custom lists for the current user.
     
@@ -6528,7 +6548,7 @@ def get_user_lists():
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/debug/test-method', methods=['GET'])
-def debug_test_method():
+def debug_test_method() -> Union[Response, Tuple[Response, int]]:
     """Debug endpoint to test if add_items_to_list method exists"""
     try:
         # Check if the method exists
@@ -6552,7 +6572,7 @@ def debug_test_method():
 
 @app.route('/api/debug/test-lists', methods=['GET'])
 @require_auth
-def debug_test_lists():
+def debug_test_lists() -> Union[Response, Tuple[Response, int]]:
     """Debug endpoint to test custom lists functionality"""
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
@@ -6585,7 +6605,7 @@ def debug_test_lists():
 # =============================================================================
 
 @app.route('/api/test/setup-privacy-test-data', methods=['POST'])
-def setup_privacy_test_data():
+def setup_privacy_test_data() -> Union[Response, Tuple[Response, int]]:
     """
     Setup test data for privacy enforcement integration tests.
     
@@ -6763,7 +6783,7 @@ def setup_privacy_test_data():
         }), 500
 
 @app.route('/api/test/cleanup-privacy-test-data', methods=['DELETE'])
-def cleanup_privacy_test_data():
+def cleanup_privacy_test_data() -> Union[Response, Tuple[Response, int]]:
     """
     Cleanup test data created for privacy enforcement tests.
     
@@ -6814,7 +6834,7 @@ def cleanup_privacy_test_data():
         }), 500
 
 @app.route('/api/test/generate-auth-token', methods=['POST'])
-def generate_test_auth_token():
+def generate_test_auth_token() -> Union[Response, Tuple[Response, int]]:
     """
     Generate JWT authentication token for test users.
     
@@ -6873,7 +6893,7 @@ def generate_test_auth_token():
         }), 500
 
 @app.route('/api/analytics/user/<user_id>/stats', methods=['GET'])
-def get_public_user_stats_by_id(user_id):
+def get_public_user_stats_by_id(user_id) -> Union[Response, Tuple[Response, int]]:
     """
     Get public statistics for a specific user with privacy controls.
     
@@ -6979,7 +6999,7 @@ def get_public_user_stats_by_id(user_id):
             if stats:
                 set_user_stats_in_cache(user_id, stats)
         else:
-            stats = get_user_statistics(user_id)
+            stats = _get_user_statistics_data(user_id)
         
         # Determine cache status
         cache_hit = False
@@ -7015,7 +7035,7 @@ def get_public_user_stats_by_id(user_id):
         return jsonify({'error': 'Failed to retrieve user statistics'}), 500
 
 @app.route('/api/cache/status', methods=['GET'])
-def get_cache_status_endpoint():
+def get_cache_status_endpoint() -> Union[Response, Tuple[Response, int]]:
     """
     Get cache status and statistics for monitoring.
     
@@ -7058,7 +7078,7 @@ def get_cache_status_endpoint():
         }), 500
 
 @app.route('/api/health', methods=['GET'])
-def system_health_check():
+def system_health_check() -> Union[Response, Tuple[Response, int]]:
     """
     Comprehensive system health check endpoint.
     
@@ -7135,7 +7155,7 @@ def system_health_check():
 
 
 @app.route('/api/test/privacy/verify-enforcement', methods=['POST'])
-def verify_privacy_enforcement():
+def verify_privacy_enforcement() -> Union[Response, Tuple[Response, int]]:
     """
     Verify that privacy enforcement is working correctly.
     
@@ -7204,7 +7224,7 @@ def verify_privacy_enforcement():
 
 @app.route('/api/lists/discover', methods=['GET'])
 @rate_limit(requests_per_minute=30, per_ip=True)  # Allow 30 requests per minute per IP
-def discover_lists():
+def discover_lists() -> Union[Response, Tuple[Response, int]]:
     """
     Discover public custom lists with search and filtering.
     
@@ -7303,7 +7323,7 @@ def discover_lists():
 
 @app.route('/api/lists/<int:list_id>', methods=['GET'])
 @rate_limit(requests_per_minute=30, per_ip=True)
-def get_public_list_details(list_id):
+def get_public_list_details(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Get details for a public custom list (no authentication required).
     
@@ -7363,7 +7383,7 @@ def get_public_list_details(list_id):
 
 @app.route('/api/lists/<int:list_id>/items', methods=['GET'])
 @rate_limit(requests_per_minute=30, per_ip=True)
-def get_public_list_items(list_id):
+def get_public_list_items(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Get items for a public custom list (no authentication required).
     
@@ -7405,7 +7425,7 @@ def get_public_list_items(list_id):
 
 @app.route('/api/auth/lists/<int:list_id>/reorder', methods=['POST'])
 @require_auth
-def reorder_list_items(list_id):
+def reorder_list_items(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Reorder items in a custom list with conflict detection.
     
@@ -7534,7 +7554,7 @@ def add_user_dismissed_item(user_id: str, item_uid: str):
         _user_dismissed_items[user_id] = set()
     _user_dismissed_items[user_id].add(item_uid)
 @app.route('/api/lists/<int:list_id>/comments', methods=['GET'])
-def get_list_comments(list_id):
+def get_list_comments(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Get comments for a specific list.
     
@@ -7583,7 +7603,7 @@ def get_list_comments(list_id):
 
 @app.route('/api/lists/<int:list_id>/comments', methods=['POST'])
 @require_auth
-def create_list_comment(list_id):
+def create_list_comment(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Create a new comment on a list.
     
@@ -7641,7 +7661,7 @@ def create_list_comment(list_id):
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/users/search', methods=['GET'])
-def search_users():
+def search_users() -> Union[Response, Tuple[Response, int]]:
     """
     Search for users by username or display name.
     
@@ -7712,7 +7732,7 @@ def search_users():
 
 @app.route('/api/auth/activity-feed', methods=['GET'])
 @require_auth
-def get_activity_feed():
+def get_activity_feed() -> Union[Response, Tuple[Response, int]]:
     """
     Get activity feed for the authenticated user.
     
@@ -7760,7 +7780,7 @@ def get_activity_feed():
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/lists/popular', methods=['GET'])
-def get_popular_lists():
+def get_popular_lists() -> Union[Response, Tuple[Response, int]]:
     """
     Get popular lists for the current week.
     
@@ -7842,8 +7862,10 @@ def get_popular_lists():
             pass
         # If cache is not available or stale, trigger background calculation
         try:
-            from tasks.recommendation_tasks import calculate_popular_lists
-            task_result = calculate_popular_lists.delay()
+            # Legacy Celery task import - replaced with compute endpoints
+            # from tasks.recommendation_tasks import calculate_popular_lists
+            # task_result = calculate_popular_lists.delay()
+            pass
         except Exception as task_error:
             pass
         # Return empty result with message about background processing
@@ -7867,7 +7889,7 @@ def get_popular_lists():
 
 @app.route('/api/auth/recommended-lists', methods=['GET'])
 @require_auth
-def get_recommended_lists():
+def get_recommended_lists() -> Union[Response, Tuple[Response, int]]:
     """
     Get community-recommended lists for the authenticated user.
     
@@ -7955,8 +7977,10 @@ def get_recommended_lists():
                 pass
         # If cache is not available, stale, or force refresh requested, trigger background calculation
         try:
-            from tasks.recommendation_tasks import generate_community_recommendations
-            task_result = generate_community_recommendations.delay(user_id)
+            # Legacy Celery task import - replaced with compute endpoints
+            # from tasks.recommendation_tasks import generate_community_recommendations
+            # task_result = generate_community_recommendations.delay(user_id)
+            pass
         except Exception as task_error:
             pass
         # Return empty result with message about background processing
@@ -7980,7 +8004,7 @@ def get_recommended_lists():
 
 @app.route('/api/auth/notifications', methods=['GET'])
 @require_auth
-def get_notifications():
+def get_notifications() -> Union[Response, Tuple[Response, int]]:
     """
     Get notifications for the authenticated user.
     
@@ -8041,7 +8065,7 @@ def get_notifications():
 
 @app.route('/api/auth/notifications/<int:notification_id>/read', methods=['PATCH'])
 @require_auth
-def mark_notification_read(notification_id):
+def mark_notification_read(notification_id) -> Union[Response, Tuple[Response, int]]:
     """
     Mark a notification as read.
     
@@ -8079,7 +8103,7 @@ def mark_notification_read(notification_id):
 
 @app.route('/api/auth/notifications/read-all', methods=['PATCH'])
 @require_auth
-def mark_all_notifications_read():
+def mark_all_notifications_read() -> Union[Response, Tuple[Response, int]]:
     """
     Mark all notifications as read for the authenticated user.
     
@@ -8115,7 +8139,7 @@ def mark_all_notifications_read():
 
 @app.route('/api/reviews', methods=['POST'])
 @require_auth
-def create_review():
+def create_review() -> Union[Response, Tuple[Response, int]]:
     """
     Create a new review for an anime/manga item.
     
@@ -8194,7 +8218,7 @@ def create_review():
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/reviews/<item_uid>', methods=['GET'])
-def get_reviews_for_item(item_uid):
+def get_reviews_for_item(item_uid) -> Union[Response, Tuple[Response, int]]:
     """
     Get all reviews for a specific anime/manga item.
     
@@ -8249,7 +8273,7 @@ def get_reviews_for_item(item_uid):
 
 @app.route('/api/reviews/<int:review_id>/vote', methods=['POST'])
 @require_auth
-def vote_on_review(review_id):
+def vote_on_review(review_id) -> Union[Response, Tuple[Response, int]]:
     """
     Vote on a review's helpfulness.
     
@@ -8308,7 +8332,7 @@ def vote_on_review(review_id):
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/reviews/<int:review_id>/votes', methods=['GET'])
-def get_review_vote_stats(review_id):
+def get_review_vote_stats(review_id) -> Union[Response, Tuple[Response, int]]:
     """
     Get voting statistics for a review.
     
@@ -8347,7 +8371,7 @@ def get_review_vote_stats(review_id):
 
 @app.route('/api/reviews/<int:review_id>/report', methods=['POST'])
 @require_auth
-def report_review(review_id):
+def report_review(review_id) -> Union[Response, Tuple[Response, int]]:
     """
     Report a review for moderation.
     
@@ -8416,7 +8440,7 @@ def report_review(review_id):
 
 @app.route('/api/reviews/<int:review_id>', methods=['PUT'])
 @require_auth
-def update_review(review_id):
+def update_review(review_id) -> Union[Response, Tuple[Response, int]]:
     """
     Update an existing review (author only).
     
@@ -8471,7 +8495,7 @@ def update_review(review_id):
 
 @app.route('/api/reviews/<int:review_id>', methods=['DELETE'])
 @require_auth
-def delete_review(review_id):
+def delete_review(review_id) -> Union[Response, Tuple[Response, int]]:
     """
     Delete a review (author only, soft delete).
     
@@ -8582,7 +8606,7 @@ def enhance_comment_with_moderation_cache(comment: Dict[str, Any], viewer_id: Op
 
 @app.route('/api/comments', methods=['POST'])
 @require_auth
-def create_comment():
+def create_comment() -> Union[Response, Tuple[Response, int]]:
     """
     Create a new comment.
     
@@ -8724,7 +8748,7 @@ def create_comment():
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/comments/<parent_type>/<parent_id>', methods=['GET'])
-def get_comments(parent_type, parent_id):
+def get_comments(parent_type, parent_id) -> Union[Response, Tuple[Response, int]]:
     """
     Get comments for a specific parent resource.
     
@@ -8876,7 +8900,7 @@ def get_comments(parent_type, parent_id):
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/comments/<int:comment_id>/replies', methods=['GET'])
-def get_comment_replies(comment_id):
+def get_comment_replies(comment_id) -> Union[Response, Tuple[Response, int]]:
     """
     Get all replies for a specific comment.
     
@@ -8943,7 +8967,7 @@ def get_comment_replies(comment_id):
 
 @app.route('/api/comments/<int:comment_id>/react', methods=['POST'])
 @require_auth
-def react_to_comment(comment_id):
+def react_to_comment(comment_id) -> Union[Response, Tuple[Response, int]]:
     """
     Add or remove a reaction to a comment.
     
@@ -9038,7 +9062,7 @@ def react_to_comment(comment_id):
 
 @app.route('/api/comments/<int:comment_id>', methods=['PUT'])
 @require_auth
-def update_comment(comment_id):
+def update_comment(comment_id) -> Union[Response, Tuple[Response, int]]:
     """
     Update a comment (author only, within time limit).
     
@@ -9116,7 +9140,7 @@ def update_comment(comment_id):
 
 @app.route('/api/comments/<int:comment_id>', methods=['DELETE'])
 @require_auth
-def delete_comment(comment_id):
+def delete_comment(comment_id) -> Union[Response, Tuple[Response, int]]:
     """
     Delete a comment (author only, soft delete).
     
@@ -9170,7 +9194,7 @@ def delete_comment(comment_id):
 
 @app.route('/api/comments/<int:comment_id>/report', methods=['POST'])
 @require_auth
-def report_comment(comment_id):
+def report_comment(comment_id) -> Union[Response, Tuple[Response, int]]:
     """
     Report a comment for moderation.
     
@@ -9298,7 +9322,7 @@ def require_moderator(f):
 
 @app.route('/api/users/<user_id>/reputation', methods=['GET'])
 @require_auth
-def get_user_reputation(user_id):
+def get_user_reputation(user_id) -> Union[Response, Tuple[Response, int]]:
     """
     Get reputation information for a specific user.
     
@@ -9359,7 +9383,7 @@ def get_user_reputation(user_id):
 @app.route('/api/users/<user_id>/reputation/recalculate', methods=['POST'])
 @require_auth
 @require_moderator
-def recalculate_user_reputation(user_id):
+def recalculate_user_reputation(user_id) -> Union[Response, Tuple[Response, int]]:
     """
     Manually trigger reputation recalculation for a specific user.
     Admin/moderator only endpoint for troubleshooting or manual updates.
@@ -9396,7 +9420,7 @@ def recalculate_user_reputation(user_id):
 
 @app.route('/api/appeals', methods=['POST'])
 @require_auth
-def create_appeal():
+def create_appeal() -> Union[Response, Tuple[Response, int]]:
     """
     Create a new moderation appeal.
     
@@ -9484,7 +9508,7 @@ def create_appeal():
 
 @app.route('/api/appeals', methods=['GET'])
 @require_auth
-def get_user_appeals():
+def get_user_appeals() -> Union[Response, Tuple[Response, int]]:
     """
     Get appeals for the current user or all appeals for moderators.
     
@@ -9559,7 +9583,7 @@ def get_user_appeals():
 @app.route('/api/appeals/<int:appeal_id>', methods=['PUT'])
 @require_auth
 @require_moderator
-def update_appeal(appeal_id):
+def update_appeal(appeal_id) -> Union[Response, Tuple[Response, int]]:
     """
     Update an appeal status (moderator only).
     
@@ -9643,7 +9667,7 @@ def update_appeal(appeal_id):
 
 @app.route('/api/notifications', methods=['GET'])
 @require_auth
-def get_user_notifications():
+def get_user_notifications() -> Union[Response, Tuple[Response, int]]:
     """
     Get notifications for the current user.
     
@@ -9704,7 +9728,7 @@ def get_user_notifications():
 
 @app.route('/api/users/<user_id>/notification-preferences', methods=['GET'])
 @require_auth
-def get_notification_preferences(user_id):
+def get_notification_preferences(user_id) -> Union[Response, Tuple[Response, int]]:
     """
     Get notification preferences for a user.
     
@@ -9751,7 +9775,7 @@ def get_notification_preferences(user_id):
 
 @app.route('/api/users/<user_id>/notification-preferences', methods=['PUT'])
 @require_auth
-def update_notification_preferences(user_id):
+def update_notification_preferences(user_id) -> Union[Response, Tuple[Response, int]]:
     """
     Update notification preferences for a user.
     
@@ -9792,7 +9816,7 @@ def update_notification_preferences(user_id):
 @app.route('/api/moderation/stats', methods=['GET'])
 @require_auth
 @require_moderator
-def get_moderation_stats():
+def get_moderation_stats() -> Union[Response, Tuple[Response, int]]:
     """
     Get moderation statistics for the dashboard analytics.
     
@@ -9978,7 +10002,7 @@ def get_moderation_stats():
 @app.route('/api/moderation/reports', methods=['GET'])
 @require_auth
 @require_moderator
-def get_moderation_reports():
+def get_moderation_reports() -> Union[Response, Tuple[Response, int]]:
     """
     Get all pending moderation reports for the moderation dashboard.
     
@@ -10179,7 +10203,7 @@ def get_moderation_reports():
 @app.route('/api/moderation/reports/<int:report_id>', methods=['PUT'])
 @require_auth
 @require_moderator
-def update_moderation_report(report_id):
+def update_moderation_report(report_id) -> Union[Response, Tuple[Response, int]]:
     """
     Update a moderation report status and log the action.
     
@@ -10326,7 +10350,7 @@ def update_moderation_report(report_id):
 @app.route('/api/moderation/audit-log', methods=['GET'])
 @require_auth
 @require_moderator
-def get_moderation_audit_log():
+def get_moderation_audit_log() -> Union[Response, Tuple[Response, int]]:
     """
     Get moderation audit log for transparency and accountability.
     
@@ -10449,7 +10473,7 @@ def log_moderation_action(moderator_id: str, action_type: str, target_type: str,
     except Exception as e:
         pass
 @app.route('/api/auth/notifications/stream')
-def notification_stream():
+def notification_stream() -> Union[Response, Tuple[Response, int]]:
     """
     Server-Sent Events endpoint for real-time notifications.
     
@@ -10564,7 +10588,7 @@ def notification_stream():
 
 @app.route('/api/auth/lists/<int:list_id>', methods=['GET'])
 @require_auth
-def get_custom_list_details_route(list_id):
+def get_custom_list_details_route(list_id) -> Union[Response, Tuple[Response, int]]:
     """Retrieve a single custom list's details (owner or public)."""
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
@@ -10584,7 +10608,7 @@ def get_custom_list_details_route(list_id):
 
 @app.route('/api/auth/lists/<int:list_id>', methods=['PUT'])
 @require_auth
-def update_custom_list_route(list_id):
+def update_custom_list_route(list_id) -> Union[Response, Tuple[Response, int]]:
     """Update a custom list's details (title, description, privacy, etc.)."""
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
@@ -10620,7 +10644,7 @@ def update_custom_list_route(list_id):
 
 @app.route('/api/auth/lists/<int:list_id>/items', methods=['GET', 'POST'])
 @require_auth
-def get_custom_list_items_route(list_id):
+def get_custom_list_items_route(list_id) -> Union[Response, Tuple[Response, int]]:
     """Retrieve items belonging to a custom list or add new items."""
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
@@ -10667,7 +10691,7 @@ def get_custom_list_items_route(list_id):
 
 @app.route('/api/auth/lists/<int:list_id>', methods=['DELETE'])
 @require_auth
-def delete_custom_list(list_id):
+def delete_custom_list(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Delete a custom list and all its associated items.
     
@@ -10761,7 +10785,7 @@ def delete_custom_list(list_id):
 
 @app.route('/api/auth/lists/<int:list_id>/duplicate', methods=['POST'])
 @require_auth
-def duplicate_custom_list(list_id):
+def duplicate_custom_list(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Duplicate a custom list with all its items and settings.
     
@@ -10878,7 +10902,7 @@ def duplicate_custom_list(list_id):
 
 @app.route('/api/auth/lists/<int:list_id>/items/batch', methods=['POST'])
 @require_auth
-def add_items_to_list_batch(list_id):
+def add_items_to_list_batch(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Add multiple items to a custom list in a single request.
     
@@ -10960,7 +10984,7 @@ def add_items_to_list_batch(list_id):
 
 @app.route('/api/auth/lists/<int:list_id>/items/<int:item_id>', methods=['PUT'])
 @require_auth
-def update_list_item(list_id, item_id):
+def update_list_item(list_id, item_id) -> Union[Response, Tuple[Response, int]]:
     """
     Update an item in a custom list (e.g., notes, personal rating).
     
@@ -11054,7 +11078,7 @@ def update_list_item(list_id, item_id):
 
 @app.route('/api/auth/lists/<int:list_id>/items/<int:item_id>', methods=['DELETE'])
 @require_auth
-def remove_item_from_list(list_id, item_id):
+def remove_item_from_list(list_id, item_id) -> Union[Response, Tuple[Response, int]]:
     """
     Remove an item from a custom list.
     
@@ -11107,7 +11131,7 @@ def remove_item_from_list(list_id, item_id):
 
 @app.route('/api/auth/lists/<int:list_id>/batch-operations', methods=['POST'])
 @require_auth
-def execute_batch_operation(list_id):
+def execute_batch_operation(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Execute batch operations on multiple list items.
     
@@ -11228,7 +11252,7 @@ def execute_batch_operation(list_id):
 
 @app.route('/api/auth/filter-presets', methods=['GET'])
 @require_auth
-def get_filter_presets():
+def get_filter_presets() -> Union[Response, Tuple[Response, int]]:
     """Get user's saved filter presets"""
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
@@ -11274,7 +11298,7 @@ def get_filter_presets():
 
 @app.route('/api/auth/filter-presets', methods=['POST'])
 @require_auth
-def create_filter_preset():
+def create_filter_preset() -> Union[Response, Tuple[Response, int]]:
     """Create a new filter preset"""
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
@@ -11322,7 +11346,7 @@ def create_filter_preset():
 
 @app.route('/api/auth/filter-presets/<preset_id>/use', methods=['POST'])
 @require_auth
-def use_filter_preset(preset_id):
+def use_filter_preset(preset_id) -> Union[Response, Tuple[Response, int]]:
     """Increment usage count for a filter preset"""
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
@@ -11343,7 +11367,7 @@ def use_filter_preset(preset_id):
 
 @app.route('/api/auth/filter-presets/<preset_id>', methods=['DELETE'])
 @require_auth
-def delete_filter_preset(preset_id):
+def delete_filter_preset(preset_id) -> Union[Response, Tuple[Response, int]]:
     """Delete a user's filter preset"""
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
@@ -11366,7 +11390,7 @@ def delete_filter_preset(preset_id):
 
 @app.route('/api/auth/lists/<int:list_id>/analytics', methods=['GET'])
 @require_auth
-def get_list_analytics(list_id):
+def get_list_analytics(list_id) -> Union[Response, Tuple[Response, int]]:
     """Get analytics data for a custom list"""
     try:
         user_id = g.current_user.get('user_id') or g.current_user.get('sub')
@@ -11856,9 +11880,119 @@ def calculate_user_analytics(user_id: str, start_date=None, end_date=None, granu
             }
         }
 
+# Cache maintenance endpoints
+@app.route('/api/admin/cache/cleanup', methods=['POST'])
+@cross_origin()
+def cleanup_cache() -> Union[Response, Tuple[Response, int]]:
+    """
+    Cleanup expired cache entries from database.
+    
+    This endpoint should be called periodically (e.g., daily) by an external
+    cron service to maintain cache performance. It removes all expired entries
+    from the cache_store table.
+    
+    Returns:
+        JSON response with cleanup statistics:
+        - deleted_count: Number of entries removed
+        - execution_time: Time taken in milliseconds
+        - status: Success or error status
+    
+    Security:
+        Consider adding authentication for production use.
+    """
+    start_time = time.time()
+    
+    try:
+        # Get database cache instance
+        from utils.database_cache import DatabaseCache
+        db_cache = DatabaseCache()
+        
+        if not db_cache.connected:
+            return jsonify({
+                'status': 'error',
+                'message': 'Database cache not connected',
+                'deleted_count': 0
+            }), 503
+        
+        # Execute cleanup
+        deleted_count = db_cache.clear_expired()
+        
+        # Also trigger memory cache optimization
+        from utils.hybrid_cache import get_hybrid_cache
+        hybrid_cache = get_hybrid_cache()
+        hybrid_cache.optimize()
+        
+        execution_time = round((time.time() - start_time) * 1000, 2)
+        
+        logger.info(f"Cache cleanup completed: {deleted_count} entries removed in {execution_time}ms")
+        
+        return jsonify({
+            'status': 'success',
+            'deleted_count': deleted_count,
+            'execution_time': execution_time,
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Cache cleanup failed: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'deleted_count': 0
+        }), 500
+
+@app.route('/api/admin/cache/stats', methods=['GET'])
+@cross_origin()
+def get_cache_statistics() -> Union[Response, Tuple[Response, int]]:
+    """
+    Get detailed cache statistics for monitoring.
+    
+    Returns comprehensive cache metrics including:
+    - Memory cache stats (hit rate, size, memory usage)
+    - Database cache stats (total entries, expired entries)
+    - Cache type distribution
+    - Performance metrics
+    """
+    try:
+        from utils.hybrid_cache import get_hybrid_cache
+        hybrid_cache = get_hybrid_cache()
+        
+        # Get comprehensive stats
+        stats = hybrid_cache.get_stats()
+        
+        # Add cache health indicators
+        total_requests = stats.get('total_requests', 0)
+        hit_rate = stats.get('overall_hit_rate', 0)
+        
+        health_status = 'healthy'
+        if hit_rate < 50:
+            health_status = 'degraded'
+        elif hit_rate < 30:
+            health_status = 'critical'
+        
+        stats['health'] = {
+            'status': health_status,
+            'hit_rate_threshold': 50,
+            'recommendations': []
+        }
+        
+        if hit_rate < 50:
+            stats['health']['recommendations'].append(
+                'Low hit rate detected. Consider warming cache or adjusting TTL values.'
+            )
+        
+        return jsonify(stats), 200
+        
+    except Exception as e:
+        logger.error(f"Failed to get cache statistics: {e}")
+        return jsonify({
+            'error': 'Failed to retrieve cache statistics',
+            'message': str(e)
+        }), 500
+
 # Monitoring and health check endpoints
 @app.route('/api/admin/metrics', methods=['GET'])
-def get_system_metrics():
+def get_system_metrics() -> Union[Response, Tuple[Response, int]]:
     """
     Get system metrics for monitoring dashboard.
     
@@ -11927,7 +12061,7 @@ def get_system_metrics():
 
 @app.route('/api/auth/lists/<int:list_id>/follow', methods=['POST'])
 @require_auth
-def follow_list(list_id):
+def follow_list(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Follow or unfollow a custom list.
     
@@ -12056,7 +12190,7 @@ def follow_list(list_id):
         return jsonify({'error': 'An error occurred processing your request'}), 500
 
 @app.route('/api/admin/metrics/export', methods=['GET'])
-def export_metrics():
+def export_metrics() -> Union[Response, Tuple[Response, int]]:
     """
     Export metrics in various formats for external monitoring systems.
     
@@ -12077,17 +12211,17 @@ def export_metrics():
         
         if format_type == 'prometheus':
             exported_data = collector.export_metrics('prometheus')
-            return exported_data, 200, {'Content-Type': 'text/plain; version=0.0.4'}
+            return make_response(exported_data, 200, {'Content-Type': 'text/plain; version=0.0.4'})
         else:
             exported_data = collector.export_metrics('json')
-            return exported_data, 200, {'Content-Type': 'application/json'}
+            return make_response(exported_data, 200, {'Content-Type': 'application/json'})
             
     except Exception as e:
         logger.error(f"Error exporting metrics: {e}")
         return jsonify({'error': 'Failed to export metrics'}), 500
 
 @app.route('/api/health', methods=['GET'])
-def health_check():
+def health_check() -> Union[Response, Tuple[Response, int]]:
     """
     Health check endpoint for load balancers and monitoring systems.
     
@@ -12138,7 +12272,7 @@ def health_check():
         }), 500
 
 @app.route('/lists/<int:list_id>')
-def serve_list_detail(list_id):
+def serve_list_detail(list_id) -> Union[Response, Tuple[Response, int]]:
     """
     Serve the frontend app for list detail pages.
     
@@ -12147,7 +12281,7 @@ def serve_list_detail(list_id):
     """
     # In a production environment, this would serve the built React app
     # For development, we'll redirect to the frontend development server
-    return f'''
+    html_content = f'''
     <!DOCTYPE html>
     <html>
     <head>
@@ -12163,6 +12297,7 @@ def serve_list_detail(list_id):
     </body>
     </html>
     '''
+    return make_response(html_content, 200, {'Content-Type': 'text/html'})
 
 if __name__ == '__main__':
     # Record app start time for uptime calculation

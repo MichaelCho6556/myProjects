@@ -1,6 +1,8 @@
 # ABOUTME: Background job for calculating user reputation scores based on community activity
 # ABOUTME: Runs daily to update reputation metrics, titles, and community standing scores
 
+from __future__ import annotations
+
 import os
 import sys
 from datetime import datetime, timedelta

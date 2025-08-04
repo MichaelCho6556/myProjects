@@ -15,7 +15,7 @@ Key Features:
 
 import os
 from functools import wraps
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 from flask import request, jsonify, g
 import jwt
 from supabase_client import SupabaseClient
@@ -81,7 +81,7 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def token_required(f):
+def token_required(f: Callable) -> Callable:
     """
     Decorator to require valid JWT token for endpoint access.
     
@@ -96,7 +96,7 @@ def token_required(f):
             ...
     """
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args, **kwargs) -> Any:
         # Get Authorization header
         auth_header = request.headers.get('Authorization')
         
@@ -118,7 +118,7 @@ def token_required(f):
     return decorated_function
 
 
-def optional_token(f):
+def optional_token(f: Callable) -> Callable:
     """
     Decorator to optionally verify JWT token if present.
     
@@ -126,7 +126,7 @@ def optional_token(f):
     Sets g.current_user to None if no valid token.
     """
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(*args, **kwargs) -> Any:
         # Initialize g.current_user as None
         g.current_user = None
         
