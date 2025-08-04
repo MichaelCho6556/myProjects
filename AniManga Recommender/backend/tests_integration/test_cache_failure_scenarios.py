@@ -1,15 +1,15 @@
-# ABOUTME: Comprehensive cache failure testing for Redis and fallback scenarios
+# ABOUTME: Comprehensive cache failure testing for hybrid cache (database + memory) and fallback scenarios
 # ABOUTME: Tests resilience, error handling, and graceful degradation in production conditions
 
 """
 Cache Failure Scenario Tests
 
 Tests comprehensive cache failure scenarios and resilience:
-- Redis connection failures and recovery
+- Hybrid cache (memory + database) connection failures and recovery
 - Cache hit/miss rate tracking and validation
 - Privacy enforcement with cache failures
 - Task triggering on cache misses
-- Graceful degradation to database fallbacks
+- Graceful degradation between cache tiers
 - Performance impact measurement during failures
 """
 
@@ -27,8 +27,8 @@ from utils.cache_helpers import (
     warm_cache_for_user
 )
 from models import get_user_statistics
-import redis
-from redis.exceptions import ConnectionError as RedisConnectionError
+# Note: Using hybrid cache instead of direct Redis
+# The hybrid cache provides Redis-compatible API for backward compatibility
 
 
 @pytest.mark.real_integration
@@ -36,15 +36,15 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 class TestCacheFailureScenarios:
     """Test cache failure scenarios and resilience."""
     
-    def test_redis_connection_failure_graceful_fallback(self, test_user, supabase_client):
-        """Test graceful fallback when Redis is unavailable."""
+    def test_cache_connection_failure_graceful_fallback(self, test_user, supabase_client):
+        """Test graceful fallback when hybrid cache is unavailable."""
         user_id = test_user['id']
         
         # First, ensure we have data in the database
         stats = get_user_statistics(user_id)
         assert stats is not None
         
-        # Simulate Redis connection failure by patching the Redis client
+        # Simulate cache connection failure by patching the hybrid cache client
         with patch.object(get_cache(), 'connected', False):
             # Cache operations should return None/False gracefully
             cached_stats = get_user_stats_from_cache(user_id)
@@ -59,8 +59,8 @@ class TestCacheFailureScenarios:
             assert fallback_stats is not None
             assert fallback_stats['user_id'] == user_id
     
-    def test_redis_connection_recovery_after_failure(self, test_user, redis_client):
-        """Test Redis connection recovery after temporary failure."""
+    def test_cache_connection_recovery_after_failure(self, test_user, cache_client):
+        """Test cache connection recovery after temporary failure."""
         user_id = test_user['id']
         test_stats = {
             'user_id': user_id,
@@ -68,7 +68,7 @@ class TestCacheFailureScenarios:
             'completion_rate': 0.85
         }
         
-        # Ensure Redis is working initially
+        # Ensure cache is working initially
         cache = get_cache()
         assert cache.connected is True
         
@@ -87,13 +87,13 @@ class TestCacheFailureScenarios:
         assert recovered_stats is not None
         assert recovered_stats['total_anime_watched'] == 50
     
-    def test_cache_hit_miss_rate_tracking(self, test_user, redis_client):
+    def test_cache_hit_miss_rate_tracking(self, test_user, cache_client):
         """Test accurate cache hit/miss rate tracking."""
         user_id = test_user['id']
         cache_key = f"user_stats:{user_id}"
         
         # Clear cache first
-        redis_client.delete(cache_key)
+        cache_client.delete(cache_key)
         
         # Track initial cache stats
         initial_status = get_cache_status()
@@ -143,7 +143,7 @@ class TestCacheFailureScenarios:
             # Should work for public stats or return appropriate privacy response
             assert response.status_code in [200, 404]
     
-    def test_concurrent_cache_operations_under_failure(self, test_user, redis_client):
+    def test_concurrent_cache_operations_under_failure(self, test_user, cache_client):
         """Test concurrent cache operations during connection instability."""
         user_id = test_user['id']
         results = []
@@ -194,8 +194,8 @@ class TestCacheFailureScenarios:
         assert len(set_successes) > 0, "Some cache operations should succeed"
         assert len(set_failures) > 0, "Some cache operations should fail gracefully"
     
-    def test_cache_invalidation_during_failure(self, test_user, redis_client):
-        """Test cache invalidation works even during Redis issues."""
+    def test_cache_invalidation_during_failure(self, test_user, cache_client):
+        """Test cache invalidation works even during cache issues."""
         user_id = test_user['id']
         
         # Set up initial cache
@@ -217,8 +217,8 @@ class TestCacheFailureScenarios:
         result = invalidate_user_cache(user_id)
         assert result is True
     
-    def test_cache_warming_resilience(self, test_user, redis_client):
-        """Test cache warming handles Redis failures gracefully."""
+    def test_cache_warming_resilience(self, test_user, cache_client):
+        """Test cache warming handles cache failures gracefully."""
         user_id = test_user['id']
         test_stats = {'user_id': user_id, 'total_anime_watched': 150}
         
@@ -236,7 +236,7 @@ class TestCacheFailureScenarios:
         assert cached is not None
         assert cached['total_anime_watched'] == 150
     
-    def test_cache_status_monitoring_during_failures(self, redis_client):
+    def test_cache_status_monitoring_during_failures(self, cache_client):
         """Test cache status monitoring provides accurate information during failures."""
         # Test status with normal connection
         status = get_cache_status()
@@ -248,7 +248,7 @@ class TestCacheFailureScenarios:
             status = get_cache_status()
             assert status['connected'] is False
             assert 'timestamp' in status
-            # Should not include Redis-specific metrics when disconnected
+            # Should not include cache-specific metrics when disconnected
             assert 'used_memory_human' not in status or status.get('used_memory_human') is None
     
     def test_performance_degradation_measurement(self, test_user, benchmark_timer):
