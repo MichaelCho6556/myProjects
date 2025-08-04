@@ -603,6 +603,299 @@ def batch_compute_user_stats():
         return jsonify({'error': 'Failed to process batch'}), 500
 
 
+@compute_bp.route('/user-reputation/<user_id>', methods=['POST'])
+@cross_origin()
+@token_required
+def compute_user_reputation(user_id: str):
+    """
+    Calculate user reputation score on demand.
+    
+    This endpoint replaces the Celery task for reputation calculation.
+    """
+    try:
+        supabase = SupabaseClient()
+        
+        # Get user activity data
+        reviews = supabase.client.table('reviews').select('*').eq('user_id', user_id).execute()
+        comments = supabase.client.table('comments').select('*').eq('user_id', user_id).execute()
+        
+        # Calculate reputation components
+        total_reviews = len(reviews.data) if reviews.data else 0
+        total_comments = len(comments.data) if comments.data else 0
+        
+        # Get helpful votes
+        helpful_votes = 0
+        if reviews.data:
+            helpful_votes = sum(r.get('helpful_votes', 0) for r in reviews.data)
+        
+        # Check for violations
+        violations = supabase.client.table('moderation_actions').select('*').eq('target_user_id', user_id).execute()
+        violations_count = len(violations.data) if violations.data else 0
+        
+        # Calculate scores
+        review_quality_score = (helpful_votes / max(total_reviews, 1)) * 10
+        community_contribution = min((total_reviews + total_comments) / 10, 10)
+        moderation_penalty = min(violations_count * 2, 10)
+        
+        reputation_score = max(0, 100 + review_quality_score + community_contribution - moderation_penalty)
+        
+        # Update database
+        reputation_data = {
+            'user_id': user_id,
+            'reputation_score': round(reputation_score),
+            'review_quality_score': round(review_quality_score, 2),
+            'community_contribution_score': round(community_contribution, 2),
+            'moderation_penalty_score': moderation_penalty,
+            'total_helpful_votes': helpful_votes,
+            'total_reviews': total_reviews,
+            'total_comments': total_comments,
+            'violations_count': violations_count,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        
+        supabase.client.table('user_reputation').upsert(reputation_data, on_conflict='user_id').execute()
+        
+        return jsonify({
+            'status': 'success',
+            'data': reputation_data
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error computing user reputation: {e}")
+        return jsonify({'error': 'Failed to compute reputation'}), 500
+
+
+@compute_bp.route('/popular-lists', methods=['POST'])
+@cross_origin()
+def compute_popular_lists():
+    """
+    Calculate popular/trending lists on demand.
+    
+    This endpoint replaces the Celery task for popular lists calculation.
+    Results are automatically cached for 12 hours.
+    """
+    try:
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        
+        # Check cache first
+        if not force_refresh:
+            cached_lists = get_popular_lists_from_cache()
+            if cached_lists:
+                lists_data = cached_lists.get('lists', cached_lists)
+                return jsonify({
+                    'status': 'success',
+                    'data': lists_data,
+                    'cached': True
+                }), 200
+        
+        supabase = SupabaseClient()
+        
+        # Get lists with metrics
+        lists = supabase.client.table('custom_lists').select(
+            '*, list_followers(count), custom_list_items(count)'
+        ).eq('privacy', 'public').order('quality_score', desc=True).limit(50).execute()
+        
+        popular_lists = []
+        for lst in lists.data:
+            follower_count = lst.get('list_followers', [{'count': 0}])[0]['count']
+            item_count = lst.get('custom_list_items', [{'count': 0}])[0]['count']
+            
+            # Calculate popularity score
+            popularity_score = (follower_count * 2) + item_count + lst.get('quality_score', 0)
+            
+            popular_lists.append({
+                'id': lst['id'],
+                'title': lst['title'],
+                'description': lst['description'],
+                'user_id': lst['user_id'],
+                'follower_count': follower_count,
+                'item_count': item_count,
+                'quality_score': lst.get('quality_score', 0),
+                'popularity_score': popularity_score,
+                'created_at': lst['created_at']
+            })
+        
+        # Sort by popularity
+        popular_lists.sort(key=lambda x: x['popularity_score'], reverse=True)
+        popular_lists = popular_lists[:20]  # Top 20
+        
+        # Cache the results
+        set_popular_lists_in_cache(popular_lists)
+        
+        return jsonify({
+            'status': 'success',
+            'data': popular_lists,
+            'cached': False
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error computing popular lists: {e}")
+        return jsonify({'error': 'Failed to compute popular lists'}), 500
+
+
+@compute_bp.route('/all-user-stats', methods=['POST'])
+@cross_origin()
+@token_required
+def update_all_user_statistics():
+    """
+    Update statistics for all users (admin only).
+    
+    This endpoint replaces the scheduled Celery task.
+    Should be called by external scheduler (e.g., GitHub Actions).
+    """
+    try:
+        # Get requesting user
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        
+        # Check if user is admin (implement your admin check)
+        # For now, we'll process the request
+        
+        supabase = SupabaseClient()
+        
+        # Get all user IDs
+        users = supabase.client.table('user_profiles').select('id').execute()
+        
+        results = {
+            'total_users': len(users.data),
+            'processed': 0,
+            'failed': 0,
+            'start_time': datetime.utcnow().isoformat()
+        }
+        
+        # Process in batches
+        batch_size = 10
+        for i in range(0, len(users.data), batch_size):
+            batch = users.data[i:i+batch_size]
+            
+            for user in batch:
+                try:
+                    stats = _calculate_user_statistics(user['id'])
+                    set_user_stats_in_cache(user['id'], stats)
+                    results['processed'] += 1
+                except Exception as e:
+                    logger.error(f"Failed to update stats for user {user['id']}: {e}")
+                    results['failed'] += 1
+        
+        results['end_time'] = datetime.utcnow().isoformat()
+        
+        return jsonify({
+            'status': 'success',
+            'data': results
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error updating all user statistics: {e}")
+        return jsonify({'error': 'Failed to update statistics'}), 500
+
+
+@compute_bp.route('/cleanup-cache', methods=['POST'])
+@cross_origin()
+@token_required
+def cleanup_stale_cache():
+    """
+    Clean up expired cache entries.
+    
+    This endpoint replaces the scheduled Celery task.
+    Should be called by external scheduler.
+    """
+    try:
+        from utils.hybrid_cache import get_hybrid_cache
+        cache = get_hybrid_cache()
+        
+        # Clean up expired entries
+        cleaned = 0
+        if hasattr(cache, 'cleanup_expired'):
+            cleaned = cache.cleanup_expired()
+        
+        # Also clean database cache table
+        supabase = SupabaseClient()
+        result = supabase.client.rpc('cleanup_expired_cache').execute()
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'memory_cleaned': cleaned,
+                'database_cleaned': result.data if result else 0,
+                'timestamp': datetime.utcnow().isoformat()
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error cleaning cache: {e}")
+        return jsonify({'error': 'Failed to clean cache'}), 500
+
+
+@compute_bp.route('/batch/moderation', methods=['POST'])
+@cross_origin()
+@token_required
+def batch_moderate_content():
+    """
+    Moderate multiple content items in batch.
+    
+    Request Body:
+        content_ids (list): List of content IDs
+        content_type (str): Type of content ('comment' or 'review')
+    """
+    try:
+        data = request.get_json()
+        content_ids = data.get('content_ids', [])
+        content_type = data.get('content_type', 'comment')
+        
+        if content_type not in ['comment', 'review']:
+            return jsonify({'error': 'Invalid content type'}), 400
+        
+        results = {
+            'processed': 0,
+            'flagged': 0,
+            'errors': 0
+        }
+        
+        for content_id in content_ids[:50]:  # Limit to 50 items
+            try:
+                # Check cache first
+                cached = get_toxicity_analysis_from_cache(content_id, content_type)
+                if not cached:
+                    # Analyze content
+                    from utils.contentAnalysis import analyze_text_toxicity
+                    
+                    # Get content
+                    supabase = SupabaseClient()
+                    table = 'comments' if content_type == 'comment' else 'reviews'
+                    result = supabase.client.table(table).select('content').eq('id', content_id).single().execute()
+                    
+                    if result.data:
+                        text = result.data.get('content', '')
+                        analysis = analyze_text_toxicity(text)
+                        
+                        analysis_result = {
+                            'content_id': content_id,
+                            'content_type': content_type,
+                            'toxicity_score': analysis['toxicity_score'],
+                            'is_toxic': analysis['is_toxic'],
+                            'analyzed_at': datetime.utcnow().isoformat()
+                        }
+                        
+                        set_toxicity_analysis_in_cache(content_id, analysis_result, content_type)
+                        
+                        if analysis['is_toxic']:
+                            results['flagged'] += 1
+                
+                results['processed'] += 1
+                
+            except Exception as e:
+                logger.error(f"Error moderating {content_type} {content_id}: {e}")
+                results['errors'] += 1
+        
+        return jsonify({
+            'status': 'success',
+            'data': results
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in batch moderation: {e}")
+        return jsonify({'error': 'Failed to process batch'}), 500
+
+
 # Health check endpoint
 @compute_bp.route('/health', methods=['GET'])
 @cross_origin()
@@ -615,7 +908,12 @@ def health_check():
             '/api/compute/recommendations/<item_uid>',
             '/api/compute/moderation/<content_type>/<content_id>',
             '/api/compute/platform-stats',
-            '/api/compute/batch/user-stats'
+            '/api/compute/batch/user-stats',
+            '/api/compute/user-reputation/<user_id>',
+            '/api/compute/popular-lists',
+            '/api/compute/all-user-stats',
+            '/api/compute/cleanup-cache',
+            '/api/compute/batch/moderation'
         ],
         'active_tasks': len(task_status)
     }), 200

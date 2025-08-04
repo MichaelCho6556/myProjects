@@ -20,7 +20,8 @@
       "mcp__context7__get-library-docs",
       "mcp__zen__precommit",
       "mcp__zen__planner",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "mcp__zen__codereview"
     ],
     "deny": []
   },

@@ -1,11 +1,11 @@
-# ABOUTME: Integration test configuration with REAL database and service connections
-# ABOUTME: NO MOCKS - all tests use actual PostgreSQL, Redis, and Celery instances
+# ABOUTME: Integration test configuration with REAL database connections
+# ABOUTME: NO MOCKS - all tests use actual PostgreSQL instances
 
 """
 Integration Test Configuration for AniManga Recommender Backend
 
 CRITICAL: This file contains NO MOCKS. All fixtures provide real connections
-to actual services (PostgreSQL, Redis, Celery) for true integration testing.
+to actual services (PostgreSQL) for true integration testing.
 """
 
 import os
@@ -18,8 +18,6 @@ import json
 from pathlib import Path
 from typing import Generator, Dict, Any
 from sqlalchemy import create_engine, text
-from celery import Celery
-from redis import Redis
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -37,9 +35,9 @@ TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
     "postgresql://test_user:test_password@localhost:5433/animanga_test"
 )
-TEST_REDIS_URL = os.getenv("TEST_REDIS_URL", "redis://localhost:6380/0")
-TEST_CELERY_BROKER = os.getenv("TEST_CELERY_BROKER", TEST_REDIS_URL)
-TEST_CELERY_BACKEND = os.getenv("TEST_CELERY_BACKEND", TEST_REDIS_URL)
+# Cache configuration for hybrid cache
+TEST_CACHE_MEMORY_SIZE = int(os.getenv("TEST_CACHE_MEMORY_SIZE", "100"))
+TEST_CACHE_MEMORY_MB = int(os.getenv("TEST_CACHE_MEMORY_MB", "10"))
 
 # Supabase test configuration - use local test setup instead of external service
 TEST_SUPABASE_URL = os.getenv("TEST_SUPABASE_URL", "http://localhost:8000")
@@ -139,61 +137,24 @@ def setup_database_schema(database_engine):
             conn.commit()
 
 
-# ======================== Redis Fixtures ========================
+# ======================== Cache Fixtures ========================
 
-@pytest.fixture(scope="session")
-def redis_client():
-    """Provide a real Redis client for testing."""
-    client = Redis.from_url(TEST_REDIS_URL, decode_responses=True)
+@pytest.fixture(scope="function")
+def hybrid_cache():
+    """Provide a hybrid cache instance for testing."""
+    from utils.hybrid_cache import HybridCache
     
-    # Wait for Redis to be ready
-    max_retries = 10
-    for i in range(max_retries):
-        try:
-            client.ping()
-            break
-        except Exception:
-            if i == max_retries - 1:
-                raise
-            time.sleep(1)
-    
-    yield client
-    
-    # Clean up test keys
-    for key in client.scan_iter("test:*"):
-        client.delete(key)
-    
-    client.close()
-
-
-# ======================== Celery Fixtures ========================
-
-@pytest.fixture(scope="session")
-def celery_app():
-    """Create a real Celery app for testing."""
-    from celery_app import app as real_celery_app
-    
-    # Configure for testing
-    real_celery_app.conf.update(
-        broker_url=TEST_CELERY_BROKER,
-        result_backend=TEST_CELERY_BACKEND,
-        task_always_eager=False,  # Run tasks asynchronously
-        task_eager_propagates=True,
-        task_track_started=True,
-        task_send_sent_event=True,
-        worker_send_task_events=True,
+    # Create test cache with smaller memory limits
+    cache = HybridCache(
+        memory_size=TEST_CACHE_MEMORY_SIZE,
+        memory_mb=TEST_CACHE_MEMORY_MB,
+        use_thread_local=False  # Disable for testing
     )
     
-    return real_celery_app
-
-
-@pytest.fixture
-def celery_worker(celery_app):
-    """Start a real Celery worker for the test."""
-    from celery.contrib.testing.worker import start_worker
+    yield cache
     
-    with start_worker(celery_app, perform_ping_check=False) as worker:
-        yield worker
+    # Clear cache after test
+    cache.clear()
 
 
 # ======================== Flask App Fixtures ========================
@@ -786,9 +747,6 @@ def pytest_configure(config):
     """Configure pytest with custom markers."""
     config.addinivalue_line(
         "markers", "real_integration: Real integration tests without mocks"
-    )
-    config.addinivalue_line(
-        "markers", "celery: Tests requiring Celery worker"
     )
     config.addinivalue_line(
         "markers", "performance: Performance benchmark tests"

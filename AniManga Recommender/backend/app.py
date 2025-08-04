@@ -47,6 +47,9 @@ import traceback
 from typing import Dict, List, Optional, Any
 from concurrent.futures import ThreadPoolExecutor
 from utils.contentAnalysis import analyze_content, should_auto_moderate, should_auto_flag
+
+# Track application start time for uptime monitoring
+app_start_time = time.time()
 from utils.batchOperations import BatchOperationsManager
 from utils.cache_helpers import (
     get_user_stats_from_cache,
@@ -2656,16 +2659,15 @@ def get_user_statistics(user_id: str) -> dict:
             - completion_rate (float): Percentage of started items completed
             
     Caching Strategy:
-        1. Checks Redis cache for existing data
+        1. Checks hybrid cache (memory + database) for existing data
         2. Returns cached data if found (24-hour TTL)
-        3. Falls back to database cache if Redis miss
-        4. Calculates fresh data if all caches miss
-        5. Updates both Redis and database caches
-        6. Returns default values as final fallback
+        3. Calculates fresh data if cache miss
+        4. Updates cache with fresh data
+        5. Returns default values as final fallback
         
     Performance Impact:
-        - Fast: When Redis cache hit (<10ms)
-        - Medium: When database cache hit
+        - Fast: When memory cache hit (<1ms)
+        - Medium: When database cache hit (~10ms)
         - Slower: When full calculation needed
         - Reliable: Multiple fallback layers prevent failures
         
@@ -2676,37 +2678,30 @@ def get_user_statistics(user_id: str) -> dict:
         
     Note:
         This function is thread-safe and handles all error scenarios gracefully.
-        Redis cache has 24-hour TTL. Database cache for longer persistence.
+        Hybrid cache has 24-hour TTL with automatic tier management.
         Logs detailed cache status and fallback usage for debugging purposes.
     """
     try:
-        # Try Redis cache first (fastest)
-        redis_stats = get_user_stats_from_cache(user_id)
-        if redis_stats:
-            return redis_stats
-        
-        # Try database cache second
-        cached_stats = get_cached_user_statistics(user_id)
-        
-        if cached_stats and is_cache_fresh(cached_stats):
-            # Update Redis cache for next time
-            set_user_stats_in_cache(user_id, cached_stats)
+        # Try hybrid cache first (memory -> database)
+        cached_stats = get_user_stats_from_cache(user_id)
+        if cached_stats:
             return cached_stats
+        
+        # Check if we have fresh data in database table
+        db_stats = get_cached_user_statistics(user_id)
+        
+        if db_stats and is_cache_fresh(db_stats):
+            # Update cache for next time
+            set_user_stats_in_cache(user_id, db_stats)
+            return db_stats
         
         # Calculate fresh statistics
         fresh_stats = calculate_user_statistics_realtime(user_id)
         
         if fresh_stats:
-            # Update both caches with fresh data
-            set_user_stats_in_cache(user_id, fresh_stats)  # Redis cache
-            update_user_statistics_cache(user_id, fresh_stats)  # Database cache
-            
-            # Trigger background task to keep stats updated
-            try:
-                from tasks.statistics_tasks import calculate_user_statistics_task
-                calculate_user_statistics_task.delay(user_id)
-            except ImportError:
-                pass  # Celery tasks not available in test environment
+            # Update caches with fresh data
+            set_user_stats_in_cache(user_id, fresh_stats)  # Hybrid cache
+            update_user_statistics_cache(user_id, fresh_stats)  # Database table
             
             return fresh_stats
         
@@ -2963,9 +2958,9 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
     """
     Invalidate personalized recommendation cache when user data changes.
     
-    This function removes cached personalized recommendations from both Redis
-    and in-memory cache, forcing fresh recommendation generation on the next
-    request. Called automatically when user updates their lists or ratings.
+    This function removes cached personalized recommendations from the hybrid
+    cache system, forcing fresh recommendation generation on the next request.
+    Called automatically when user updates their lists or ratings.
     
     Args:
         user_id (str): UUID of the user whose recommendation cache to invalidate
@@ -2974,8 +2969,8 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
         bool: True if cache invalidation succeeded, False if failed
         
     Cache Invalidation Strategy:
-        - Clears Redis cache with immediate deletion
-        - Removes in-memory cache entries  
+        - Clears hybrid cache (both memory and database layers)
+        - Invalidates all recommendation-related keys for the user
         - Logs invalidation attempts for monitoring
         - Fails gracefully if cache systems are unavailable
         
@@ -3002,20 +2997,29 @@ def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
         recommendations on the next API call.
     """
     try:
-        cache_key = f"personalized_recommendations:{user_id}"
-        success = False
+        from utils.hybrid_cache import get_hybrid_cache
+        cache = get_hybrid_cache()
         
-        # Clear Redis cache
-        if redis_client:
-            try:
-                redis_client.delete(cache_key)
+        # Clear all recommendation cache keys for this user
+        base_key = f"personalized_recommendations:{user_id}"
+        keys_to_clear = [
+            base_key,  # Base recommendation key
+            f"{base_key}:all:all",  # All content, all sections
+            f"{base_key}:anime:all",
+            f"{base_key}:manga:all",
+            f"{base_key}:anime:for_you",
+            f"{base_key}:anime:trending",
+            f"{base_key}:anime:new_releases",
+            f"{base_key}:manga:for_you",
+            f"{base_key}:manga:trending",
+            f"{base_key}:manga:new_releases"
+        ]
+        
+        success = False
+        for key in keys_to_clear:
+            if cache.delete(key):
                 success = True
-            except Exception as e:
-                pass  # Redis not available
-        # Clear in-memory cache
-        if cache_key in _recommendation_cache:
-            del _recommendation_cache[cache_key]
-            success = True
+        
         return success
         
     except Exception as e:
@@ -3906,11 +3910,7 @@ def get_item_details_simple(item_uid: str) -> dict:
 # -----------------------------------------------------------------------------
 
 # Cache system is now handled by hybrid_cache module
-# No need for direct Redis client initialization
-redis_client = None  # Kept for backward compatibility during transition
-
-# In-memory cache fallback for recommendations
-_recommendation_cache: Dict[str, Any] = {}
+# All caching operations use the hybrid cache (memory + database)
 
 def get_personalized_recommendation_cache(user_id: str, content_type: str = 'all', section: str = 'all') -> Optional[Dict[str, Any]]:
     """
@@ -3920,10 +3920,10 @@ def get_personalized_recommendation_cache(user_id: str, content_type: str = 'all
     cache keys to efficiently store and retrieve different filtered views of recommendations.
     
     Cache Strategy:
-        - Base cache: user_id + 'all' content + 'all' sections
+        - Two-tier cache: Memory (LRU) -> Database
         - Filtered cache: user_id + specific content_type + specific section
-        - TTL: 30 minutes for all cache entries
-        - Fallback: In-memory cache if Redis unavailable
+        - TTL: 4 hours for recommendation entries
+        - Automatic promotion of hot data to memory
         
     Args:
         user_id (str): UUID of the user whose recommendations to retrieve
@@ -3937,42 +3937,27 @@ def get_personalized_recommendation_cache(user_id: str, content_type: str = 'all
         personalized_recommendations:{user_id}:{content_type}:{section}
         
     Performance:
-        - O(1) Redis lookup with optimized key structure
-        - Automatic stale data cleanup
-        - Graceful degradation to in-memory cache
+        - O(1) memory lookup for hot data
+        - Database fallback for warm data
+        - Automatic cache validation
     """
     try:
+        from utils.hybrid_cache import get_hybrid_cache
+        cache = get_hybrid_cache()
+        
         # Create hierarchical cache key for efficient filtering
         cache_key = f"personalized_recommendations:{user_id}:{content_type}:{section}"
         
-        if redis_client:
-            try:
-                # Try Redis first with robust error handling
-                cached_data = redis_client.get(cache_key)
-                if cached_data:
-                    import json
-                    data = json.loads(cached_data)
-                    
-                    # Validate cache structure
-                    if _is_valid_cache_data(data):
-                        return data
-                    else:
-                        # Invalid cache data, remove it
-                        redis_client.delete(cache_key)
-            except Exception as redis_error:
-                pass  # Continue to in-memory fallback
+        # Get from hybrid cache
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            # Validate cache structure
+            if _is_valid_cache_data(cached_data):
+                return cached_data
+            else:
+                # Invalid cache data, remove it
+                cache.delete(cache_key)
         
-        # Fall back to in-memory cache with the same key structure
-        if hasattr(_recommendation_cache, 'get'):
-            cached_data = _recommendation_cache.get(cache_key)
-            if cached_data:
-                # Validate freshness (30 minutes TTL)
-                if _is_cache_fresh(cached_data):
-                    return cached_data
-                else:
-                    # Remove stale cache
-                    if cache_key in _recommendation_cache:
-                        del _recommendation_cache[cache_key]
         return None
         
     except Exception as e:
@@ -4017,13 +4002,13 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
     Cache personalized recommendations with production-ready multi-level caching strategy.
     
     Implements sophisticated caching with content type and section support, automatic
-    expiration, data validation, and graceful fallback mechanisms for high availability.
+    expiration, data validation, and transparent tier management.
     
     Caching Strategy:
-        - Primary: Redis with 30-minute TTL and automatic cleanup
-        - Fallback: In-memory cache with manual TTL management
+        - Two-tier: Memory (fast) + Database (persistent)
+        - Write-through: Updates both tiers
+        - TTL: 4 hours (configured in CACHE_TTL_HOURS)
         - Validation: Data integrity checks before storage
-        - Monitoring: Success/failure logging for ops visibility
     
     Args:
         user_id (str): UUID of the user whose recommendations to cache
@@ -4039,12 +4024,15 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
         - Filtered keys: personalized_recommendations:{user_id}:{content_type}:{section}
         
     Performance Optimizations:
-        - JSON serialization with error handling
-        - Atomic Redis operations with TTL
-        - Memory-efficient in-memory fallback
-        - Automatic stale data cleanup
+        - Automatic JSON serialization
+        - Write-through to both cache tiers
+        - Thread-safe operations
+        - Automatic eviction management
     """
     try:
+        from utils.hybrid_cache import get_hybrid_cache
+        cache = get_hybrid_cache()
+        
         # Create hierarchical cache key
         cache_key = f"personalized_recommendations:{user_id}:{content_type}:{section}"
         
@@ -4061,36 +4049,9 @@ def set_personalized_recommendation_cache(user_id: str, recommendations: Dict[st
             recommendations['cache_info']['content_type'] = content_type
             recommendations['cache_info']['section'] = section
         
-        success = False
+        # Cache with 4-hour TTL (recommendations have shorter TTL)
+        success = cache.set(cache_key, recommendations, ttl_hours=4)
         
-        # Primary caching: Redis with robust error handling
-        if redis_client:
-            try:
-                import json
-                serialized_data = json.dumps(recommendations, ensure_ascii=False)
-                
-                # Use pipeline for atomic operation
-                pipe = redis_client.pipeline()
-                pipe.setex(cache_key, 1800, serialized_data)  # 30 minutes TTL
-                pipe.execute()
-                
-                success = True
-            except Exception as redis_error:
-                pass  # Continue to fallback caching
-        
-        # Fallback caching: In-memory with manual TTL
-        try:
-            # Add TTL metadata for in-memory cache
-            cache_data = recommendations.copy()
-            cache_data['_cache_expires_at'] = (datetime.now() + timedelta(minutes=30)).isoformat()
-            
-            _recommendation_cache[cache_key] = cache_data
-            success = True
-            # Clean up old in-memory cache entries periodically
-            _cleanup_stale_memory_cache()
-            
-        except Exception as memory_error:
-            pass
         return success
         
     except Exception as e:
@@ -4119,32 +4080,7 @@ def _is_valid_cache_input(data: Dict[str, Any]) -> bool:
     except Exception:
         return False
 
-def _cleanup_stale_memory_cache():
-    """Clean up stale entries from in-memory cache"""
-    try:
-        current_time = datetime.now()
-        stale_keys = []
-        
-        for key, data in _recommendation_cache.items():
-            if isinstance(data, dict) and '_cache_expires_at' in data:
-                try:
-                    expires_at = datetime.fromisoformat(data['_cache_expires_at'])
-                    if current_time > expires_at:
-                        stale_keys.append(key)
-                except Exception:
-                    # Invalid expiration time, mark for cleanup
-                    stale_keys.append(key)
-        
-        # Remove stale entries
-        for key in stale_keys:
-            del _recommendation_cache[key]
-            
-        if stale_keys:
-            # Debug: Cleaned up stale in-memory cache entries
-            pass
-            
-    except Exception as e:
-        pass
+# Note: _cleanup_stale_memory_cache is no longer needed as hybrid cache handles cleanup automatically
 def _filter_cached_recommendations(cached_data: Dict[str, Any], content_type: str, section: str) -> Optional[Dict[str, Any]]:
     """
     Filter cached recommendations by content type and section for production efficiency.
@@ -4940,7 +4876,7 @@ def get_personalized_recommendations():
         - Intelligent caching with 30-minute TTL
         
     Performance Optimizations:
-        - Redis caching with automatic expiration
+        - Hybrid caching with automatic expiration
         - In-memory fallback cache for high availability
         - Efficient DataFrame operations with vectorization
         - Background recommendation pre-computation (planned)
@@ -6942,7 +6878,7 @@ def get_public_user_stats_by_id(user_id):
     Get public statistics for a specific user with privacy controls.
     
     This endpoint provides cached user statistics while respecting privacy settings.
-    It's designed for high performance with Redis caching and automatic fallback.
+    It's designed for high performance with hybrid caching and automatic fallback.
     
     Path Parameters:
         user_id (str): UUID of the user whose statistics to retrieve
@@ -7081,20 +7017,20 @@ def get_public_user_stats_by_id(user_id):
 @app.route('/api/cache/status', methods=['GET'])
 def get_cache_status_endpoint():
     """
-    Get Redis cache status and statistics for monitoring.
+    Get cache status and statistics for monitoring.
     
     This endpoint provides cache health information for operational monitoring
-    and debugging. It shows connection status, memory usage, and hit rates.
+    and debugging. It shows memory usage, hit rates, and tier statistics.
     
     Returns:
         JSON Response containing:
-            - connected (bool): Whether Redis is connected
+            - healthy (bool): Whether cache system is healthy
             - timestamp (str): Current server time
-            - used_memory_human (str): Human-readable memory usage
-            - connected_clients (int): Number of connected clients
-            - hit_rate (float): Cache hit rate percentage
-            - keyspace_hits (int): Total successful cache reads
-            - keyspace_misses (int): Total cache misses
+            - memory_cache_stats (dict): In-memory cache statistics
+            - database_cache_stats (dict): Database cache statistics
+            - hit_rate (float): Overall cache hit rate percentage
+            - total_hits (int): Total successful cache reads
+            - total_misses (int): Total cache misses
             
     HTTP Status Codes:
         200: Success - Cache status retrieved
@@ -7120,6 +7056,83 @@ def get_cache_status_endpoint():
             'error': str(e),
             'timestamp': datetime.utcnow().isoformat()
         }), 500
+
+@app.route('/api/health', methods=['GET'])
+def system_health_check():
+    """
+    Comprehensive system health check endpoint.
+    
+    Returns overall system health including database, cache, and compute endpoints.
+    
+    Returns:
+        JSON Response containing:
+            - status (str): 'healthy', 'degraded', or 'unhealthy'
+            - timestamp (str): Current server time
+            - components (dict): Health status of each component
+            - uptime (float): Application uptime in seconds
+    """
+    try:
+        health = {
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'components': {},
+            'uptime': time.time() - app_start_time if 'app_start_time' in globals() else 0
+        }
+        
+        # Check database
+        try:
+            # Simple query to check database connection
+            result = requests.get(
+                f"{auth_client.base_url}/rest/v1/items",
+                headers=auth_client.headers,
+                params={'select': 'uid', 'limit': 1}
+            )
+            health['components']['database'] = {
+                'status': 'healthy' if result.status_code == 200 else 'unhealthy',
+                'response_time_ms': result.elapsed.total_seconds() * 1000
+            }
+        except Exception as e:
+            health['components']['database'] = {'status': 'unhealthy', 'error': str(e)}
+            health['status'] = 'degraded'
+        
+        # Check cache
+        try:
+            cache_status = get_cache_status()
+            health['components']['cache'] = {
+                'status': 'healthy' if cache_status.get('connected', False) else 'unhealthy',
+                'backend': cache_status.get('backend', 'unknown'),
+                'hit_rate': cache_status.get('hit_rate', 0)
+            }
+        except Exception as e:
+            health['components']['cache'] = {'status': 'unhealthy', 'error': str(e)}
+            health['status'] = 'degraded'
+        
+        # Check compute endpoints
+        try:
+            compute_health = requests.get(f"{request.host_url}api/compute/health", timeout=5)
+            health['components']['compute_endpoints'] = {
+                'status': 'healthy' if compute_health.status_code == 200 else 'unhealthy',
+                'endpoints_count': len(compute_health.json().get('endpoints', [])) if compute_health.status_code == 200 else 0
+            }
+        except Exception as e:
+            health['components']['compute_endpoints'] = {'status': 'unhealthy', 'error': str(e)}
+        
+        # Overall status
+        unhealthy_count = sum(1 for c in health['components'].values() if c['status'] == 'unhealthy')
+        if unhealthy_count >= 2:
+            health['status'] = 'unhealthy'
+        elif unhealthy_count == 1:
+            health['status'] = 'degraded'
+        
+        return jsonify(health), 200
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
 
 @app.route('/api/test/privacy/verify-enforcement', methods=['POST'])
 def verify_privacy_enforcement():
@@ -7507,31 +7520,6 @@ def reorder_list_items(list_id):
     except Exception as e:
         logger.error(f"Error in request: {e}")
         return jsonify({'error': 'An error occurred processing your request'}), 500
-
-def invalidate_personalized_recommendation_cache(user_id: str) -> bool:
-    """
-    Invalidate personalized recommendation cache for a specific user.
-    
-    Args:
-        user_id (str): UUID of the user whose cache to invalidate
-        
-    Returns:
-        bool: True if cache was invalidated successfully, False otherwise
-    """
-    try:
-        cache_key = f"personalized_recommendations:{user_id}"
-        
-        if redis_client:
-            # Remove from Redis
-            redis_client.delete(cache_key)
-        
-        # Remove from in-memory cache
-        if cache_key in _recommendation_cache:
-            del _recommendation_cache[cache_key]
-            
-        return True
-    except Exception as e:
-        return False
 
 # Global storage for user feedback (in production, this would be in a database)
 _user_dismissed_items = {}  # Format: {user_id: set(item_uids)}
@@ -11398,21 +11386,21 @@ def get_list_analytics(list_id):
             return jsonify({'error': 'List not found or access denied'}), 403
         
         # Get cached analytics or calculate
+        from utils.hybrid_cache import get_hybrid_cache
+        cache = get_hybrid_cache()
         cache_key = f"analytics:list:{list_id}"
-        try:
-            # Check cache (you can implement Redis caching here)
-            cached_analytics = None  # Redis get would go here
-            
-            if cached_analytics:
-                return jsonify(cached_analytics), 200
-        except:
-            pass
+        
+        # Check cache first
+        cached_analytics = cache.get(cache_key)
+        if cached_analytics:
+            return jsonify(cached_analytics), 200
         
         # Calculate analytics
         analytics = calculate_list_analytics(list_id, user_id)
         
-        # Cache the results (you can implement Redis caching here)
-        # Redis set with 30 minute TTL would go here
+        # Cache the results with 2-hour TTL
+        if analytics and 'error' not in analytics:
+            cache.set(cache_key, analytics, ttl_hours=2)
         
         return jsonify(analytics), 200
         
