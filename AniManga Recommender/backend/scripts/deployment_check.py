@@ -25,10 +25,10 @@ RESET = '\033[0m'
 def check(condition, description):
     """Check a condition and print result."""
     if condition:
-        print(f"{GREEN}✓{RESET} {description}")
+        print(f"{GREEN}[OK]{RESET} {description}")
         return True
     else:
-        print(f"{RED}✗{RESET} {description}")
+        print(f"{RED}[FAIL]{RESET} {description}")
         return False
 
 
@@ -145,10 +145,10 @@ def main():
     print(f"Deployment Readiness: {checks_passed}/{total_checks} checks passed")
     
     if checks_passed == total_checks:
-        print(f"{GREEN}✓ System is ready for deployment!{RESET}")
+        print(f"{GREEN}[READY] System is ready for deployment!{RESET}")
         return 0
     else:
-        print(f"{RED}✗ System is not ready for deployment.{RESET}")
+        print(f"{RED}[NOT READY] System is not ready for deployment.{RESET}")
         print(f"{YELLOW}Fix the issues above before deploying.{RESET}")
         return 1
 
