@@ -1,0 +1,66 @@
+name: Scheduled Background Tasks
+
+on:
+  schedule:
+    # Platform statistics - every hour
+    - cron: '0 * * * *'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  platform-stats:
+    runs-on: ubuntu-latest
+    name: Update Platform Statistics
+    steps:
+      - name: Update Platform Statistics
+        run: |
+          curl -X POST ${{ secrets.API_URL }}/api/compute/platform-stats \
+            -H "Authorization: Bearer ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --fail \
+            --show-error
+
+  daily-tasks:
+    runs-on: ubuntu-latest
+    name: Daily Maintenance Tasks
+    # Run at 2 AM UTC
+    if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Update All User Statistics
+        run: |
+          curl -X POST ${{ secrets.API_URL }}/api/compute/all-user-stats \
+            -H "Authorization: Bearer ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --fail \
+            --show-error
+      
+      - name: Calculate Popular Lists
+        run: |
+          curl -X POST ${{ secrets.API_URL }}/api/compute/popular-lists \
+            -H "Authorization: Bearer ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --fail \
+            --show-error
+
+  cache-cleanup:
+    runs-on: ubuntu-latest
+    name: Cache Cleanup
+    # Run every 6 hours
+    if: contains('0 */6 * * *', github.event.schedule) || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Clean Expired Cache Entries
+        run: |
+          curl -X POST ${{ secrets.API_URL }}/api/compute/cleanup-cache \
+            -H "Authorization: Bearer ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --fail \
+            --show-error
+
+  health-check:
+    runs-on: ubuntu-latest
+    name: API Health Check
+    steps:
+      - name: Check Compute Endpoints Health
+        run: |
+          curl -X GET ${{ secrets.API_URL }}/api/compute/health \
+            --fail \
+            --show-error

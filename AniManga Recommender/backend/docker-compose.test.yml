@@ -1,5 +1,5 @@
 # ABOUTME: Docker Compose configuration for integration test infrastructure
-# ABOUTME: Provides PostgreSQL and Redis services for real integration testing
+# ABOUTME: Provides PostgreSQL service for real integration testing
 
 version: '3.8'
 
@@ -25,49 +25,8 @@ services:
     networks:
       - test-network
 
-  # Redis for Celery and Caching Tests
-  test-redis:
-    image: redis:7-alpine
-    container_name: animanga-test-redis
-    ports:
-      - "6380:6379"  # Different port to avoid conflicts
-    volumes:
-      - test-redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - test-network
-
-  # Optional: RabbitMQ for Celery (if you prefer over Redis as broker)
-  test-rabbitmq:
-    image: rabbitmq:3.13-management-alpine
-    container_name: animanga-test-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: test_user
-      RABBITMQ_DEFAULT_PASS: test_password
-      RABBITMQ_DEFAULT_VHOST: test_vhost
-    ports:
-      - "5673:5672"  # AMQP port
-      - "15673:15672"  # Management UI
-    volumes:
-      - test-rabbitmq-data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - test-network
-
 volumes:
   test-postgres-data:
-    driver: local
-  test-redis-data:
-    driver: local
-  test-rabbitmq-data:
     driver: local
 
 networks:
