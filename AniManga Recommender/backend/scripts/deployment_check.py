@@ -2,8 +2,9 @@
 """
 Deployment readiness check for AniManga Recommender.
 
-This script verifies that the system is ready for deployment without Redis/Celery.
-Run this before deploying to ensure all dependencies are properly configured.
+This script verifies that the system is ready for deployment with hybrid cache
+(database + memory) instead of Redis/Celery. Run this before deploying to ensure 
+all dependencies are properly configured for free-tier hosting.
 """
 
 import os
@@ -38,14 +39,14 @@ def main():
     checks_passed = 0
     total_checks = 0
     
-    # Check 1: No Redis imports
-    print("\n1. Checking for Redis dependencies...")
+    # Check 1: No direct Redis imports (using hybrid cache instead)
+    print("\n1. Checking for direct Redis dependencies...")
     total_checks += 1
     try:
         import redis
-        check(False, "Redis module found - should be removed")
+        check(False, "Redis module found - should use hybrid cache instead")
     except ImportError:
-        check(True, "No Redis module found")
+        check(True, "No direct Redis imports (using hybrid cache)")
         checks_passed += 1
     
     # Check 2: No Celery imports

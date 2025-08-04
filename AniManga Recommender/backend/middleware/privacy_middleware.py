@@ -405,13 +405,13 @@ def rate_limit_privacy_operations(user_id: str, operation: str = 'update') -> bo
     """
     try:
         # Implement simple rate limiting logic
-        # In production, use Redis or similar for distributed rate limiting
+        # In production, use hybrid cache (database + memory) for distributed rate limiting
         from datetime import datetime, timedelta
         import time
         
         cache_key = f"privacy_rate_limit_{user_id}_{operation}"
         
-        # Simple in-memory rate limiting (replace with Redis in production)
+        # Simple in-memory rate limiting (replace with hybrid cache in production)
         current_time = time.time()
         
         # Allow max 10 privacy updates per minute

@@ -522,14 +522,14 @@ class TestPerformanceUnderLoad:
         
         assert consistency_rate >= 0.95  # 95% consistency
     
-    def test_caching_performance_impact(self, client, redis_client, load_test_items, 
+    def test_caching_performance_impact(self, client, cache_client, load_test_items, 
                                       sample_items_data, benchmark_timer):
         """Test performance impact of caching mechanisms."""
         
         item_uid = sample_items_data.iloc[0]['uid']
         
         # Clear cache first
-        redis_client.flushdb()
+        cache_client.clear_memory()  # Clear memory cache for testing
         
         # Measure performance without cache
         with benchmark_timer('without_cache'):
@@ -820,7 +820,7 @@ class TestProductionReadiness:
                     if response.status_code != 404:  # 404 might not be JSON
                         pytest.fail(f"Invalid JSON for API endpoint: {endpoint}")
     
-    def test_health_check_and_readiness(self, client, database_connection, redis_client):
+    def test_health_check_and_readiness(self, client, database_connection, cache_client):
         """Test health check and readiness endpoints."""
         
         # Basic health check
@@ -833,8 +833,8 @@ class TestProductionReadiness:
             result = database_connection.execute(text("SELECT 1"))
             assert result.scalar() == 1
         
-        # Redis connectivity
-        assert redis_client.ping() is True
+        # Cache connectivity
+        assert cache_client.ping() is True
         
         # If health check endpoint exists, test it
         health_endpoints = ['/health', '/api/health', '/status']

@@ -116,8 +116,8 @@ class ProductionValidator:
         
         required_packages = [
             ('flask', '3.0.0'),
-            ('redis', '4.0.0'),
-            ('celery', '5.0.0'),
+            # ('redis', '4.0.0'),  # No longer needed - using hybrid cache
+            # ('celery', '5.0.0'),  # No longer needed - using compute endpoints
             ('pandas', '1.5.0'),
             ('scikit-learn', '1.0.0'),
             ('psutil', '5.8.0'),
@@ -143,7 +143,7 @@ class ProductionValidator:
             'SUPABASE_KEY',
             'JWT_SECRET_KEY',
             'SECRET_KEY',
-            'REDIS_URL',
+            # 'REDIS_URL',  # No longer needed - using hybrid cache
         ]
         
         optional_env_vars = [
@@ -267,8 +267,8 @@ class ProductionValidator:
                           f"Failed to initialize: {e}")
     
     def validate_cache_configuration(self):
-        """Validate Redis cache configuration."""
-        print("🗄️  Validating Cache Configuration...")
+        """Validate hybrid cache configuration (database + memory)."""
+        print("🗄️  Validating Hybrid Cache Configuration...")
         
         try:
             from utils.cache_helpers import get_cache, get_cache_status
@@ -276,32 +276,39 @@ class ProductionValidator:
             cache = get_cache()
             
             if cache.connected:
-                self.add_result("Redis Connection", CheckStatus.PASS,
-                              "Connected successfully")
+                self.add_result("Hybrid Cache Connection", CheckStatus.PASS,
+                              "Connected successfully (Memory + Database)")
                 
                 # Get cache status
                 status = get_cache_status()
-                if 'used_memory_human' in status:
-                    self.add_result("Redis Memory", CheckStatus.INFO,
-                                  f"Used: {status['used_memory_human']}")
+                if 'memory_tier' in status:
+                    memory_info = status.get('memory_tier', {})
+                    self.add_result("Memory Cache", CheckStatus.INFO,
+                                  f"Size: {memory_info.get('size', 0)}, "
+                                  f"Hit Rate: {memory_info.get('hit_rate', 0)}%")
+                
+                if 'database_tier' in status:
+                    db_info = status.get('database_tier', {})
+                    self.add_result("Database Cache", CheckStatus.INFO,
+                                  f"Connected: {db_info.get('connected', False)}")
                 
                 if 'hit_rate' in status:
                     hit_rate = status['hit_rate']
                     if hit_rate >= 90:
-                        self.add_result("Cache Hit Rate", CheckStatus.PASS,
+                        self.add_result("Overall Cache Hit Rate", CheckStatus.PASS,
                                       f"{hit_rate}%")
                     elif hit_rate >= 70:
-                        self.add_result("Cache Hit Rate", CheckStatus.WARNING,
+                        self.add_result("Overall Cache Hit Rate", CheckStatus.WARNING,
                                       f"{hit_rate}% (low)")
                     else:
-                        self.add_result("Cache Hit Rate", CheckStatus.FAIL,
+                        self.add_result("Overall Cache Hit Rate", CheckStatus.FAIL,
                                       f"{hit_rate}% (very low)")
                 
             else:
-                self.add_result("Redis Connection", CheckStatus.FAIL,
-                              "Cannot connect to Redis",
-                              details="Check REDIS_URL and Redis server status",
-                              fixable=True, fix_command="redis-server")
+                self.add_result("Hybrid Cache Connection", CheckStatus.FAIL,
+                              "Cannot connect to cache system",
+                              details="Check database connection and cache configuration",
+                              fixable=True)
                 
         except Exception as e:
             self.add_result("Cache System", CheckStatus.FAIL,

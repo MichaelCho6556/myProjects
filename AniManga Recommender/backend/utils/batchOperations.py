@@ -10,8 +10,8 @@ from supabase import Client
 from enum import Enum
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
-import redis
 import json
+from utils.cache_helpers import invalidate_list_cache, invalidate_user_lists_cache
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +44,9 @@ class BatchOperationError(Exception):
     pass
 
 class BatchOperationsManager:
-    def __init__(self, db_connection, redis_client: Optional[redis.Redis] = None):
+    def __init__(self, db_connection, cache_client=None):
         self.db = db_connection
-        self.redis = redis_client
+        self.cache = cache_client  # Now expects hybrid cache instance
         
     def perform_batch_operation(self, user_id: str, list_id: str, operation_type: str, 
                               item_ids: List[str], operation_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -368,21 +368,17 @@ class BatchOperationsManager:
     
     def _invalidate_caches(self, list_id: str, user_id: str):
         """Invalidate relevant caches after batch operation"""
-        if self.redis:
-            try:
-                # Invalidate list cache
-                self.redis.delete(f"list:{list_id}:items")
-                self.redis.delete(f"list:{list_id}:details")
-                
-                # Invalidate user lists cache
-                self.redis.delete(f"user:{user_id}:lists")
-                
-                # Invalidate analytics cache
-                self.redis.delete(f"analytics:list:{list_id}")
-                
-            except Exception as e:
-                logger.warning(f"Failed to invalidate caches: {e}")
+        try:
+            # Invalidate list cache using cache helper functions
+            # This will handle list details, items, and analytics cache
+            invalidate_list_cache(int(list_id), user_id)
+            
+            # Note: invalidate_list_cache already calls invalidate_user_lists_cache
+            # when user_id is provided, so we don't need to call it separately
+            
+        except Exception as e:
+            logger.warning(f"Failed to invalidate caches: {e}")
 
-def create_batch_operations_manager(db_connection, redis_client=None):
+def create_batch_operations_manager(db_connection, cache_client=None):
     """Factory function to create a BatchOperationsManager instance"""
-    return BatchOperationsManager(db_connection, redis_client) 
+    return BatchOperationsManager(db_connection, cache_client) 
