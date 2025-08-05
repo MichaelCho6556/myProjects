@@ -47,8 +47,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
-import { DashboardData } from "../types";
+import { useDashboardQuery, useUpdateUserItemMutation, useOfflineDataStatus } from "../hooks/useApiCache";
+import { useColdStart } from "../hooks/useColdStart";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import StatisticsCards from "../components/dashboard/StatisticsCards";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
@@ -56,13 +56,13 @@ import ItemLists from "../components/dashboard/ItemLists";
 import QuickActions from "../components/dashboard/QuickActions";
 import PersonalizedRecommendations from "../components/dashboard/PersonalizedRecommendations";
 import DashboardSkeleton from "../components/Loading/DashboardSkeleton";
+import ColdStartLoader from "../components/common/ColdStartLoader";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import CollapsibleSection from "../components/CollapsibleSection";
 import EmptyState from "../components/EmptyState";
 import { ListAnalyticsDashboard } from "../components/analytics/ListAnalyticsDashboard";
 import CacheStatusIndicator from "../components/dashboard/CacheStatusIndicator";
 import "./DashboardPage.css";
-import { supabase } from "../lib/supabase";
 import { logger } from "../utils/logger";
 
 /**
@@ -89,10 +89,23 @@ interface DashboardPageProps {
  */
 const DashboardPage: React.FC<DashboardPageProps> = () => {
   const { user } = useAuth();
-  const { makeAuthenticatedRequest } = useAuthenticatedApi();
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  
+  // Cold start detection
+  const { isInColdStart } = useColdStart();
+  const { hasAnyData } = useOfflineDataStatus();
+  
+  // Use React Query for dashboard data
+  const { 
+    data: dashboardData, 
+    isLoading, 
+    error: queryError, 
+    refetch: refetchDashboard,
+    isFetching 
+  } = useDashboardQuery();
+  
+  // Mutations
+  const updateUserItemMutation = useUpdateUserItemMutation();
+  
   const [sectionLoading, setSectionLoading] = useState({
     recommendations: false,
     itemLists: false,
@@ -110,83 +123,8 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
 
   useDocumentTitle("Dashboard");
 
-  useEffect(() => {
-    if (user) {
-      fetchDashboardData();
-    }
-  }, [user]);
-
   /**
-   * Fetches comprehensive dashboard data from the backend API.
-   *
-   * This function handles the complete data loading process including:
-   * - Session validation and token refresh
-   * - API request with proper authentication
-   * - Error handling and user feedback
-   * - Data validation and state updates
-   *
-   * @async
-   * @function fetchDashboardData
-   * @returns {Promise<void>} Promise that resolves when data is loaded
-   *
-   * @throws {Error} When session is invalid or API request fails
-   *
-   * @example
-   * ```typescript
-   * // Called automatically on component mount and user changes
-   * await fetchDashboardData();
-   * ```
-   */
-  const fetchDashboardData = async (): Promise<void> => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Get current session and token properly
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError || !session) {
-        logger.error("No valid session found", {
-          error: sessionError?.message || "Session not found",
-          context: "DashboardPage",
-          operation: "fetchDashboardData",
-          userId: user?.id
-        });
-        setError("Authentication required. Please sign in again.");
-        return;
-      }
-
-
-      // ✅ FIXED: Use the dedicated getDashboardData method OR makeAuthenticatedRequest correctly
-      const response = await makeAuthenticatedRequest("/api/auth/dashboard");
-
-
-      // ✅ FIXED: The response IS the dashboard data (not wrapped in .data)
-      if (response && typeof response === "object") {
-        setDashboardData(response);
-      } else {
-        console.warn("⚠️ Invalid dashboard data format:", response);
-        setError("Invalid dashboard data format received");
-      }
-    } catch (error: any) {
-      logger.error("Error fetching dashboard data", {
-        error: error instanceof Error ? error.message : "Unknown error",
-        context: "DashboardPage",
-        operation: "fetchDashboardData",
-        userId: user?.id,
-        errorCode: error?.code || error?.response?.status
-      });
-      setError(`Failed to load dashboard: ${error instanceof Error ? error.message : "Unknown error"}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
-   * Refreshes dashboard data and provides user feedback.
+   * Refreshes dashboard data using React Query
    *
    * This function is called when users perform actions that might
    * affect dashboard data or when manual refresh is requested.
@@ -201,9 +139,9 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
    * await refreshDashboard();
    * ```
    */
-  const refreshDashboard = async (): Promise<void> => {
-    await fetchDashboardData();
-  };
+  const refreshDashboard = useCallback(async (): Promise<void> => {
+    await refetchDashboard();
+  }, [refetchDashboard]);
 
   /**
    * Helper function for debounced section refresh to prevent rapid API calls
@@ -225,7 +163,7 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
       return new Promise<void>((resolve) => {
         refreshTimers.current[sectionName] = setTimeout(async () => {
           try {
-            await fetchDashboardData();
+            await refetchDashboard();
           } finally {
             setSectionLoading((prev) => ({ ...prev, [sectionName]: false }));
             resolve();
@@ -233,7 +171,7 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
         }, delay);
       });
     },
-    [sectionLoading]
+    [sectionLoading, refetchDashboard]
   );
 
   /**
@@ -306,7 +244,7 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
    * await handleStatusUpdate("anime_123", "completed", { rating: 9 });
    * ```
    */
-  const handleStatusUpdate = async (
+  const handleStatusUpdate = useCallback(async (
     itemUid: string,
     newStatus: string,
     additionalData?: any
@@ -317,12 +255,13 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
         ...additionalData,
       };
 
-      await makeAuthenticatedRequest(`/api/auth/user-items/${itemUid}`, {
-        method: "POST",
-        body: JSON.stringify(updateData),
+      await updateUserItemMutation.mutateAsync({
+        itemUid,
+        data: updateData,
       });
 
-      await fetchDashboardData();
+      // React Query will automatically invalidate and refetch
+      // No need to manually refresh dashboard
     } catch (err: any) {
       logger.error("Status update error", {
         error: err?.message || "Unknown error",
@@ -332,9 +271,9 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
         itemUid: itemUid,
         newStatus: newStatus
       });
-      setError("Failed to update item status");
+      // Error is handled by the mutation hook
     }
-  };
+  }, [updateUserItemMutation, user?.id]);
 
   // Render authentication required state
   if (!user) {
@@ -361,8 +300,24 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
     );
   }
 
-  // Render loading state with skeleton
-  if (loading) {
+  // Render cold start loader if backend is starting up
+  if (isInColdStart && isLoading) {
+    return (
+      <div className="dashboard-page">
+        <ColdStartLoader 
+          isVisible={true}
+          hasCachedData={hasAnyData}
+          onBrowseOffline={() => {
+            // Force React Query to use cached data
+            window.location.reload();
+          }}
+        />
+      </div>
+    );
+  }
+  
+  // Render normal loading state with skeleton
+  if (isLoading) {
     return (
       <div className="dashboard-page">
         <DashboardSkeleton />
@@ -371,10 +326,14 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
   }
 
   // Render error state with retry functionality
-  if (error) {
+  if (queryError) {
     return (
       <div className="dashboard-page">
-        <ErrorFallback error={new Error(error)} onRetry={fetchDashboardData} showDetails={true} />
+        <ErrorFallback 
+          error={queryError instanceof Error ? queryError : new Error(String(queryError))} 
+          onRetry={() => refetchDashboard()} 
+          showDetails={true} 
+        />
       </div>
     );
   }
@@ -414,7 +373,7 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
             <CacheStatusIndicator
               cacheHit={dashboardData.cache_hit}
               lastUpdated={dashboardData.last_updated}
-              updating={dashboardData.updating}
+              updating={dashboardData.updating || isFetching}
               onRefresh={refreshDashboard}
             />
           </div>
@@ -438,7 +397,7 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
                 onHold={dashboardData.on_hold}
                 completedRecently={dashboardData.completed_recently}
                 onStatusUpdate={handleStatusUpdate}
-                onItemDeleted={fetchDashboardData}
+                onItemDeleted={refetchDashboard}
               />
             </CollapsibleSection>
 
@@ -450,7 +409,7 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
               onRefresh={refreshRecommendations}
               isLoading={sectionLoading.recommendations}
             >
-              <PersonalizedRecommendations onRefresh={fetchDashboardData} />
+              <PersonalizedRecommendations onRefresh={refetchDashboard} />
             </CollapsibleSection>
 
             <CollapsibleSection
@@ -461,7 +420,7 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
               onRefresh={refreshQuickActions}
               isLoading={sectionLoading.quickActions}
             >
-              <QuickActions onRefresh={fetchDashboardData} />
+              <QuickActions onRefresh={refetchDashboard} />
             </CollapsibleSection>
 
             <CollapsibleSection
