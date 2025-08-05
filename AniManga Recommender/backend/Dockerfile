@@ -26,6 +26,9 @@ RUN pip install --no-cache-dir PyJWT==2.10.1
 # Install all other requirements
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install production server
+RUN pip install --no-cache-dir gunicorn==22.0.0
+
 # Verify that JWT can be imported (catch issues early)
 RUN python -c "import jwt; print('✅ JWT imported successfully:', jwt.__version__)"
 RUN python -c "import flask; print('✅ Flask imported successfully:', flask.__version__)"
@@ -33,14 +36,15 @@ RUN python -c "import flask; print('✅ Flask imported successfully:', flask.__v
 # Copy the application code
 COPY . .
 
-# Set Flask environment variables (Flask best practices)
+# Set production environment variables
 ENV FLASK_APP=app.py
-ENV FLASK_ENV=development
-ENV FLASK_RUN_HOST=0.0.0.0
-ENV FLASK_RUN_PORT=5000
+ENV FLASK_ENV=production
 ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
-EXPOSE 5000
+# Expose port (Render uses PORT env var)
+EXPOSE 10000
 
-# Use proper Flask CLI command (as you requested!)
-CMD ["flask", "run", "--host=0.0.0.0", "--port=5000", "--debug"]
+# Production command with gunicorn
+# The PORT env var is set by Render, default to 10000 for local testing
+CMD exec gunicorn --bind 0.0.0.0:${PORT:-10000} --workers 2 --timeout 120 --log-level info --access-logfile - --error-logfile - app:app

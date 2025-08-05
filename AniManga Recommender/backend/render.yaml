@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: animanga-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: PORT
+        value: 10000
+      - key: SUPABASE_URL
+        sync: false  # Set in Render dashboard
+      - key: SUPABASE_KEY
+        sync: false  # Set in Render dashboard
+      - key: SUPABASE_SERVICE_KEY
+        sync: false  # Set in Render dashboard
+      - key: JWT_SECRET_KEY
+        generateValue: true  # Render will generate a secure value
+      - key: SECRET_KEY
+        generateValue: true  # Render will generate a secure value
+      - key: CACHE_MEMORY_SIZE
+        value: 1000
+      - key: CACHE_MEMORY_MB
+        value: 100
+      - key: REQUEST_CACHE_TTL
+        value: 300
+      - key: ALLOWED_ORIGINS
+        value: https://animanga-recommender.vercel.app  # Update with your frontend URL
+    healthCheckPath: /api/health
+    numInstances: 1
+    autoDeploy: true  # Auto-deploy on git push
