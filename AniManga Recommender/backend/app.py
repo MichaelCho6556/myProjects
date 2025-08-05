@@ -165,6 +165,43 @@ CORS(app,
 # Note: CORS headers are already handled by Flask-CORS extension above
 # No need for duplicate after_request handler
 
+# Security headers middleware
+@app.after_request
+def add_security_headers(response):
+    """
+    Add security headers to all responses for production safety.
+    
+    These headers help protect against common web vulnerabilities:
+    - XSS attacks
+    - Clickjacking
+    - MIME type sniffing
+    - HTTPS downgrade attacks
+    """
+    # Prevent MIME type sniffing
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    
+    # Prevent clickjacking
+    response.headers['X-Frame-Options'] = 'DENY'
+    
+    # Enable XSS protection in older browsers
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    
+    # Force HTTPS in production (only if not localhost)
+    if not request.host.startswith('localhost') and not request.host.startswith('127.0.0.1'):
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    
+    # Content Security Policy - adjust based on your needs
+    # This is a basic policy that allows same-origin for everything
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+    
+    # Referrer Policy
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    
+    # Permissions Policy (formerly Feature Policy)
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    
+    return response
+
 # Add explicit OPTIONS handling for preflight requests
 @app.before_request
 def handle_preflight():
@@ -215,16 +252,119 @@ def handle_preflight():
         
         return response
 
-# Configure structured logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('app.log')
-    ]
-)
-logger = logging.getLogger(__name__)
+# Configure production logging
+def setup_logging():
+    """
+    Configure logging for production with support for:
+    - JSON structured logging (when enabled)
+    - Log level from environment
+    - Request ID tracking
+    - Performance metrics
+    """
+    log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+    enable_json_logging = os.getenv('ENABLE_JSON_LOGGING', 'false').lower() == 'true'
+    
+    # Base configuration
+    logging_config = {
+        'level': getattr(logging, log_level, logging.INFO),
+        'handlers': []
+    }
+    
+    if enable_json_logging and os.getenv('FLASK_ENV') == 'production':
+        # JSON formatter for production
+        import json as json_lib
+        class JsonFormatter(logging.Formatter):
+            def format(self, record):
+                log_data = {
+                    'timestamp': datetime.utcnow().isoformat(),
+                    'level': record.levelname,
+                    'logger': record.name,
+                    'message': record.getMessage(),
+                    'module': record.module,
+                    'function': record.funcName,
+                    'line': record.lineno
+                }
+                
+                # Add exception info if present
+                if record.exc_info:
+                    log_data['exception'] = self.formatException(record.exc_info)
+                
+                # Add request context if available
+                if hasattr(g, 'request_id'):
+                    log_data['request_id'] = g.request_id
+                
+                # Add user context if available
+                if hasattr(g, 'current_user'):
+                    log_data['user_id'] = g.current_user.get('user_id', 'anonymous')
+                
+                return json_lib.dumps(log_data)
+        
+        # JSON handler for production
+        json_handler = logging.StreamHandler()
+        json_handler.setFormatter(JsonFormatter())
+        logging_config['handlers'].append(json_handler)
+    else:
+        # Standard formatter for development
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        # Console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        logging_config['handlers'].append(console_handler)
+        
+        # File handler (only in development)
+        if os.getenv('FLASK_ENV') != 'production':
+            file_handler = logging.FileHandler('app.log')
+            file_handler.setFormatter(formatter)
+            logging_config['handlers'].append(file_handler)
+    
+    # Apply configuration
+    logging.basicConfig(**logging_config)
+    
+    # Reduce noise from libraries
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    
+    return logging.getLogger(__name__)
+
+# Initialize logging
+logger = setup_logging()
+
+# Add request ID middleware for tracking
+@app.before_request
+def add_request_id():
+    """Add unique request ID for tracking through logs"""
+    import uuid
+    g.request_id = str(uuid.uuid4())
+    
+# Log request details
+@app.before_request
+def log_request_info():
+    """Log incoming request details for monitoring"""
+    if request.path != '/api/health':  # Don't log health checks
+        logger.info(f"Request started: {request.method} {request.path}", 
+                   extra={
+                       'method': request.method,
+                       'path': request.path,
+                       'remote_addr': request.remote_addr,
+                       'user_agent': request.user_agent.string
+                   })
+
+# Log response details
+@app.after_request
+def log_response_info(response):
+    """Log response details for monitoring"""
+    if request.path != '/api/health':  # Don't log health checks
+        logger.info(f"Request completed: {request.method} {request.path} - {response.status_code}",
+                   extra={
+                       'method': request.method,
+                       'path': request.path,
+                       'status_code': response.status_code,
+                       'content_length': response.content_length
+                   })
+    return response
 
 # Import and register compute endpoints blueprint
 try:
@@ -7258,18 +7398,16 @@ def system_health_check() -> Union[Response, Tuple[Response, int]]:
             'uptime': time.time() - app_start_time if 'app_start_time' in globals() else 0
         }
         
-        # Check database
+        # Check database using resilient health check
         try:
-            # Simple query to check database connection
-            result = requests.get(
-                f"{auth_client.base_url}/rest/v1/items",
-                headers=auth_client.headers,
-                params={'select': 'uid', 'limit': 1}
-            )
+            db_health = supabase_client.check_health() if supabase_client else {'connected': False, 'error': 'Client not initialized'}
             health['components']['database'] = {
-                'status': 'healthy' if result.status_code == 200 else 'unhealthy',
-                'response_time_ms': result.elapsed.total_seconds() * 1000
+                'status': 'healthy' if db_health.get('connected', False) else 'unhealthy',
+                'response_time_ms': db_health.get('response_time_ms', 0),
+                'error': db_health.get('error')
             }
+            if not db_health.get('connected', False):
+                health['status'] = 'degraded'
         except Exception as e:
             health['components']['database'] = {'status': 'unhealthy', 'error': str(e)}
             health['status'] = 'degraded'
@@ -12413,6 +12551,150 @@ def serve_list_detail(list_id) -> Union[Response, Tuple[Response, int]]:
     </html>
     '''
     return make_response(html_content, 200, {'Content-Type': 'text/html'})
+
+# =============================================================================
+# ERROR HANDLERS FOR PRODUCTION
+# =============================================================================
+
+@app.errorhandler(404)
+def not_found_error(error) -> Tuple[Response, int]:
+    """
+    Handle 404 Not Found errors with a JSON response.
+    
+    Args:
+        error: The error object from Flask
+        
+    Returns:
+        JSON response with error details and 404 status code
+    """
+    return jsonify({
+        'error': 'Not Found',
+        'message': 'The requested resource could not be found',
+        'status': 404,
+        'timestamp': datetime.utcnow().isoformat()
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error) -> Tuple[Response, int]:
+    """
+    Handle 500 Internal Server errors with a JSON response.
+    
+    Args:
+        error: The error object from Flask
+        
+    Returns:
+        JSON response with error details and 500 status code
+    """
+    # Log the full error for debugging
+    logger.error(f"Internal server error: {str(error)}", exc_info=True)
+    
+    # Return a generic error message to avoid exposing internals
+    return jsonify({
+        'error': 'Internal Server Error',
+        'message': 'An unexpected error occurred. Please try again later.',
+        'status': 500,
+        'timestamp': datetime.utcnow().isoformat()
+    }), 500
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(error) -> Tuple[Response, int]:
+    """
+    Generic error handler for all unhandled exceptions.
+    
+    Args:
+        error: The exception that was raised
+        
+    Returns:
+        JSON response with error details and appropriate status code
+    """
+    # Log the full error with traceback
+    logger.error(f"Unhandled exception: {str(error)}", exc_info=True)
+    
+    # Determine status code based on error type
+    status_code = 500
+    if hasattr(error, 'code'):
+        status_code = error.code
+    
+    # Return a safe error response
+    return jsonify({
+        'error': error.__class__.__name__,
+        'message': 'An error occurred processing your request',
+        'status': status_code,
+        'timestamp': datetime.utcnow().isoformat()
+    }), status_code
+
+@app.errorhandler(400)
+def bad_request_error(error) -> Tuple[Response, int]:
+    """
+    Handle 400 Bad Request errors with a JSON response.
+    
+    Args:
+        error: The error object from Flask
+        
+    Returns:
+        JSON response with error details and 400 status code
+    """
+    return jsonify({
+        'error': 'Bad Request',
+        'message': str(error.description) if hasattr(error, 'description') else 'Invalid request format or parameters',
+        'status': 400,
+        'timestamp': datetime.utcnow().isoformat()
+    }), 400
+
+@app.errorhandler(401)
+def unauthorized_error(error) -> Tuple[Response, int]:
+    """
+    Handle 401 Unauthorized errors with a JSON response.
+    
+    Args:
+        error: The error object from Flask
+        
+    Returns:
+        JSON response with error details and 401 status code
+    """
+    return jsonify({
+        'error': 'Unauthorized',
+        'message': 'Authentication required to access this resource',
+        'status': 401,
+        'timestamp': datetime.utcnow().isoformat()
+    }), 401
+
+@app.errorhandler(403)
+def forbidden_error(error) -> Tuple[Response, int]:
+    """
+    Handle 403 Forbidden errors with a JSON response.
+    
+    Args:
+        error: The error object from Flask
+        
+    Returns:
+        JSON response with error details and 403 status code
+    """
+    return jsonify({
+        'error': 'Forbidden',
+        'message': 'You do not have permission to access this resource',
+        'status': 403,
+        'timestamp': datetime.utcnow().isoformat()
+    }), 403
+
+@app.errorhandler(429)
+def rate_limit_error(error) -> Tuple[Response, int]:
+    """
+    Handle 429 Too Many Requests errors with a JSON response.
+    
+    Args:
+        error: The error object from Flask
+        
+    Returns:
+        JSON response with error details and 429 status code
+    """
+    return jsonify({
+        'error': 'Too Many Requests',
+        'message': 'Rate limit exceeded. Please try again later.',
+        'status': 429,
+        'timestamp': datetime.utcnow().isoformat(),
+        'retry_after': getattr(error, 'retry_after', 60)  # Default to 60 seconds
+    }), 429
 
 if __name__ == '__main__':
     # Record app start time for uptime calculation
