@@ -84,7 +84,7 @@ try:
     REQUEST_CACHE_AVAILABLE = True
 except ImportError:
     REQUEST_CACHE_AVAILABLE = False
-    logger.warning("Request cache not available, using standard caching only")
+    # Request cache not available, using standard caching only
     # Fallback decorator that does nothing
     def request_cache(*args, **kwargs):
         def decorator(func):
