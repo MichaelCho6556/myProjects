@@ -6576,7 +6576,7 @@ def update_privacy_settings() -> Union[Response, Tuple[Response, int]]:
         for field in visibility_fields:
             if field in data and data[field] not in valid_visibility_options:
                 return jsonify({
-                    'error': "Invalid . Must be one of: {", ".join(valid_visibility_options)}'
+                    'error': f"Invalid {field}. Must be one of: {', '.join(valid_visibility_options)}"
                 }), 400
         
         result = auth_client.update_privacy_settings(user_id, data)
