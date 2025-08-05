@@ -29,7 +29,7 @@ services:
       - key: REQUEST_CACHE_TTL
         value: 300
       - key: ALLOWED_ORIGINS
-        value: https://animanga-recommender.vercel.app  # Update with your frontend URL
+        value: https://animanga-recommender.vercel.app,https://*.vercel.app,http://localhost:3000,http://localhost:3001  # Production URL, preview deployments, and local dev
     healthCheckPath: /api/health
     numInstances: 1
     autoDeploy: true  # Auto-deploy on git push

@@ -31,6 +31,7 @@ from __future__ import annotations
 
 # backend/app.py
 import ast
+import re
 from flask import Flask, jsonify, request, g, Response, make_response
 from flask_cors import CORS, cross_origin
 import os
@@ -143,19 +144,76 @@ def sanitize_input(data: Any) -> Any:
 app = Flask(__name__)
 
 # Configure CORS with environment-based origins
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else [
+# Parse allowed origins from environment, supporting wildcards for Vercel previews
+raw_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else []
+ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins if origin.strip()] or [
     "http://localhost:3000",
-    "http://127.0.0.1:3000"
-    # Production URLs will be added via ALLOWED_ORIGINS env variable
-    # Example: ALLOWED_ORIGINS=https://animanga.com,https://www.animanga.com
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",  # Backup development port
 ]
 
-CORS(app, origins=ALLOWED_ORIGINS,
-     allow_headers=["Content-Type", "Authorization"],
-     supports_credentials=True)
+# Production CORS configuration with enhanced security
+CORS(app, 
+     origins=ALLOWED_ORIGINS,
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+     supports_credentials=True,
+     max_age=3600,  # Cache preflight requests for 1 hour
+     vary_header=True  # Add Vary: Origin header for CDN compatibility
+)
 
 # Note: CORS headers are already handled by Flask-CORS extension above
 # No need for duplicate after_request handler
+
+# Add explicit OPTIONS handling for preflight requests
+@app.before_request
+def handle_preflight():
+    """
+    Handle CORS preflight requests globally.
+    
+    This ensures all OPTIONS requests receive proper CORS headers,
+    especially important for complex requests with custom headers.
+    Supports Vercel preview deployments with wildcard matching.
+    """
+    if request.method == "OPTIONS":
+        # Build response
+        response = make_response()
+        
+        # Get the requesting origin
+        origin = request.headers.get("Origin")
+        
+        # Helper function to check if origin matches allowed patterns
+        def is_origin_allowed(origin, allowed_list):
+            for allowed in allowed_list:
+                if allowed == origin:
+                    return True
+                # Handle wildcard patterns like https://*.vercel.app
+                if "*" in allowed:
+                    # Convert wildcard pattern to regex
+                    pattern = allowed.replace(".", r"\.")  # Escape dots
+                    pattern = pattern.replace("*", ".*")   # Convert * to regex .*
+                    pattern = f"^{pattern}$"                # Anchor pattern
+                    if re.match(pattern, origin):
+                        return True
+            return False
+        
+        # Check if origin is allowed
+        if origin and is_origin_allowed(origin, ALLOWED_ORIGINS):
+            response.headers["Access-Control-Allow-Origin"] = origin
+        elif not ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS:
+            response.headers["Access-Control-Allow-Origin"] = "*"
+        else:
+            # For security, don't set any origin if not allowed
+            app.logger.warning(f"Rejected CORS preflight from origin: {origin}")
+            response.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else "null"
+        
+        # Set other CORS headers
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Max-Age"] = "3600"
+        
+        return response
 
 # Configure structured logging
 logging.basicConfig(
@@ -12326,56 +12384,7 @@ def export_metrics() -> Union[Response, Tuple[Response, int]]:
         logger.error(f"Error exporting metrics: {e}")
         return jsonify({'error': 'Failed to export metrics'}), 500
 
-@app.route('/api/health', methods=['GET'])
-def health_check() -> Union[Response, Tuple[Response, int]]:
-    """
-    Health check endpoint for load balancers and monitoring systems.
-    
-    Returns system health status and basic metrics.
-    Public endpoint with basic health information.
-    """
-    try:
-        # Record system health
-        record_system_health()
-        
-        # Get cache status
-        cache_status = get_cache_status()
-        
-        # Basic health checks
-        health_status = {
-            'status': 'healthy',
-            'timestamp': datetime.utcnow().isoformat(),
-            'version': '1.0.0',
-            'cache_connected': cache_status.get('connected', False),
-            'uptime_seconds': time.time() - app.start_time if hasattr(app, 'start_time') else 0
-        }
-        
-        # Check for critical issues
-        collector = get_metrics_collector()
-        current_metrics = collector.get_current_metrics()
-        
-        # Check cache hit rate
-        cache_hit_rate = current_metrics.get('cache_hit_rate', {}).get('value')
-        if cache_hit_rate is not None and cache_hit_rate < 0.5:
-            health_status['warnings'] = health_status.get('warnings', [])
-            health_status['warnings'].append('Low cache hit rate')
-        
-        # Check error rate
-        error_rate = current_metrics.get('error_rate', {}).get('value')
-        if error_rate is not None and error_rate > 0.1:
-            health_status['status'] = 'degraded'
-            health_status['warnings'] = health_status.get('warnings', [])
-            health_status['warnings'].append('High error rate')
-        
-        return jsonify(health_status)
-        
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return jsonify({
-            'status': 'unhealthy',
-            'timestamp': datetime.utcnow().isoformat(),
-            'error': str(e)
-        }), 500
+# Duplicate health check endpoint removed - using system_health_check() at line 7239 instead
 
 @app.route('/lists/<int:list_id>')
 def serve_list_detail(list_id) -> Union[Response, Tuple[Response, int]]:
