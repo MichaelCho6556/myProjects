@@ -24,25 +24,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # --- START: ADDED STEPS ---
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16' # Or the version your project uses
-
       - name: Install Frontend Dependencies
-        # This fixes the "Failed to load config" error for ESLint
         run: npm --prefix "AniManga Recommender/frontend" install
-      # --- END: ADDED STEPS ---
 
       - name: Run Codacy Analysis CLI
-        # I've updated this to the latest version, v4.3.0
-        uses: codacy/codacy-analysis-cli-action@v4.3.0 
+        uses: codacy/codacy-analysis-cli-action@v4.3.0
         with:
-          # --- ADD THIS LINE ---
-          # This tells Codacy to only scan inside this directory
+          # This tells the action to only scan this directory.
+          # The action handles creating the correct absolute paths for Docker.
           directory: "AniManga Recommender"
-          # ---
           
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           verbose: true
