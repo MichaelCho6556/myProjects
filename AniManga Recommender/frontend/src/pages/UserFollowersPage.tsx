@@ -8,6 +8,47 @@ import { api } from "../services/api";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import { generateAvatarColor } from "../utils/helpers";
+
+// URL Sanitization - Prevents XSS through dangerous URL schemes
+export const sanitizeUrl = (url) => {
+  if (!url) return '';
+  
+  // Decode URL to catch encoded attacks
+  let decodedUrl = url;
+  try {
+    decodedUrl = decodeURIComponent(url);
+  } catch {
+    decodedUrl = url;
+  }
+  
+  const lowerUrl = decodedUrl.trim().toLowerCase();
+  
+  // Dangerous schemes to block
+  const dangerousSchemes = [
+    'javascript:', 'data:', 'vbscript:', 'file:', 'about:',
+    'chrome:', 'chrome-extension:', 'ms-appx:', 'ms-appx-web:',
+    'ms-local-stream:', 'res:', 'ie.http:', 'mk:', 'mhtml:',
+    'view-source:', 'ws:', 'wss:', 'ftp:', 'intent:',
+    'web+app:', 'web+action:'
+  ];
+  
+  // Check if URL starts with any dangerous scheme
+  for (const scheme of dangerousSchemes) {
+    if (lowerUrl.startsWith(scheme)) {
+      return 'about:blank';
+    }
+  }
+  
+  // Additional check for encoded attempts
+  if (lowerUrl.includes('javascript:') || 
+      lowerUrl.includes('data:') || 
+      lowerUrl.includes('vbscript:')) {
+    return 'about:blank';
+  }
+  
+  return url;
+};
+
 import "./UserProfilePage.css";
 
 interface Follower {
@@ -212,7 +253,7 @@ export const UserFollowersPage: React.FC = () => {
                     >
                       {follower.avatar_url ? (
                         <img
-                          src={follower.avatar_url}
+                          src={sanitizeUrl(follower.avatar_url)}
                           alt={`${follower.display_name}'s avatar`}
                           className="follower-avatar"
                         />

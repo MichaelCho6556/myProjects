@@ -4,6 +4,47 @@ import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { UserItem } from "../../types";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
+
+// URL Sanitization - Prevents XSS through dangerous URL schemes
+export const sanitizeUrl = (url) => {
+  if (!url) return '';
+  
+  // Decode URL to catch encoded attacks
+  let decodedUrl = url;
+  try {
+    decodedUrl = decodeURIComponent(url);
+  } catch {
+    decodedUrl = url;
+  }
+  
+  const lowerUrl = decodedUrl.trim().toLowerCase();
+  
+  // Dangerous schemes to block
+  const dangerousSchemes = [
+    'javascript:', 'data:', 'vbscript:', 'file:', 'about:',
+    'chrome:', 'chrome-extension:', 'ms-appx:', 'ms-appx-web:',
+    'ms-local-stream:', 'res:', 'ie.http:', 'mk:', 'mhtml:',
+    'view-source:', 'ws:', 'wss:', 'ftp:', 'intent:',
+    'web+app:', 'web+action:'
+  ];
+  
+  // Check if URL starts with any dangerous scheme
+  for (const scheme of dangerousSchemes) {
+    if (lowerUrl.startsWith(scheme)) {
+      return 'about:blank';
+    }
+  }
+  
+  // Additional check for encoded attempts
+  if (lowerUrl.includes('javascript:') || 
+      lowerUrl.includes('data:') || 
+      lowerUrl.includes('vbscript:')) {
+    return 'about:blank';
+  }
+  
+  return url;
+};
+
 import { sanitizeSearchInput } from "../../utils/security"; // ✅ NEW: Import search sanitization
 import { logger } from "../../utils/logger";
 import Spinner from "../../components/Spinner";
@@ -697,7 +738,7 @@ const UserListsPage: React.FC<UserListsPageProps> = () => {
                       <div className="item-image-container">
                         <Link to={`/item/${userItem.item_uid}`}>
                           <img
-                            src={userItem.item.image_url || "/images/default.webp"}
+                            src={sanitizeUrl(userItem.item.image_url || "/images/default.webp")}
                             alt={userItem.item.title || "Unknown"}
                             className="item-thumbnail"
                             loading="lazy"

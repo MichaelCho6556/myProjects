@@ -4,6 +4,47 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ListItem } from "../../types/social";
 import { logger } from "../../utils/logger";
+
+// URL Sanitization - Prevents XSS through dangerous URL schemes
+export const sanitizeUrl = (url) => {
+  if (!url) return '';
+  
+  // Decode URL to catch encoded attacks
+  let decodedUrl = url;
+  try {
+    decodedUrl = decodeURIComponent(url);
+  } catch {
+    decodedUrl = url;
+  }
+  
+  const lowerUrl = decodedUrl.trim().toLowerCase();
+  
+  // Dangerous schemes to block
+  const dangerousSchemes = [
+    'javascript:', 'data:', 'vbscript:', 'file:', 'about:',
+    'chrome:', 'chrome-extension:', 'ms-appx:', 'ms-appx-web:',
+    'ms-local-stream:', 'res:', 'ie.http:', 'mk:', 'mhtml:',
+    'view-source:', 'ws:', 'wss:', 'ftp:', 'intent:',
+    'web+app:', 'web+action:'
+  ];
+  
+  // Check if URL starts with any dangerous scheme
+  for (const scheme of dangerousSchemes) {
+    if (lowerUrl.startsWith(scheme)) {
+      return 'about:blank';
+    }
+  }
+  
+  // Additional check for encoded attempts
+  if (lowerUrl.includes('javascript:') || 
+      lowerUrl.includes('data:') || 
+      lowerUrl.includes('vbscript:')) {
+    return 'about:blank';
+  }
+  
+  return url;
+};
+
 import "./InlineEditPanel.css";
 
 interface InlineEditPanelProps {
@@ -270,7 +311,7 @@ export const InlineEditPanel: React.FC<InlineEditPanelProps> = ({ item, onSave, 
     <div className="inline-edit-panel">
       <div className="edit-panel-header">
         <div className="item-preview">
-          {item.imageUrl && <img src={item.imageUrl} alt={item.title} className="preview-image" />}
+          {item.imageUrl && <img src={sanitizeUrl(item.imageUrl)} alt={item.title} className="preview-image" />}
           <div className="preview-details">
             <h4 className="preview-title">{item.title}</h4>
             <span className="preview-type">{getDisplayMediaType(item.mediaType)}</span>

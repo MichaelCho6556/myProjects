@@ -66,6 +66,9 @@
     "brace-expansion": "^1.1.12",
     "filelist": {
       "brace-expansion": "^2.0.2"
+    },
+    "resolve-url-loader": {
+      "postcss": "^8.4.31"
     }
   },
   "devDependencies": {

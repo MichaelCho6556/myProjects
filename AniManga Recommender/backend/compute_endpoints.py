@@ -190,7 +190,7 @@ def _compute_user_stats_async(user_id: str, task_id: str):
         
     except Exception as e:
         logger.error(f"Error in async stats computation: {e}")
-        track_progress(task_id, 'failed', 100, {'error': str(e)})
+        track_progress(task_id, 'failed', 100, {'error': 'Task failed. Please check logs.'})
 
 
 # Apply request-time caching to statistics calculation if available

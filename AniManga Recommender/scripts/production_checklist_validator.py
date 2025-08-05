@@ -397,6 +397,10 @@ class ProductionChecklistValidator:
                 port = int(url_parts[1]) if len(url_parts) > 1 else 443
                 
                 context = ssl.create_default_context()
+                # Enforce minimum TLS version 1.2 for security
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                # Optional: For even better security, enforce TLS 1.3 if supported
+                # context.minimum_version = ssl.TLSVersion.TLSv1_3
                 with socket.create_connection((hostname, port), timeout=10) as sock:
                     with context.wrap_socket(sock, server_hostname=hostname) as ssock:
                         cert = ssock.getpeercert()

@@ -68,30 +68,44 @@ export const csrfUtils = {
   },
 };
 
-// Input Sanitization - Enhanced for Advanced Attacks
+// Input Sanitization - Enhanced for Advanced Attacks with Complete Multi-Character Replacement
 export const sanitizeInput = (input: string): string => {
-  return input
-    .replace(/[<>]/g, "") // Remove < and > to prevent basic XSS
-    .replace(/javascript:/gi, "") // Remove javascript: protocol
-    .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
-    .replace(/\.\.\//g, "") // ✅ NEW: Block path traversal attacks
-    .replace(/\{\{.*?\}\}/g, "") // ✅ NEW: Block template injection {{ }}
-    .replace(/\$\{.*?\}/g, "") // ✅ NEW: Block expression injection ${ }
-    .replace(/\(\)\s*\{.*?\}/g, "") // ✅ NEW: Block shell function injection
-    .replace(/;\s*echo\s+/gi, "") // ✅ NEW: Block echo commands
-    .replace(/;\s*cat\s+/gi, "") // ✅ NEW: Block cat commands
-    .replace(/;\s*ls\s+/gi, "") // ✅ NEW: Block ls commands
-    .replace(/;\s*rm\s+/gi, "") // ✅ NEW: Block rm commands
-    .replace(/DROP\s+TABLE/gi, "") // ✅ NEW: Block SQL DROP TABLE (backup)
-    .trim();
+  let sanitized = input;
+  let previousValue: string;
+  
+  // Apply sanitization in a loop until no more changes occur
+  // This ensures complete removal of patterns like "<<>>" which would become "<>" after one pass
+  do {
+    previousValue = sanitized;
+    sanitized = sanitized
+      .replace(/[<>]/g, "") // Remove < and > to prevent basic XSS
+      .replace(/javascript:/gi, "") // Remove javascript: protocol
+      .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
+      .replace(/\.\.\//g, "") // Block path traversal attacks
+      .replace(/\{\{.*?\}\}/g, "") // Block template injection {{ }}
+      .replace(/\$\{.*?\}/g, "") // Block expression injection ${ }
+      .replace(/\(\)\s*\{.*?\}/g, "") // Block shell function injection
+      .replace(/;\s*echo\s+/gi, "") // Block echo commands
+      .replace(/;\s*cat\s+/gi, "") // Block cat commands
+      .replace(/;\s*ls\s+/gi, "") // Block ls commands
+      .replace(/;\s*rm\s+/gi, "") // Block rm commands
+      .replace(/DROP\s+TABLE/gi, ""); // Block SQL DROP TABLE (backup)
+  } while (sanitized !== previousValue);
+  
+  return sanitized.trim();
 };
 
 // ✅ NEW: Search-specific sanitization function that preserves spaces and normal search terms
 export const sanitizeSearchInput = (input: string): string => {
   // For search queries, we want to be less aggressive to allow legitimate search terms
   // while still protecting against dangerous patterns
-  return (
-    input
+  let sanitized = input;
+  let previousValue: string;
+  
+  // Apply sanitization in a loop until no more changes occur
+  do {
+    previousValue = sanitized;
+    sanitized = sanitized
       .replace(/[<>]/g, "") // Remove < and > to prevent basic XSS
       .replace(/javascript:/gi, "") // Remove javascript: protocol
       .replace(/on\w+=/gi, "") // Remove event handlers like onclick=
@@ -99,11 +113,13 @@ export const sanitizeSearchInput = (input: string): string => {
       .replace(/\{\{.*?\}\}/g, "") // Block template injection {{ }}
       .replace(/\$\{.*?\}/g, "") // Block expression injection ${ }
       .replace(/;\s*(echo|cat|ls|rm|curl|wget|nc|bash|sh)/gi, "") // Block command injection
-      .replace(/(DROP|DELETE|INSERT|UPDATE|CREATE|ALTER)\s+(TABLE|DATABASE)/gi, "") // Block SQL injection
-      // Preserve spaces and normal punctuation for search
-      .replace(/^\s+|\s+$/g, "") // Only trim leading/trailing spaces
-      .replace(/\s+/g, " ")
-  ); // Normalize multiple spaces to single space
+      .replace(/(DROP|DELETE|INSERT|UPDATE|CREATE|ALTER)\s+(TABLE|DATABASE)/gi, ""); // Block SQL injection
+  } while (sanitized !== previousValue);
+  
+  // Preserve spaces and normal punctuation for search
+  return sanitized
+    .replace(/^\s+|\s+$/g, "") // Only trim leading/trailing spaces
+    .replace(/\s+/g, " "); // Normalize multiple spaces to single space
 };
 
 // ✅ NEW: Advanced Input Validation - Strict Rejection
@@ -342,6 +358,91 @@ export const secureStorage = {
   removeItem(key: string): void {
     localStorage.removeItem(key);
   },
+};
+
+// URL Sanitization - Comprehensive scheme validation
+export const sanitizeUrl = (url: string): string => {
+  if (!url) return "";
+  
+  // Decode URL to handle encoded attacks
+  let decodedUrl = url;
+  try {
+    decodedUrl = decodeURIComponent(url);
+  } catch {
+    // If decoding fails, use original URL
+    decodedUrl = url;
+  }
+  
+  // Convert to lowercase for case-insensitive comparison
+  const lowerUrl = decodedUrl.trim().toLowerCase();
+  
+  // List of dangerous URL schemes
+  const dangerousSchemes = [
+    'javascript:',
+    'data:',
+    'vbscript:',
+    'file:',
+    'about:',
+    'chrome:',
+    'chrome-extension:',
+    'ms-appx:',
+    'ms-appx-web:',
+    'ms-local-stream:',
+    'res:',
+    'ie.http:',
+    'mk:',
+    'mhtml:',
+    'view-source:',
+    'ws:',
+    'wss:',
+    'ftp:',
+    'intent:',
+    'web+app:',
+    'web+action:'
+  ];
+  
+  // Check if URL starts with any dangerous scheme
+  for (const scheme of dangerousSchemes) {
+    if (lowerUrl.startsWith(scheme)) {
+      return "about:blank"; // Safe fallback URL
+    }
+  }
+  
+  // Additional validation for relative URLs that might be malicious
+  if (lowerUrl.includes('javascript:') || 
+      lowerUrl.includes('data:') || 
+      lowerUrl.includes('vbscript:')) {
+    return "about:blank";
+  }
+  
+  // If no dangerous patterns found, return the original URL
+  return url;
+};
+
+// URL Validation - Check if URL is safe to use
+export const isValidUrl = (url: string): boolean => {
+  if (!url) return false;
+  
+  const sanitized = sanitizeUrl(url);
+  
+  // If URL was sanitized to about:blank, it's not valid
+  if (sanitized === "about:blank" && url !== "about:blank") {
+    return false;
+  }
+  
+  // Additional validation for proper URL format
+  try {
+    // For relative URLs, prepend a base URL for validation
+    const urlToValidate = url.startsWith('http') || url.startsWith('//') 
+      ? url 
+      : `https://example.com${url.startsWith('/') ? '' : '/'}${url}`;
+      
+    new URL(urlToValidate);
+    return true;
+  } catch {
+    // If URL constructor throws, it's not a valid URL format
+    return false;
+  }
 };
 
 // Password strength validation
