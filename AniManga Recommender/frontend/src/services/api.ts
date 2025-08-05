@@ -20,9 +20,76 @@
  * @since 1.0.0
  */
 
-import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
-import { retryOperation, networkMonitor, RetryConfig } from '../utils/errorHandler';
+import axios, { AxiosInstance, AxiosError } from 'axios';
+import { networkMonitor } from '../utils/errorHandler';
 import { supabase } from '../lib/supabase';
+
+/**
+ * Cold start detection and event system
+ */
+export interface ColdStartEvent {
+  type: 'cold-start-detected' | 'cold-start-resolved';
+  timestamp: number;
+  duration?: number;
+}
+
+class ColdStartDetector {
+  private isFirstLoad = true;
+  private coldStartDetected = false;
+  private coldStartStartTime: number | null = null;
+  private listeners: Set<(event: ColdStartEvent) => void> = new Set();
+
+  detectColdStart(error: any): boolean {
+    const isColdStart = this.isFirstLoad && error?.response && 
+      (error.response.status === 502 || error.response.status === 503);
+    if (isColdStart) {
+      if (!this.coldStartDetected) {
+        this.coldStartDetected = true;
+        this.coldStartStartTime = Date.now();
+        this.emit({
+          type: 'cold-start-detected',
+          timestamp: Date.now()
+        });
+      }
+      return true;
+    }
+    return false;
+  }
+
+  resolveColdStart(): void {
+    if (this.coldStartDetected) {
+      this.coldStartDetected = false;
+      this.isFirstLoad = false;
+      const duration = this.coldStartStartTime 
+        ? Date.now() - this.coldStartStartTime 
+        : undefined;
+      
+      const event: ColdStartEvent = {
+        type: 'cold-start-resolved',
+        timestamp: Date.now()
+      };
+      if (duration !== undefined) {
+        event.duration = duration;
+      }
+      this.emit(event);
+    }
+  }
+
+  subscribe(listener: (event: ColdStartEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private emit(event: ColdStartEvent): void {
+    this.listeners.forEach(listener => listener(event));
+  }
+
+  isInColdStart(): boolean {
+    return this.coldStartDetected;
+  }
+}
+
+export const coldStartDetector = new ColdStartDetector();
 
 /**
  * Base URL for API endpoints
@@ -30,36 +97,6 @@ import { supabase } from '../lib/supabase';
  */
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-/**
- * Cold start retry configuration
- * Optimized for handling server wake-up scenarios
- */
-const COLD_START_RETRY_CONFIG: Partial<RetryConfig> = {
-  maxRetries: 5, // More retries for cold starts
-  baseDelayMs: 3000, // Longer initial delay
-  maxDelayMs: 30000,
-  exponentialBase: 1.5, // Slower exponential growth
-  jitter: true,
-  retryableStatuses: [408, 429, 500, 502, 503, 504],
-  onRetry: (attempt, error) => {
-    console.info(`Retrying API call (attempt ${attempt}). Server may be starting up...`);
-  },
-  onFinalFailure: (error) => {
-    console.error('API call failed after all retries:', error);
-  }
-};
-
-/**
- * Standard retry configuration for regular errors
- */
-const STANDARD_RETRY_CONFIG: Partial<RetryConfig> = {
-  maxRetries: 3,
-  baseDelayMs: 1000,
-  maxDelayMs: 10000,
-  exponentialBase: 2,
-  jitter: true,
-  retryableStatuses: [408, 429, 500, 502, 503, 504]
-};
 
 /**
  * Create axios instance with default configuration
@@ -130,40 +167,6 @@ const createAxiosInstance = (): AxiosInstance => {
 // Create the axios instance
 const axiosInstance = createAxiosInstance();
 
-/**
- * Determine if an error is likely due to a cold start
- */
-const isColdStartError = (error: any): boolean => {
-  if (error.response) {
-    const status = error.response.status;
-    // 502 Bad Gateway and 503 Service Unavailable are common during cold starts
-    return status === 502 || status === 503;
-  }
-  return false;
-};
-
-/**
- * Execute API request with appropriate retry strategy
- */
-const executeWithRetry = async <T>(
-  operation: () => Promise<AxiosResponse<T>>,
-  customConfig?: Partial<RetryConfig>
-): Promise<T> => {
-  try {
-    // First attempt
-    const response = await operation();
-    return response.data;
-  } catch (error) {
-    // Determine retry strategy based on error type
-    const retryConfig = isColdStartError(error) 
-      ? { ...COLD_START_RETRY_CONFIG, ...customConfig }
-      : { ...STANDARD_RETRY_CONFIG, ...customConfig };
-
-    // Retry with appropriate configuration
-    const response = await retryOperation(operation, retryConfig);
-    return response.data;
-  }
-};
 
 /**
  * API Service Interface
@@ -177,122 +180,122 @@ export const api = {
      * Get paginated items with optional filters
      */
     getItems: async (params?: Record<string, any>) => {
-      return executeWithRetry(() => 
-        axiosInstance.get('/api/items', { 
-          params,
-          headers: { 'X-Skip-Auth': 'true' }
-        })
-      );
+      const response = await axiosInstance.get('/api/items', { 
+        params,
+        headers: { 'X-Skip-Auth': 'true' }
+      });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get single item details
      */
     getItem: async (uid: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/items/${uid}`, {
-          headers: { 'X-Skip-Auth': 'true' }
-        })
-      );
+      const response = await axiosInstance.get(`/api/items/${uid}`, {
+        headers: { 'X-Skip-Auth': 'true' }
+      });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get recommendations for an item
      */
     getRecommendations: async (uid: string, n: number = 10) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/recommendations/${uid}`, { 
-          params: { n },
-          headers: { 'X-Skip-Auth': 'true' }
-        })
-      );
+      const response = await axiosInstance.get(`/api/recommendations/${uid}`, { 
+        params: { n },
+        headers: { 'X-Skip-Auth': 'true' }
+      });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get distinct filter values
      */
     getDistinctValues: async () => {
-      return executeWithRetry(() => 
-        axiosInstance.get('/api/distinct-values', {
-          headers: { 'X-Skip-Auth': 'true' }
-        })
-      );
+      const response = await axiosInstance.get('/api/distinct-values', {
+        headers: { 'X-Skip-Auth': 'true' }
+      });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Discover public lists
      */
     discoverLists: async (params?: Record<string, any>) => {
-      return executeWithRetry(() => 
-        axiosInstance.get('/api/lists/discover', { params })
-      );
+      const response = await axiosInstance.get('/api/lists/discover', { params });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get user profile (public view)
      */
     getUserProfile: async (userId: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/social/users/${userId}/profile`, {
-          headers: { 'X-Skip-Auth': 'true' }
-        })
-      );
+      const response = await axiosInstance.get(`/api/social/users/${userId}/profile`, {
+        headers: { 'X-Skip-Auth': 'true' }
+      });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get user's public lists
      */
     getUserLists: async (userId: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/social/users/${userId}/lists`, {
-          headers: { 'X-Skip-Auth': 'true' }
-        })
-      );
+      const response = await axiosInstance.get(`/api/social/users/${userId}/lists`, {
+        headers: { 'X-Skip-Auth': 'true' }
+      });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get user's followers
      */
     getUserFollowers: async (userId: string, params?: Record<string, any>) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/social/users/${userId}/followers`, { params })
-      );
+      const response = await axiosInstance.get(`/api/social/users/${userId}/followers`, { params });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get users that a user is following
      */
     getUserFollowing: async (userId: string, params?: Record<string, any>) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/social/users/${userId}/following`, { params })
-      );
+      const response = await axiosInstance.get(`/api/social/users/${userId}/following`, { params });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get list details
      */
     getListDetails: async (listId: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/lists/${listId}`)
-      );
+      const response = await axiosInstance.get(`/api/lists/${listId}`);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get list items
      */
     getListItems: async (listId: string, params?: Record<string, any>) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/lists/${listId}/items`, { params })
-      );
+      const response = await axiosInstance.get(`/api/lists/${listId}/items`, { params });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get list analytics (if public)
      */
     getListAnalytics: async (listId: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/analytics/lists/${listId}`)
-      );
+      const response = await axiosInstance.get(`/api/analytics/lists/${listId}`);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     }
   },
 
@@ -305,74 +308,74 @@ export const api = {
      * Get authenticated user's dashboard data
      */
     getDashboard: async () => {
-      return executeWithRetry(() => 
-        axiosInstance.get('/api/auth/dashboard')
-      );
+      const response = await axiosInstance.get('/api/auth/dashboard');
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get authenticated user's profile
      */
     getProfile: async () => {
-      return executeWithRetry(() => 
-        axiosInstance.get('/api/auth/profile')
-      );
+      const response = await axiosInstance.get('/api/auth/profile');
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Update authenticated user's profile
      */
     updateProfile: async (data: any) => {
-      return executeWithRetry(() => 
-        axiosInstance.put('/api/auth/profile', data)
-      );
+      const response = await axiosInstance.put('/api/auth/profile', data);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get authenticated user's items
      */
     getUserItems: async (status?: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.get('/api/auth/user-items', { 
-          params: status ? { status } : undefined 
-        })
-      );
+      const response = await axiosInstance.get('/api/auth/user-items', { 
+        params: status ? { status } : undefined 
+      });
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Add or update user item
      */
     updateUserItem: async (itemUid: string, data: any) => {
-      return executeWithRetry(() => 
-        axiosInstance.post(`/api/auth/user-items/${itemUid}`, data)
-      );
+      const response = await axiosInstance.post(`/api/auth/user-items/${itemUid}`, data);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Remove user item
      */
     removeUserItem: async (itemUid: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.delete(`/api/auth/user-items/${itemUid}`)
-      );
+      const response = await axiosInstance.delete(`/api/auth/user-items/${itemUid}`);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Force refresh user statistics
      */
     forceRefreshStats: async () => {
-      return executeWithRetry(() => 
-        axiosInstance.post('/api/auth/force-refresh-stats')
-      );
+      const response = await axiosInstance.post('/api/auth/force-refresh-stats');
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Cleanup orphaned items
      */
     cleanupOrphanedItems: async () => {
-      return executeWithRetry(() => 
-        axiosInstance.post('/api/auth/cleanup-orphaned-items')
-      );
+      const response = await axiosInstance.post('/api/auth/cleanup-orphaned-items');
+      coldStartDetector.resolveColdStart();
+      return response.data;
     }
   },
 
@@ -384,45 +387,45 @@ export const api = {
      * Follow/unfollow a user
      */
     toggleFollow: async (userId: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.post(`/api/social/follow/${userId}`)
-      );
+      const response = await axiosInstance.post(`/api/social/follow/${userId}`);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get comments for an entity
      */
     getComments: async (entityType: string, entityId: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/social/comments/${entityType}/${entityId}`)
-      );
+      const response = await axiosInstance.get(`/api/social/comments/${entityType}/${entityId}`);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Create a comment
      */
     createComment: async (data: any) => {
-      return executeWithRetry(() => 
-        axiosInstance.post('/api/social/comments', data)
-      );
+      const response = await axiosInstance.post('/api/social/comments', data);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Get reviews for an item
      */
     getReviews: async (itemUid: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.get(`/api/social/reviews/${itemUid}`)
-      );
+      const response = await axiosInstance.get(`/api/social/reviews/${itemUid}`);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Create a review
      */
     createReview: async (data: any) => {
-      return executeWithRetry(() => 
-        axiosInstance.post('/api/social/reviews', data)
-      );
+      const response = await axiosInstance.post('/api/social/reviews', data);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     }
   },
 
@@ -434,80 +437,70 @@ export const api = {
      * Get authenticated user's lists
      */
     getMyLists: async () => {
-      return executeWithRetry(() => 
-        axiosInstance.get('/api/auth/lists')
-      );
+      const response = await axiosInstance.get('/api/auth/lists');
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Create a new list
      */
     createList: async (data: any) => {
-      return executeWithRetry(() => 
-        axiosInstance.post('/api/auth/lists', data)
-      );
+      const response = await axiosInstance.post('/api/auth/lists', data);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Update list details
      */
     updateList: async (listId: string, data: any) => {
-      return executeWithRetry(() => 
-        axiosInstance.put(`/api/auth/lists/${listId}`, data)
-      );
+      const response = await axiosInstance.put(`/api/auth/lists/${listId}`, data);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Delete a list
      */
     deleteList: async (listId: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.delete(`/api/auth/lists/${listId}`)
-      );
+      const response = await axiosInstance.delete(`/api/auth/lists/${listId}`);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Add item to list
      */
     addItemToList: async (listId: string, itemId: string, data?: any) => {
-      return executeWithRetry(() => 
-        axiosInstance.post(`/api/auth/lists/${listId}/items/${itemId}`, data)
-      );
+      const response = await axiosInstance.post(`/api/auth/lists/${listId}/items/${itemId}`, data);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Remove item from list
      */
     removeItemFromList: async (listId: string, itemId: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.delete(`/api/auth/lists/${listId}/items/${itemId}`)
-      );
+      const response = await axiosInstance.delete(`/api/auth/lists/${listId}/items/${itemId}`);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     },
 
     /**
      * Follow/unfollow a list
      */
     toggleListFollow: async (listId: string) => {
-      return executeWithRetry(() => 
-        axiosInstance.post(`/api/auth/lists/${listId}/follow`)
-      );
+      const response = await axiosInstance.post(`/api/auth/lists/${listId}/follow`);
+      coldStartDetector.resolveColdStart();
+      return response.data;
     }
   },
 
   /**
    * Raw axios instance for custom requests
    */
-  raw: axiosInstance,
-
-  /**
-   * Utility method to create a custom retry configuration
-   */
-  withRetryConfig: <T>(
-    operation: () => Promise<AxiosResponse<T>>,
-    config: Partial<RetryConfig>
-  ) => {
-    return executeWithRetry(operation, config);
-  }
+  raw: axiosInstance
 };
 
 // Export types for use in components

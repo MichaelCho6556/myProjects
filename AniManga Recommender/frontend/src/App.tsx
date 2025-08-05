@@ -1,8 +1,11 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { AuthProvider } from "./context/AuthContext";
 import { LoadingProvider, useLoading } from "./context/LoadingContext";
 import { ToastProvider } from "./components/Feedback/ToastProvider";
+import { queryClient, persister } from "./config/queryClient";
 import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
 import ItemDetailPage from "./pages/ItemDetailPage";
@@ -69,15 +72,28 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <LoadingProvider>
-          <AuthProvider>
-            <Router>
-              <AppContent />
-            </Router>
-          </AuthProvider>
-        </LoadingProvider>
-      </ToastProvider>
+      <PersistQueryClientProvider 
+        client={queryClient}
+        persistOptions={{
+          persister,
+          maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+          buster: process.env.REACT_APP_VERSION || '1.0.0', // Cache busting on app version change
+        }}
+      >
+        <ToastProvider>
+          <LoadingProvider>
+            <AuthProvider>
+              <Router>
+                <AppContent />
+              </Router>
+            </AuthProvider>
+          </LoadingProvider>
+        </ToastProvider>
+        {/* React Query Devtools only in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <ReactQueryDevtools initialIsOpen={false} />
+        )}
+      </PersistQueryClientProvider>
     </ErrorBoundary>
   );
 };

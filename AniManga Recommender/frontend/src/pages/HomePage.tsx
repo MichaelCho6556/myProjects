@@ -67,8 +67,11 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
+import { useColdStart } from "../hooks/useColdStart";
+import { useOfflineDataStatus } from "../hooks/useApiCache";
 import ItemCard from "../components/ItemCard";
 import ItemCardSkeleton from "../components/Loading/ItemCardSkeleton";
+import ColdStartLoader from "../components/common/ColdStartLoader";
 import FilterBar from "../components/FilterBar";
 import PaginationControls from "../components/PaginationControls";
 import Spinner from "../components/Spinner";
@@ -198,12 +201,17 @@ const getMultiSelectValuesFromParam = (
  */
 const HomePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Cold start detection
+  const { isInColdStart } = useColdStart();
+  const { hasAnyData } = useOfflineDataStatus();
 
   // Data and loading states
   const [items, setItems] = useState<AnimeItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [filtersLoading, setFiltersLoading] = useState<boolean>(true);
+  const [isFirstLoad, setIsFirstLoad] = useState<boolean>(true);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState<number>(parseInt(searchParams.get("page") || "1"));
@@ -473,6 +481,11 @@ const HomePage: React.FC = () => {
         setTotalPages(itemsData.total_pages || 1);
         setCurrentPage(itemsData.page || 1); // API returns "page", not "current_page"
         setTotalItems(itemsData.total_items || 0);
+        
+        // Mark first load as complete
+        if (isFirstLoad) {
+          setIsFirstLoad(false);
+        }
       } catch (err) {
         handleError(err as Error, "loading items");
         setItems([]);
@@ -484,7 +497,7 @@ const HomePage: React.FC = () => {
     };
 
     fetchItems();
-  }, [searchParams, handleError]);
+  }, [searchParams, handleError, isFirstLoad]);
 
   /**
    * Media type filter change handler.
@@ -1103,8 +1116,25 @@ const HomePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Loading States */}
-        {loading && items.length === 0 && (
+        {/* Cold Start Loading State */}
+        {isInColdStart && loading && isFirstLoad && (
+          <ColdStartLoader 
+            isVisible={true}
+            hasCachedData={hasAnyData}
+            onBrowseOffline={() => {
+              // Navigate to cached items view
+              window.location.reload();
+            }}
+            customMessages={{
+              initial: "Starting up the anime & manga database...",
+              extended: "Almost ready! The server is loading your content...",
+              prolonged: "First visit takes a bit longer. Thanks for your patience!"
+            }}
+          />
+        )}
+
+        {/* Normal Loading States */}
+        {!isInColdStart && loading && items.length === 0 && (
           <section className="skeleton-container" aria-label="Loading content" data-testid="skeleton-loading">
             <div className="item-list">
               {Array.from({ length: itemsPerPage }).map((_, index) => (
