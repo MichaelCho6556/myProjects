@@ -89,7 +89,7 @@ class LocalStorageManager {
       const stored = localStorage.getItem(metadataKey);
       
       if (stored) {
-        const parsed = JSON.parse(stored);
+        const parsed = JSON.parse(stored as string);
         this.metadata = new Map(Object.entries(parsed));
       }
     } catch (error) {
@@ -256,10 +256,18 @@ class LocalStorageManager {
       const metadata: StorageMetadata = {
         key,
         size,
-        timestamp: Date.now(),
-        version: options.ttl ? -(Date.now() + options.ttl) : options.version,
-        encrypted: options.encrypt && !!this.config.encryptionKey
+        timestamp: Date.now()
       };
+      
+      // Add optional properties only if they have values
+      const version = options.ttl ? -(Date.now() + options.ttl) : options.version;
+      if (version !== undefined) {
+        metadata.version = version;
+      }
+      
+      if (options.encrypt && !!this.config.encryptionKey) {
+        metadata.encrypted = true;
+      }
       
       this.metadata.set(key, metadata);
       this.saveMetadata();
@@ -291,7 +299,7 @@ class LocalStorageManager {
       }
       
       
-      return this.deserialize(data, metadata);
+      return this.deserialize(data as string, metadata);
     } catch (error) {
       this.logError(`Failed to retrieve ${key}`, error);
       return null;
