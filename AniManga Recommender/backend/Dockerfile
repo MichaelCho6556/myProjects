@@ -27,7 +27,7 @@ RUN pip install --no-cache-dir PyJWT==2.10.1
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install production server
-RUN pip install --no-cache-dir gunicorn==22.0.0
+RUN pip install --no-cache-dir gunicorn==23.0.0
 
 # Verify that JWT can be imported (catch issues early)
 RUN python -c "import jwt; print('✅ JWT imported successfully:', jwt.__version__)"
