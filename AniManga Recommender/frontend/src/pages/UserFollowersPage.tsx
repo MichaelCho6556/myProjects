@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { api } from "../services/api";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import { generateAvatarColor } from "../utils/helpers";
@@ -26,8 +27,6 @@ interface FollowersData {
   limit: number;
   has_more: boolean;
 }
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 export const UserFollowersPage: React.FC = () => {
   const { username } = useParams<{ username: string }>();
@@ -59,29 +58,10 @@ export const UserFollowersPage: React.FC = () => {
     }
 
     try {
-      const headers: Record<string, string> = {};
-      
-      // Add auth header if user is logged in
-      try {
-        const { data: { session } } = await import('../lib/supabase').then(m => m.supabase.auth.getSession());
-        if (session?.access_token) {
-          headers['Authorization'] = `Bearer ${session.access_token}`;
-        }
-      } catch (authError) {
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/users/${username}/followers?page=${page}&limit=20`, {
-        headers
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error("User not found");
-        }
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data: FollowersData = await response.json();
+      const data = await api.public.getUserFollowers(username, { 
+        page, 
+        limit: 20 
+      }) as FollowersData;
       
       if (reset) {
         setFollowersData(data);
@@ -109,37 +89,21 @@ export const UserFollowersPage: React.FC = () => {
     }
 
     try {
-      const { data: { session } } = await import('../lib/supabase').then(m => m.supabase.auth.getSession());
-      if (!session?.access_token) {
-        navigate('/auth/login');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/auth/follow/${targetUsername}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const result = await response.json();
+      const result = await api.social.toggleFollow(targetUsername);
+      
+      // Update local state
+      setFollowersData(prev => {
+        if (!prev) return prev;
         
-        // Update local state
-        setFollowersData(prev => {
-          if (!prev) return prev;
-          
-          return {
-            ...prev,
-            followers: prev.followers.map(follower => 
-              follower.id === targetUserId 
-                ? { ...follower, is_following: result.is_following }
-                : follower
-            )
-          };
-        });
-      }
+        return {
+          ...prev,
+          followers: prev.followers.map(follower => 
+            follower.id === targetUserId 
+              ? { ...follower, is_following: result.is_following }
+              : follower
+          )
+        };
+      });
     } catch (error) {
       console.error('Error toggling follow:', error);
     }

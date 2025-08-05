@@ -66,14 +66,14 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import axios from "axios";
+import { api } from "../services/api";
 import ItemCard from "../components/ItemCard";
 import ItemCardSkeleton from "../components/Loading/ItemCardSkeleton";
 import FilterBar from "../components/FilterBar";
 import PaginationControls from "../components/PaginationControls";
 import Spinner from "../components/Spinner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
-import { createErrorHandler, retryOperation, validateResponseData } from "../utils/errorHandler";
+import { createErrorHandler, validateResponseData } from "../utils/errorHandler";
 import RetryButton from "../components/Feedback/RetryButton";
 import "../App.css";
 import {
@@ -89,12 +89,6 @@ import {
   FilterBarProps,
 } from "../types";
 import { secureStorage } from "../utils/security";
-
-/**
- * Base URL for API endpoints.
- * Centralized configuration for backend communication.
- */
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 /**
  * Get initial items per page from localStorage with validation.
@@ -283,10 +277,7 @@ const HomePage: React.FC = () => {
     const fetchFilterOptions = async (): Promise<void> => {
       setFiltersLoading(true);
       try {
-        const operation = () => axios.get<DistinctValuesApiResponse>(`${API_BASE_URL}/api/distinct-values`);
-        const response = await retryOperation(operation, { maxRetries: 3, baseDelayMs: 1000 });
-
-        let distinctData = response.data;
+        let distinctData = await api.public.getDistinctValues() as DistinctValuesApiResponse;
 
         // Handle case where server returns stringified JSON
         if (typeof distinctData === "string") {
@@ -337,11 +328,9 @@ const HomePage: React.FC = () => {
           setError(null);
 
           try {
-            const paramsString = searchParams.toString();
-            const operation = () => axios.get<ItemsApiResponse>(`${API_BASE_URL}/api/items?${paramsString}`);
-            const response = await retryOperation(operation, { maxRetries: 3, baseDelayMs: 1000 });
-
-            let itemsData = response.data;
+            // Convert URLSearchParams to plain object for API
+            const params = Object.fromEntries(searchParams.entries());
+            let itemsData = await api.public.getItems(params) as ItemsApiResponse;
 
             // Handle case where server returns stringified JSON
             if (typeof itemsData === "string") {
@@ -459,11 +448,9 @@ const HomePage: React.FC = () => {
       setError(null);
 
       try {
-        const paramsString = searchParams.toString();
-        const operation = () => axios.get<ItemsApiResponse>(`${API_BASE_URL}/api/items?${paramsString}`);
-        const response = await retryOperation(operation, { maxRetries: 3, baseDelayMs: 1000 });
-
-        let itemsData = response.data;
+        // Convert URLSearchParams to plain object for API
+        const params = Object.fromEntries(searchParams.entries());
+        let itemsData = await api.public.getItems(params) as ItemsApiResponse;
 
         // Handle case where server returns stringified JSON
         if (typeof itemsData === "string") {
