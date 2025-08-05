@@ -145,6 +145,7 @@ class SupabaseClient:
             - Response compression support (gzip, deflate)
             - JSON response validation
             - Detailed error logging for debugging
+            - Retry logic with exponential backoff for resilience
             
         Example:
             >>> response = client._make_request('GET', 'items', {'limit': 100})
@@ -168,37 +169,64 @@ class SupabaseClient:
             'Accept': 'application/json'  # Explicitly request JSON
         }
         
-        try:
-            response = requests.request(
-                method=method,
-                url=url,
-                headers=headers,
-                params=params,
-                json=data,
-                timeout=30
-            )
-            
-            # Check if request was successful
-            if response.status_code not in [200, 201, 204]:
-                logger.error(f"Request failed: {response.status_code} - {url} - {response.text}")
-                response.raise_for_status()
-            
-            # Handle potential response parsing issues
-            if response.status_code in [200, 201] and response.text:
-                try:
-                    # Test if we can parse the JSON
-                    response.json()
-                except ValueError as e:
-                    logger.error(f"JSON parsing issue: {e} - Response length: {len(response.text)} bytes - Content-Type: {response.headers.get('Content-Type', 'unknown')}")
-            
-            return response
-            
-        except requests.exceptions.Timeout:
-            logger.error(f"Request timeout for {endpoint}")
-            raise
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Request failed for {endpoint}: {e}")
-            raise
+        # Retry configuration
+        max_retries = 3
+        retry_delay = 1  # Initial delay in seconds
+        retry_statuses = [502, 503, 504]  # Gateway errors that are worth retrying
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    params=params,
+                    json=data,
+                    timeout=30
+                )
+                
+                # Check if request was successful
+                if response.status_code not in [200, 201, 204]:
+                    # Check if this is a retryable error
+                    if response.status_code in retry_statuses and attempt < max_retries - 1:
+                        logger.warning(f"Retryable error {response.status_code} for {endpoint}, attempt {attempt + 1}/{max_retries}")
+                        time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                        continue
+                    
+                    logger.error(f"Request failed: {response.status_code} - {url} - {response.text}")
+                    response.raise_for_status()
+                
+                # Handle potential response parsing issues
+                if response.status_code in [200, 201] and response.text:
+                    try:
+                        # Test if we can parse the JSON
+                        response.json()
+                    except ValueError as e:
+                        logger.error(f"JSON parsing issue: {e} - Response length: {len(response.text)} bytes - Content-Type: {response.headers.get('Content-Type', 'unknown')}")
+                
+                # Success - return the response
+                if attempt > 0:
+                    logger.info(f"Request succeeded after {attempt + 1} attempts for {endpoint}")
+                return response
+                
+            except requests.exceptions.Timeout:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Request timeout for {endpoint}, attempt {attempt + 1}/{max_retries}")
+                    time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                    continue
+                logger.error(f"Request timeout for {endpoint} after {max_retries} attempts")
+                raise
+            except requests.exceptions.ConnectionError:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Connection error for {endpoint}, attempt {attempt + 1}/{max_retries}")
+                    time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                    continue
+                logger.error(f"Connection error for {endpoint} after {max_retries} attempts")
+                raise
+            except requests.exceptions.RequestException as e:
+                # Don't retry on other types of errors (e.g., invalid JSON)
+                logger.error(f"Request failed for {endpoint}: {e}")
+                raise
     
     def get_all_items(self, limit: int = 1000, offset: int = 0) -> List[Dict]:
         """
@@ -267,6 +295,64 @@ class SupabaseClient:
         items = response.json()
         
         return items
+    
+    def check_health(self) -> Dict[str, Any]:
+        """
+        Check database connectivity and health status.
+        
+        This method performs a lightweight health check by attempting to
+        query a single item from the database. Used for monitoring and
+        health check endpoints.
+        
+        Returns:
+            Dict containing:
+                - connected (bool): Whether database is accessible
+                - response_time_ms (float): Response time in milliseconds
+                - error (str, optional): Error message if connection failed
+                
+        Example:
+            >>> health = client.check_health()
+            >>> if health['connected']:
+            ...     print(f"Database healthy, response time: {health['response_time_ms']}ms")
+            ... else:
+            ...     print(f"Database error: {health['error']}")
+        """
+        start_time = time.time()
+        
+        try:
+            # Perform a lightweight query - just fetch one item
+            params = {
+                'select': 'uid',  # Only select minimal data
+                'limit': 1
+            }
+            
+            response = self._make_request('GET', 'items', params=params)
+            
+            # Calculate response time
+            response_time_ms = (time.time() - start_time) * 1000
+            
+            # Check if we got a valid response
+            if response.status_code == 200:
+                return {
+                    'connected': True,
+                    'response_time_ms': round(response_time_ms, 2),
+                    'status_code': response.status_code
+                }
+            else:
+                return {
+                    'connected': False,
+                    'response_time_ms': round(response_time_ms, 2),
+                    'status_code': response.status_code,
+                    'error': f'Unexpected status code: {response.status_code}'
+                }
+                
+        except Exception as e:
+            response_time_ms = (time.time() - start_time) * 1000
+            return {
+                'connected': False,
+                'response_time_ms': round(response_time_ms, 2),
+                'error': str(e)
+            }
     
     def get_all_items_paginated(self, page_size: int = 1000) -> List[Dict]:
         """
