@@ -5292,14 +5292,14 @@ def get_personalized_recommendations() -> Union[Response, Tuple[Response, int]]:
                     return jsonify({'error': 'Limit must be between 1 and 100'}), 400
                 limit = min(limit, 50)  # Cap at 50 for performance
             except ValueError:
-                return jsonify({'error': f'Invalid limit parameter: {limit_str}. Must be an integer.'}), 400
+                return jsonify({'error': 'Invalid limit parameter. Must be an integer between 1 and 100.'}), 400
             
             # Parse and validate section parameter
             section = request.args.get('section', 'all').lower().strip()
             valid_sections = ['all', 'completed_based', 'trending_genres', 'hidden_gems']
             if section not in valid_sections:
                 return jsonify({
-                    'error': f'Invalid section parameter: {section}',
+                    'error': 'Invalid section parameter.',
                     'valid_sections': valid_sections
                 }), 400
             
@@ -5308,7 +5308,7 @@ def get_personalized_recommendations() -> Union[Response, Tuple[Response, int]]:
             valid_content_types = ['all', 'anime', 'manga']
             if content_type not in valid_content_types:
                 return jsonify({
-                    'error': f'Invalid content_type parameter: {content_type}',
+                    'error': 'Invalid content_type parameter.',
                     'valid_content_types': valid_content_types
                 }), 400
             
@@ -5318,7 +5318,8 @@ def get_personalized_recommendations() -> Union[Response, Tuple[Response, int]]:
             
             # Log request parameters for monitoring
         except Exception as param_error:
-            return jsonify({'error': f'Parameter validation failed: {str(param_error)}'}), 400
+            logger.error(f'Parameter validation failed: {str(param_error)}')
+            return jsonify({'error': 'Parameter validation failed. Please check your request parameters.'}), 400
         
         # Production-ready cache management with content type and section support
         cache_hit = False
@@ -5535,7 +5536,8 @@ def admin_reload_data() -> Union[Response, Tuple[Response, int]]:
         total = 0 if df_processed is None else len(df_processed)
         return jsonify({"status": "success", "total_items": total}), 200
     except Exception as exc:
-        return jsonify({"error": f"Failed to reload data: {exc}"}), 500
+        logger.error(f"Failed to reload data: {exc}")
+        return jsonify({"error": "Failed to reload data. Please try again later."}), 500
 
 @app.route('/api/auth/personalized-recommendations/feedback', methods=['POST'])
 @require_auth
@@ -5636,7 +5638,7 @@ def submit_recommendation_feedback() -> Union[Response, Tuple[Response, int]]:
         required_fields = ['item_uid', 'action', 'section_type']
         for field in required_fields:
             if field not in data:
-                return jsonify({'error': f'Missing required field: {field}'}), 400
+                return jsonify({'error': 'Missing required field', 'field': field}), 400
         
         item_uid = data['item_uid']
         action = data['action']
@@ -5648,12 +5650,12 @@ def submit_recommendation_feedback() -> Union[Response, Tuple[Response, int]]:
         # Validate action type
         valid_actions = ['not_interested', 'added_to_list', 'rated', 'clicked']
         if action not in valid_actions:
-            return jsonify({'error': f'Invalid action. Must be one of: {", ".join(valid_actions)}'}), 400
+            return jsonify({'error': 'Invalid action', 'valid_actions': valid_actions}), 400
         
         # Validate section type
         valid_sections = ['completed_based', 'trending_genres', 'hidden_gems']
         if section_type not in valid_sections:
-            return jsonify({'error': f'Invalid section_type. Must be one of: {", ".join(valid_sections)}'}), 400
+            return jsonify({'error': 'Invalid section_type', 'valid_sections': valid_sections}), 400
         
         # Validate rating if provided
         if rating is not None:
@@ -6574,7 +6576,7 @@ def update_privacy_settings() -> Union[Response, Tuple[Response, int]]:
         for field in visibility_fields:
             if field in data and data[field] not in valid_visibility_options:
                 return jsonify({
-                    'error': f'Invalid {field}. Must be one of: {", ".join(valid_visibility_options)}'
+                    'error': "Invalid . Must be one of: {", ".join(valid_visibility_options)}'
                 }), 400
         
         result = auth_client.update_privacy_settings(user_id, data)
@@ -6897,7 +6899,8 @@ def debug_test_lists() -> Union[Response, Tuple[Response, int]]:
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e), 'test_status': 'failed'}), 500
+        logger.error(f"Test endpoint error: {str(e)}")
+        return jsonify({'error': 'Test failed. Please check logs.', 'test_status': 'failed'}), 500
 
 # =============================================================================
 # PRIVACY TEST ENDPOINTS - For frontend integration testing
@@ -7074,9 +7077,10 @@ def setup_privacy_test_data() -> Union[Response, Tuple[Response, int]]:
     except Exception as e:
         pass  # Exception traceback removed
         
+        logger.error(f"Error occurred: {str(e)})")
         return jsonify({
             'status': 'error',
-            'error': str(e),
+            "error": "An error occurred. Please try again later.",
             'message': 'Failed to setup privacy test data',
             'traceback': traceback.format_exc()
         }), 500
@@ -7126,9 +7130,10 @@ def cleanup_privacy_test_data() -> Union[Response, Tuple[Response, int]]:
         }), 200
         
     except Exception as e:
+        logger.error(f"Error occurred: {str(e)})")
         return jsonify({
             'status': 'error',
-            'error': str(e),
+            "error": "An error occurred. Please try again later.",
             'message': 'Failed to cleanup privacy test data'
         }), 500
 
@@ -7186,9 +7191,10 @@ def generate_test_auth_token() -> Union[Response, Tuple[Response, int]]:
         }), 200
         
     except Exception as e:
+        logger.error(f"Error occurred: {str(e)})")
         return jsonify({
             'status': 'error',
-            'error': str(e)
+            "error": "An error occurred. Please try again later."
         }), 500
 
 @app.route('/api/analytics/user/<user_id>/stats', methods=['GET'])
@@ -7370,9 +7376,10 @@ def get_cache_status_endpoint() -> Union[Response, Tuple[Response, int]]:
         status = get_cache_status()
         return jsonify(status), 200
     except Exception as e:
+        logger.error(f"Error occurred: {str(e)})")
         return jsonify({
             'connected': False,
-            'error': str(e),
+            "error": "An error occurred. Please try again later.",
             'timestamp': datetime.utcnow().isoformat()
         }), 500
 
@@ -7444,9 +7451,10 @@ def system_health_check() -> Union[Response, Tuple[Response, int]]:
         return jsonify(health), 200
         
     except Exception as e:
+        logger.error(f"Error occurred: {str(e)})")
         return jsonify({
             'status': 'unhealthy',
-            'error': str(e),
+            "error": "An error occurred. Please try again later.",
             'timestamp': datetime.utcnow().isoformat()
         }), 500
 
@@ -7510,9 +7518,10 @@ def verify_privacy_enforcement() -> Union[Response, Tuple[Response, int]]:
         }), 200
         
     except Exception as e:
+        logger.error(f"Error occurred: {str(e)})")
         return jsonify({
             'status': 'error',
-            'error': str(e)
+            "error": "An error occurred. Please try again later."
         }), 500
 
 # =============================================================================
@@ -8479,7 +8488,7 @@ def create_review() -> Union[Response, Tuple[Response, int]]:
         required_fields = ['item_uid', 'title', 'content', 'overall_rating']
         for field in required_fields:
             if field not in data or not data[field]:
-                return jsonify({'error': f'Missing required field: {field}'}), 400
+                return jsonify({'error': 'Missing required field', 'field': field}), 400
         
         # Validate field constraints
         if len(data['title']) < 5 or len(data['title']) > 100:
@@ -8496,7 +8505,7 @@ def create_review() -> Union[Response, Tuple[Response, int]]:
         for rating in aspect_ratings:
             if rating in data and data[rating] is not None:
                 if not (1.0 <= data[rating] <= 10.0):
-                    return jsonify({'error': f'{rating} must be between 1.0 and 10.0'}), 400
+                    return jsonify({'error': 'Rating must be between 1.0 and 10.0', 'field': rating}), 400
         
         # Validate spoiler level if provided
         if 'spoiler_level' in data and data['spoiler_level'] not in [None, 'minor', 'major']:
@@ -8706,7 +8715,7 @@ def report_review(review_id) -> Union[Response, Tuple[Response, int]]:
         valid_reasons = ['spam', 'inappropriate', 'spoilers', 'harassment', 'fake', 'other']
         
         if not report_reason or report_reason not in valid_reasons:
-            return jsonify({'error': f'Report reason must be one of: {", ".join(valid_reasons)}'}), 400
+            return jsonify({'error': 'Invalid report reason', 'valid_reasons': valid_reasons}), 400
         
         additional_context = data.get('additional_context', '')
         if len(additional_context) > 500:
@@ -8937,7 +8946,7 @@ def create_comment() -> Union[Response, Tuple[Response, int]]:
         # Validate parent_type
         valid_parent_types = ['item', 'list', 'review']
         if data['parent_type'] not in valid_parent_types:
-            return jsonify({'error': f'Invalid parent_type. Must be one of: {valid_parent_types}'}), 400
+            return jsonify({'error': 'Invalid parent_type', 'valid_types': valid_parent_types}), 400
         
         # Validate content length (enforced by database constraint)
         content = data['content'].strip()
@@ -9067,7 +9076,7 @@ def get_comments(parent_type, parent_id) -> Union[Response, Tuple[Response, int]
         # Validate parent_type
         valid_parent_types = ['item', 'list', 'review']
         if parent_type not in valid_parent_types:
-            return jsonify({'error': f'Invalid parent_type. Must be one of: {valid_parent_types}'}), 400
+            return jsonify({'error': 'Invalid parent_type', 'valid_types': valid_parent_types}), 400
         
         # Get pagination parameters
         page = int(request.args.get('page', 1))
@@ -9295,7 +9304,7 @@ def react_to_comment(comment_id) -> Union[Response, Tuple[Response, int]]:
         valid_reactions = ['like', 'dislike', 'thumbs_up', 'thumbs_down', 'laugh', 'surprise', 'sad', 'angry', 'heart', 'thinking']
         
         if reaction_type not in valid_reactions:
-            return jsonify({'error': f'Invalid reaction_type. Must be one of: {valid_reactions}'}), 400
+            return jsonify({'error': 'Invalid reaction_type', 'valid_reactions': valid_reactions}), 400
         
         # Check if comment exists
         comment = supabase_client.table('comments').select('id, user_id').eq('id', comment_id).execute()
@@ -9525,7 +9534,7 @@ def report_comment(comment_id) -> Union[Response, Tuple[Response, int]]:
         valid_reasons = ['spam', 'harassment', 'inappropriate', 'offensive', 'other']
         
         if report_reason not in valid_reasons:
-            return jsonify({'error': f'Invalid report_reason. Must be one of: {valid_reasons}'}), 400
+            return jsonify({'error': 'Invalid report_reason', 'valid_reasons': valid_reasons}), 400
         
         # Check if comment exists
         comment = supabase_client.table('comments').select('id, user_id').eq('id', comment_id).execute()
@@ -9740,7 +9749,7 @@ def create_appeal() -> Union[Response, Tuple[Response, int]]:
         required_fields = ['content_type', 'content_id', 'original_action', 'appeal_reason']
         for field in required_fields:
             if not data.get(field):
-                return jsonify({'error': f'Missing required field: {field}'}), 400
+                return jsonify({'error': 'Missing required field', 'field': field}), 400
         
         # Validate content_type
         valid_content_types = ['comment', 'review', 'profile']
@@ -10531,10 +10540,10 @@ def update_moderation_report(report_id) -> Union[Response, Tuple[Response, int]]
         valid_actions = ['remove_content', 'warn_user', 'no_action', 'temp_ban', 'permanent_ban']
         
         if status not in valid_statuses:
-            return jsonify({'error': f'Invalid status. Must be one of: {valid_statuses}'}), 400
+            return jsonify({'error': 'Invalid status', 'valid_statuses': valid_statuses}), 400
             
         if resolution_action not in valid_actions:
-            return jsonify({'error': f'Invalid resolution_action. Must be one of: {valid_actions}'}), 400
+            return jsonify({'error': 'Invalid resolution_action', 'valid_actions': valid_actions}), 400
         
         # Check if it's a comment report or review report
         comment_report = (supabase_client.table('comment_reports')

@@ -67,6 +67,47 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import ItemCard from "../components/ItemCard";
+
+// URL Sanitization - Prevents XSS through dangerous URL schemes
+export const sanitizeUrl = (url) => {
+  if (!url) return '';
+  
+  // Decode URL to catch encoded attacks
+  let decodedUrl = url;
+  try {
+    decodedUrl = decodeURIComponent(url);
+  } catch {
+    decodedUrl = url;
+  }
+  
+  const lowerUrl = decodedUrl.trim().toLowerCase();
+  
+  // Dangerous schemes to block
+  const dangerousSchemes = [
+    'javascript:', 'data:', 'vbscript:', 'file:', 'about:',
+    'chrome:', 'chrome-extension:', 'ms-appx:', 'ms-appx-web:',
+    'ms-local-stream:', 'res:', 'ie.http:', 'mk:', 'mhtml:',
+    'view-source:', 'ws:', 'wss:', 'ftp:', 'intent:',
+    'web+app:', 'web+action:'
+  ];
+  
+  // Check if URL starts with any dangerous scheme
+  for (const scheme of dangerousSchemes) {
+    if (lowerUrl.startsWith(scheme)) {
+      return 'about:blank';
+    }
+  }
+  
+  // Additional check for encoded attempts
+  if (lowerUrl.includes('javascript:') || 
+      lowerUrl.includes('data:') || 
+      lowerUrl.includes('vbscript:')) {
+    return 'about:blank';
+  }
+  
+  return url;
+};
+
 import "./ItemDetail.css";
 import Spinner from "../components/Spinner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
@@ -357,7 +398,7 @@ const ItemDetailPage: React.FC = () => {
    * @example
    * ```tsx
    * <img
-   *   src={item.image_url}
+   *   src={sanitizeUrl(item.image_url)}
    *   alt={item.title}
    *   onError={handleImageError}
    * />
@@ -459,7 +500,7 @@ const ItemDetailPage: React.FC = () => {
           {/* Image Section */}
           <div className="item-detail-image">
             <img
-              src={item.image_url || getDefaultImage()}
+              src={sanitizeUrl(item.image_url || getDefaultImage())}
               alt={`Cover for ${item.title}`}
               className="item-image"
               onError={handleImageError}
@@ -653,7 +694,7 @@ const ItemDetailPage: React.FC = () => {
                   {item.external_links.map((link, index) => (
                     <a
                       key={`link-${index}`}
-                      href={link.url}
+                      href={sanitizeUrl(link.url)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="external-link"
@@ -696,7 +737,7 @@ const ItemDetailPage: React.FC = () => {
             <h3>Trailer</h3>
             <div className="video-responsive">
               <iframe
-                src={`https://www.youtube.com/embed/${youtubeID}`}
+                src={sanitizeUrl(`https://www.youtube.com/embed/${youtubeID)}`}
                 title={`${item.title} Trailer`}
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

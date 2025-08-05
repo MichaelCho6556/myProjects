@@ -3,6 +3,47 @@ import { Link } from "react-router-dom";
 import { ItemCardProps } from "../types";
 import LazyImage from "./LazyImage";
 
+
+// URL Sanitization - Prevents XSS through dangerous URL schemes
+export const sanitizeUrl = (url) => {
+  if (!url) return '';
+  
+  // Decode URL to catch encoded attacks
+  let decodedUrl = url;
+  try {
+    decodedUrl = decodeURIComponent(url);
+  } catch {
+    decodedUrl = url;
+  }
+  
+  const lowerUrl = decodedUrl.trim().toLowerCase();
+  
+  // Dangerous schemes to block
+  const dangerousSchemes = [
+    'javascript:', 'data:', 'vbscript:', 'file:', 'about:',
+    'chrome:', 'chrome-extension:', 'ms-appx:', 'ms-appx-web:',
+    'ms-local-stream:', 'res:', 'ie.http:', 'mk:', 'mhtml:',
+    'view-source:', 'ws:', 'wss:', 'ftp:', 'intent:',
+    'web+app:', 'web+action:'
+  ];
+  
+  // Check if URL starts with any dangerous scheme
+  for (const scheme of dangerousSchemes) {
+    if (lowerUrl.startsWith(scheme)) {
+      return 'about:blank';
+    }
+  }
+  
+  // Additional check for encoded attempts
+  if (lowerUrl.includes('javascript:') || 
+      lowerUrl.includes('data:') || 
+      lowerUrl.includes('vbscript:')) {
+    return 'about:blank';
+  }
+  
+  return url;
+};
+
 const DEFAULT_PLACEHOLDER_IMAGE = "/images/default.webp";
 
 /**
@@ -129,7 +170,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, className = "" }) => {
       <article className="item-card">
         <div className="item-card-image">
           <LazyImage
-            src={imageUrl}
+            src={sanitizeUrl(imageUrl)}
             alt={`Cover for ${title}`}
             fallbackSrc={DEFAULT_PLACEHOLDER_IMAGE}
             title={title}

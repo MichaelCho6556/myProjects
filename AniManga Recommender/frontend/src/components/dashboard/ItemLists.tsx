@@ -4,6 +4,47 @@ import { UserItem } from "../../types";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { logger } from "../../utils/logger";
 
+
+// URL Sanitization - Prevents XSS through dangerous URL schemes
+export const sanitizeUrl = (url) => {
+  if (!url) return '';
+  
+  // Decode URL to catch encoded attacks
+  let decodedUrl = url;
+  try {
+    decodedUrl = decodeURIComponent(url);
+  } catch {
+    decodedUrl = url;
+  }
+  
+  const lowerUrl = decodedUrl.trim().toLowerCase();
+  
+  // Dangerous schemes to block
+  const dangerousSchemes = [
+    'javascript:', 'data:', 'vbscript:', 'file:', 'about:',
+    'chrome:', 'chrome-extension:', 'ms-appx:', 'ms-appx-web:',
+    'ms-local-stream:', 'res:', 'ie.http:', 'mk:', 'mhtml:',
+    'view-source:', 'ws:', 'wss:', 'ftp:', 'intent:',
+    'web+app:', 'web+action:'
+  ];
+  
+  // Check if URL starts with any dangerous scheme
+  for (const scheme of dangerousSchemes) {
+    if (lowerUrl.startsWith(scheme)) {
+      return 'about:blank';
+    }
+  }
+  
+  // Additional check for encoded attempts
+  if (lowerUrl.includes('javascript:') || 
+      lowerUrl.includes('data:') || 
+      lowerUrl.includes('vbscript:')) {
+    return 'about:blank';
+  }
+  
+  return url;
+};
+
 interface ItemListsProps {
   inProgress?: UserItem[];
   planToWatch?: UserItem[];
@@ -92,7 +133,7 @@ const ItemLists: React.FC<ItemListsProps> = ({
             <div className="item-image-container">
               <Link to={`/item/${userItem.item_uid}`}>
                 <img
-                  src={userItem.item?.image_url || "/images/default.webp"}
+                  src={sanitizeUrl(userItem.item?.image_url || "/images/default.webp")}
                   alt={userItem.item?.title || "Unknown"}
                   className="item-thumbnail"
                 />

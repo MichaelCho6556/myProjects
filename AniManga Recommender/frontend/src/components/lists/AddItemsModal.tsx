@@ -5,6 +5,47 @@ import React, { useState, useCallback } from 'react';
 import { useAuthenticatedApi } from '../../hooks/useAuthenticatedApi';
 import { useDebounce } from '../../hooks/useDebounce';
 import { logger } from '../../utils/logger';
+
+// URL Sanitization - Prevents XSS through dangerous URL schemes
+export const sanitizeUrl = (url) => {
+  if (!url) return '';
+  
+  // Decode URL to catch encoded attacks
+  let decodedUrl = url;
+  try {
+    decodedUrl = decodeURIComponent(url);
+  } catch {
+    decodedUrl = url;
+  }
+  
+  const lowerUrl = decodedUrl.trim().toLowerCase();
+  
+  // Dangerous schemes to block
+  const dangerousSchemes = [
+    'javascript:', 'data:', 'vbscript:', 'file:', 'about:',
+    'chrome:', 'chrome-extension:', 'ms-appx:', 'ms-appx-web:',
+    'ms-local-stream:', 'res:', 'ie.http:', 'mk:', 'mhtml:',
+    'view-source:', 'ws:', 'wss:', 'ftp:', 'intent:',
+    'web+app:', 'web+action:'
+  ];
+  
+  // Check if URL starts with any dangerous scheme
+  for (const scheme of dangerousSchemes) {
+    if (lowerUrl.startsWith(scheme)) {
+      return 'about:blank';
+    }
+  }
+  
+  // Additional check for encoded attempts
+  if (lowerUrl.includes('javascript:') || 
+      lowerUrl.includes('data:') || 
+      lowerUrl.includes('vbscript:')) {
+    return 'about:blank';
+  }
+  
+  return url;
+};
+
 import './AddItemsModal.css';
 
 interface SearchResult {
@@ -196,7 +237,7 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
                 {selectedItems.map(item => (
                   <div key={item.uid} className="selected-item">
                     <img 
-                      src={item.imageUrl || '/images/default.webp'} 
+                      src={sanitizeUrl(item.imageUrl || '/images/default.webp')} 
                       alt={item.title}
                       className="item-image"
                     />
@@ -269,7 +310,7 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
                     onClick={() => handleItemSelect(item)}
                   >
                     <img 
-                      src={item.imageUrl || '/images/default.webp'} 
+                      src={sanitizeUrl(item.imageUrl || '/images/default.webp')} 
                       alt={item.title}
                       className="item-image"
                     />

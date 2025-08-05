@@ -6,6 +6,47 @@ import { useUserSearch } from "../../hooks/useSocialFeatures";
 import { FollowButton } from "./FollowButton";
 import { useDebounce } from "../../hooks/useDebounce";
 
+
+// URL Sanitization - Prevents XSS through dangerous URL schemes
+export const sanitizeUrl = (url) => {
+  if (!url) return '';
+  
+  // Decode URL to catch encoded attacks
+  let decodedUrl = url;
+  try {
+    decodedUrl = decodeURIComponent(url);
+  } catch {
+    decodedUrl = url;
+  }
+  
+  const lowerUrl = decodedUrl.trim().toLowerCase();
+  
+  // Dangerous schemes to block
+  const dangerousSchemes = [
+    'javascript:', 'data:', 'vbscript:', 'file:', 'about:',
+    'chrome:', 'chrome-extension:', 'ms-appx:', 'ms-appx-web:',
+    'ms-local-stream:', 'res:', 'ie.http:', 'mk:', 'mhtml:',
+    'view-source:', 'ws:', 'wss:', 'ftp:', 'intent:',
+    'web+app:', 'web+action:'
+  ];
+  
+  // Check if URL starts with any dangerous scheme
+  for (const scheme of dangerousSchemes) {
+    if (lowerUrl.startsWith(scheme)) {
+      return 'about:blank';
+    }
+  }
+  
+  // Additional check for encoded attempts
+  if (lowerUrl.includes('javascript:') || 
+      lowerUrl.includes('data:') || 
+      lowerUrl.includes('vbscript:')) {
+    return 'about:blank';
+  }
+  
+  return url;
+};
+
 export const UserSearchComponent: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedQuery = useDebounce(searchQuery, 500);
@@ -80,7 +121,7 @@ export const UserSearchComponent: React.FC = () => {
                   <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                     {user.avatarUrl ? (
                       <img
-                        src={user.avatarUrl}
+                        src={sanitizeUrl(user.avatarUrl)}
                         alt={`${user.displayName}'s avatar`}
                         className="w-12 h-12 rounded-full object-cover"
                       />
