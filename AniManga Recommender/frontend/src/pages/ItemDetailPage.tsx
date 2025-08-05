@@ -65,7 +65,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import axios from "axios";
+import { api } from "../services/api";
 import ItemCard from "../components/ItemCard";
 import "./ItemDetail.css";
 import Spinner from "../components/Spinner";
@@ -73,12 +73,6 @@ import useDocumentTitle from "../hooks/useDocumentTitle";
 import { AnimeItem } from "../types";
 import { useAuth } from "../context/AuthContext";
 import UserListActions from "../components/UserListActions";
-
-/**
- * Base URL for API endpoints.
- * Uses environment variable or defaults to localhost for development.
- */
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 /**
  * Default placeholder image path for items without cover images.
@@ -206,8 +200,7 @@ const ItemDetailPage: React.FC = () => {
       setError("");
 
       // Fetch item details - Using correct API endpoint
-      const response = await axios.get(`${API_BASE_URL}/api/items/${uid}`);
-      const itemData = response.data;
+      const itemData = await api.public.getItem(uid);
 
       if (!itemData || !itemData.uid) {
         setError("Item not found");
@@ -219,21 +212,21 @@ const ItemDetailPage: React.FC = () => {
 
       // Fetch related items in parallel
       try {
-        const relatedResponse = await axios.get(`${API_BASE_URL}/api/recommendations/${uid}?n=10`);
+        const relatedResponse = await api.public.getRecommendations(uid, 10);
 
         // Access related items from API response
         // Note: Backend still uses "recommendations" field name for API compatibility,
         // but frontend treats these as "related" items for improved user clarity
         if (
-          relatedResponse.data &&
-          relatedResponse.data.recommendations &&
-          Array.isArray(relatedResponse.data.recommendations)
+          relatedResponse &&
+          relatedResponse.recommendations &&
+          Array.isArray(relatedResponse.recommendations)
         ) {
-          setRelated(relatedResponse.data.recommendations); // Store as 'related' items for frontend
-        } else if (relatedResponse.data && Array.isArray(relatedResponse.data)) {
-          setRelated(relatedResponse.data); // Handle alternative response format
+          setRelated(relatedResponse.recommendations); // Store as 'related' items for frontend
+        } else if (relatedResponse && Array.isArray(relatedResponse)) {
+          setRelated(relatedResponse); // Handle alternative response format
         } else {
-          console.warn("Unexpected related items response format:", relatedResponse.data);
+          console.warn("Unexpected related items response format:", relatedResponse);
           setRelated([]);
         }
       } catch (error) {

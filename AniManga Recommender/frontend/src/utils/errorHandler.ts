@@ -592,12 +592,14 @@ export const parseError = (error: ApiError, context?: string): ParsedError => {
         suggestedAction = "Try again in a few moments";
         break;
       case 502:
-        userMessage = "Bad gateway. The server is temporarily unavailable.";
-        suggestedAction = "Try again - the server may be restarting";
+        userMessage = "The server is starting up. This may take a moment.";
+        suggestedAction = "Please wait a few seconds - the server is waking up from sleep mode";
+        isRetryable = true;
         break;
       case 503:
-        userMessage = "Service unavailable. Please try again later.";
-        suggestedAction = "The service is temporarily down - try again later";
+        userMessage = "Service is starting up. Please wait a moment.";
+        suggestedAction = "The service is initializing - this is normal for the first request";
+        isRetryable = true;
         break;
       case 504:
         userMessage = "Gateway timeout. Please try again.";

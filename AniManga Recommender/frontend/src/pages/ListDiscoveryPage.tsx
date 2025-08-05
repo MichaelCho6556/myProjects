@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
-import { supabase } from "../lib/supabase";
+import { api } from "../services/api";
 // Removed ListPreviewCard import - using grid view only
 import { ListGridCard } from "../components/lists/ListGridCard";
 // Removed ListPreviewCardSkeleton import - using grid view only
@@ -249,64 +249,11 @@ export const ListDiscoveryPage: React.FC = () => {
         if (filters.itemCount && filters.itemCount !== 'all') params.set('itemCount', filters.itemCount);
         if (filters.followerCount && filters.followerCount !== 'all') params.set('followerCount', filters.followerCount);
 
-        // Use authenticated API if user is logged in, otherwise use public fetch
-        let result;
-        const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+        // Convert URLSearchParams to plain object for API
+        const queryParams = Object.fromEntries(params.entries());
         
-        if (user) {
-          // Get current session and token
-          const { data: { session } } = await supabase.auth.getSession();
-          const token = session?.access_token;
-          
-          if (token) {
-            const requestHeaders = {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            };
-            
-            // Use fetch with Authorization header for public endpoint with auth
-            const response = await fetch(
-              `${API_BASE_URL}/api/lists/discover?${params.toString()}`,
-              {
-                method: 'GET',
-                headers: requestHeaders,
-              }
-            );
-            if (!response.ok) {
-              // If token is invalid/expired, fallback to anonymous request
-              if (response.status === 401) {
-                const anonResponse = await fetch(
-                  `${API_BASE_URL}/api/lists/discover?${params.toString()}`
-                );
-                if (!anonResponse.ok) {
-                  throw new Error(`HTTP ${anonResponse.status}: ${anonResponse.statusText}`);
-                }
-                result = await anonResponse.json();
-              } else {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-              }
-            } else {
-              result = await response.json();
-            }
-          } else {
-            // Fallback to anonymous request
-            const response = await fetch(
-              `${API_BASE_URL}/api/lists/discover?${params.toString()}`
-            );
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            result = await response.json();
-          }
-        } else {
-          const response = await fetch(
-            `${API_BASE_URL}/api/lists/discover?${params.toString()}`
-          );
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-          result = await response.json();
-        }
+        // Use centralized API service which handles auth automatically
+        const result = await api.public.discoverLists(queryParams);
         const rawLists = result.lists || [];
 
         // Note: Backend API already provides tags correctly via list_tag_associations table

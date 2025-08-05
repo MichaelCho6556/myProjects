@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
-import axios from "axios";
+import { api } from "../../services/api";
 
 import { EditListModal } from "../../components/lists/EditListModal";
 import { AddItemsModal } from "../../components/lists/AddItemsModal";
@@ -23,7 +23,7 @@ import "./CustomListDetailPage.css";
 // Utility function to make API calls with fallback to public endpoints
 const makeFlexibleApiCall = async (
   authenticatedApiCall: () => Promise<any>,
-  publicUrl: string,
+  publicApiCall: () => Promise<any>,
   isAuthenticated: boolean
 ): Promise<any> => {
   if (isAuthenticated) {
@@ -37,17 +37,13 @@ const makeFlexibleApiCall = async (
                            error.message?.includes('403');
       
       if (shouldFallback) {
-        const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-        const fullUrl = publicUrl.startsWith('http') ? publicUrl : `${API_BASE_URL}${publicUrl}`;
-        return await axios.get(fullUrl);
+        return await publicApiCall();
       }
       throw error;
     }
   } else {
     // For anonymous users, use public endpoint directly
-    const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-    const fullUrl = publicUrl.startsWith('http') ? publicUrl : `${API_BASE_URL}${publicUrl}`;
-    return await axios.get(fullUrl);
+    return await publicApiCall();
   }
 };
 
@@ -227,12 +223,12 @@ export const CustomListDetailPage: React.FC = () => {
       const [listResponse, itemsResponse] = await Promise.all([
         makeFlexibleApiCall(
           () => get(`/api/auth/lists/${listId}`),
-          `/api/lists/${listId}`,
+          () => api.public.getListDetails(listId!),
           !!user
         ),
         makeFlexibleApiCall(
           () => get(`/api/auth/lists/${listId}/items`),
-          `/api/lists/${listId}/items`,
+          () => api.public.getListItems(listId!),
           !!user
         ),
       ]);

@@ -72,6 +72,8 @@ DEPLOYMENT.md
 
 backend/docs/
 
+frontend/.env.production
+
 
 .env# Ignore external projects
 Project-Bug-Finder/
