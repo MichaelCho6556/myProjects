@@ -27,9 +27,11 @@ jobs:
       SNYK_ORG_ID: ${{ secrets.SNYK_ORG_ID }}
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Snyk CLI to check for security issues
+
+      - name: Set up Snyk CLI
         uses: snyk/actions/setup@806182742461562b67788a64410098c9d9b96adb
-              # Add this new step to explicitly authenticate
+
+      # Correctly indented step to explicitly authenticate
       - name: Authenticate to Snyk
         run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
@@ -42,18 +44,18 @@ jobs:
         run: snyk code test --sarif > snyk-code.sarif || true
 
       - name: Snyk Open Source monitor
-        # Use the --org flag to specify which Snyk Organization to use
+        # CRITICAL: Use the --org flag to specify which Snyk Organization to use
         run: snyk monitor --all-projects --org=${{ env.SNYK_ORG_ID }}
 
       - name: Snyk IaC test and report
-        # Use the --org flag to specify which Snyk Organization to use
+        # CRITICAL: Use the --org flag to specify which Snyk Organization to use
         run: snyk iac test --report --org=${{ env.SNYK_ORG_ID }} # || true
 
       - name: Build a Docker image
         run: docker build -t your/image-to-test .
 
       - name: Snyk Container monitor
-        # Use the --org flag to specify which Snyk Organization to use
+        # CRITICAL: Use the --org flag to specify which Snyk Organization to use
         run: snyk container monitor your/image-to-test --file=Dockerfile --org=${{ env.SNYK_ORG_ID }}
 
       - name: Upload result to GitHub Code Scanning
