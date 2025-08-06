@@ -1300,8 +1300,8 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
             sort_column = 'start_date'
             sort_ascending = True
         
-        # Apply sorting with nulls last
-        query = query.order(sort_column, desc=(not sort_ascending), nullsfirst=False)
+        # Apply sorting
+        query = query.order(sort_column, desc=(not sort_ascending))
         
         # Apply pagination
         offset = (page - 1) * per_page
@@ -4902,7 +4902,7 @@ def _generate_database_trending_recommendations(user_preferences: Dict[str, Any]
             query = supabase_client.table('items').select('*')
             if content_type != 'all':
                 query = query.eq('media_type', content_type)
-            query = query.gte('score', 7.5).order('popularity', asc=True).limit(limit * 2)
+            query = query.gte('score', 7.5).order('popularity').limit(limit * 2)
             
             response = query.execute()
             items = response.data if response.data else []
