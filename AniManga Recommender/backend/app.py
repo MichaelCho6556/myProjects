@@ -1170,6 +1170,9 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         This endpoint is publicly accessible and doesn't require authentication.
         Field names are automatically mapped for frontend compatibility.
     """
+    # Ensure data is loaded before processing the request
+    ensure_data_loaded()
+    
     if df_processed is None:
         return make_response(jsonify({"error": "Dataset not available."}), 503)
     
@@ -1387,6 +1390,9 @@ def get_distinct_values() -> Union[Response, Tuple[Response, int]]:
         Values may change when dataset is updated or reloaded.
         Empty dataset returns empty arrays with appropriate status code.
     """
+    # Ensure data is loaded before processing the request
+    ensure_data_loaded()
+    
     if df_processed is None or len(df_processed) == 0:
         empty_response = jsonify({
             "genres": [], "statuses": [], "media_types": [], "themes": [],
@@ -1471,6 +1477,9 @@ def get_item_details(item_uid: str) -> Union[Response, Tuple[Response, int]]:
         Field names are automatically mapped for frontend compatibility.
         Returns None values for missing data instead of NaN.
     """
+    # Ensure data is loaded before processing the request
+    ensure_data_loaded()
+    
     if df_processed is None or uid_to_idx is None:
         return jsonify({"error": "Data not loaded or item UID mapping not available."}), 503
     
