@@ -1394,7 +1394,7 @@ def get_distinct_values() -> Union[Response, Tuple[Response, int]]:
     
     try:
         # Query the cached distinct values
-        response = supabase_client.client.table('distinct_values_cache').select('*').eq('id', 1).execute()
+        response = supabase_client.table('distinct_values_cache').select('*').eq('id', 1).execute()
         
         if response.data and len(response.data) > 0:
             cached_data = response.data[0]
@@ -1475,7 +1475,7 @@ def get_item_details(item_uid: str) -> Union[Response, Tuple[Response, int]]:
     
     try:
         # Get item from database
-        response = supabase_client.client.table('items').select('*').eq('uid', item_uid).execute()
+        response = supabase_client.table('items').select('*').eq('uid', item_uid).execute()
         
         if not response.data or len(response.data) == 0:
             return jsonify({"error": "Item not found."}), 404
@@ -1563,14 +1563,14 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
         num_related = min(num_related, 50)  # Cap at 50 for performance
         
         # Query the cached recommendations
-        response = supabase_client.client.table('recommendations_cache').select('*').eq('item_uid', item_uid).execute()
+        response = supabase_client.table('recommendations_cache').select('*').eq('item_uid', item_uid).execute()
         
         if response.data and len(response.data) > 0:
             cached_data = response.data[0]
             recommendations = json.loads(cached_data.get('recommendations', '[]'))
             
             # Get source item title
-            item_response = supabase_client.client.table('items').select('title').eq('uid', item_uid).execute()
+            item_response = supabase_client.table('items').select('title').eq('uid', item_uid).execute()
             source_title = item_response.data[0]['title'] if item_response.data else 'Unknown'
             
             # Map fields for frontend compatibility
@@ -1597,7 +1597,7 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
             app.logger.info(f"No cached recommendations for {item_uid}, using genre-based fallback")
             
             # Get the source item's genres
-            item_response = supabase_client.client.table('items').select('title,genres').eq('uid', item_uid).execute()
+            item_response = supabase_client.table('items').select('title,genres').eq('uid', item_uid).execute()
             
             if not item_response.data:
                 return jsonify({"error": "Target item for related items not found."}), 404
@@ -1610,7 +1610,7 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
                 # Query items with similar genres
                 similar_items = []
                 for genre in source_genres[:2]:  # Use first 2 genres
-                    query = supabase_client.client.table('items').select(
+                    query = supabase_client.table('items').select(
                         'uid,title,media_type,score,genres,synopsis,image_url'
                     ).contains('genres', [genre]).neq('uid', item_uid).limit(10)
                     
