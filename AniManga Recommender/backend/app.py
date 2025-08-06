@@ -146,11 +146,30 @@ app = Flask(__name__)
 # Configure CORS with environment-based origins
 # Parse allowed origins from environment, supporting wildcards for Vercel previews
 raw_origins = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else []
-ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins if origin.strip()] or [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:3001",  # Backup development port
+ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins if origin.strip()]
+
+# Always include Vercel patterns for production deployments
+VERCEL_PATTERNS = [
+    "https://*.vercel.app",
+    "https://animanga-recommender.vercel.app",
+    "https://animanga-recommender-*.vercel.app"
 ]
+
+# Add Vercel patterns if not already present
+for pattern in VERCEL_PATTERNS:
+    if pattern not in ALLOWED_ORIGINS:
+        ALLOWED_ORIGINS.append(pattern)
+
+# Add localhost for development if no origins specified or in development mode
+if not ALLOWED_ORIGINS or os.getenv('FLASK_ENV') == 'development':
+    LOCAL_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001"  # Backup development port
+    ]
+    for origin in LOCAL_ORIGINS:
+        if origin not in ALLOWED_ORIGINS:
+            ALLOWED_ORIGINS.append(origin)
 
 # Production CORS configuration with enhanced security
 CORS(app, 
@@ -236,11 +255,14 @@ def handle_preflight():
         
         # Check if origin is allowed
         if origin and is_origin_allowed(origin, ALLOWED_ORIGINS):
+            app.logger.info(f"CORS allowed - Origin: {origin}")
             response.headers["Access-Control-Allow-Origin"] = origin
         elif not ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS:
+            app.logger.info(f"CORS allowed (wildcard) - Origin: {origin}")
             response.headers["Access-Control-Allow-Origin"] = "*"
         else:
             # For security, don't set any origin if not allowed
+            app.logger.info(f"CORS check - Origin: {origin}, Allowed patterns: {ALLOWED_ORIGINS}")
             app.logger.warning(f"Rejected CORS preflight from origin: {origin}")
             response.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else "null"
         
