@@ -3085,7 +3085,7 @@ class SupabaseClient:
                     headers=self.headers,
                     params={
                         'follower_id': f'eq.{viewer_id}',
-                        'following_id': f'in.({','.join(follower_ids)})',
+                        'following_id': f'in.({",".join(follower_ids)})',
                         'select': 'following_id'
                     }
                 )
@@ -3202,7 +3202,7 @@ class SupabaseClient:
                     headers=self.headers,
                     params={
                         'follower_id': f'eq.{viewer_id}',
-                        'following_id': f'in.({','.join(following_ids)})',
+                        'following_id': f'in.({",".join(following_ids)})',
                         'select': 'following_id'
                     }
                 )
