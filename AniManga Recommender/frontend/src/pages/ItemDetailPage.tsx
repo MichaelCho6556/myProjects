@@ -68,8 +68,15 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import ItemCard from "../components/ItemCard";
 
+import "./ItemDetail.css";
+import Spinner from "../components/Spinner";
+import useDocumentTitle from "../hooks/useDocumentTitle";
+import { AnimeItem } from "../types";
+import { useAuth } from "../context/AuthContext";
+import UserListActions from "../components/UserListActions";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -107,13 +114,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import "./ItemDetail.css";
-import Spinner from "../components/Spinner";
-import useDocumentTitle from "../hooks/useDocumentTitle";
-import { AnimeItem } from "../types";
-import { useAuth } from "../context/AuthContext";
-import UserListActions from "../components/UserListActions";
 
 /**
  * Default placeholder image path for items without cover images.
@@ -737,7 +737,7 @@ const ItemDetailPage: React.FC = () => {
             <h3>Trailer</h3>
             <div className="video-responsive">
               <iframe
-                src={sanitizeUrl(`https://www.youtube.com/embed/${youtubeID)}`}
+                src={sanitizeUrl(`https://www.youtube.com/embed/${youtubeID}`)}
                 title={`${item.title} Trailer`}
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

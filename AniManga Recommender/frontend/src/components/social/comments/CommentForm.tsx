@@ -6,8 +6,10 @@ import { CommentFormProps, MentionUser, CreateCommentRequest } from "../../../ty
 import { useMentions } from "../../../hooks/useComments";
 import { logger } from "../../../utils/logger";
 
+import "./CommentForm.css";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -45,8 +47,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import "./CommentForm.css";
 
 export const CommentForm: React.FC<CommentFormProps> = ({
   parentType,

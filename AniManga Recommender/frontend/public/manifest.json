@@ -1,6 +1,7 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "AniManga",
+  "name": "AniManga Recommender - Discover Anime & Manga",
+  "description": "Discover your next favorite anime and manga with personalized recommendations, advanced filtering, and social features",
   "icons": [
     {
       "src": "favicon.ico",
@@ -10,16 +11,20 @@
     {
       "src": "logo192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#14b8a6",
+  "background_color": "#1f2937",
+  "orientation": "portrait-primary",
+  "categories": ["entertainment", "social"]
 }

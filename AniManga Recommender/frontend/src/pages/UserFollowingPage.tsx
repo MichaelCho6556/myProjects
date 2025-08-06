@@ -9,8 +9,10 @@ import LoadingSpinner from "../components/common/LoadingSpinner";
 import ErrorFallback from "../components/Error/ErrorFallback";
 import { generateAvatarColor } from "../utils/helpers";
 
+import "./UserProfilePage.css";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -48,8 +50,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import "./UserProfilePage.css";
 
 interface Following {
   id: string;

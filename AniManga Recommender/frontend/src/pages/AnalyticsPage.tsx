@@ -7,8 +7,10 @@ import { ListAnalyticsDashboard } from "../components/analytics/ListAnalyticsDas
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import EmptyState from "../components/EmptyState";
 
+import "./AnalyticsPage.css";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -46,8 +48,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import "./AnalyticsPage.css";
 
 /**
  * Dedicated analytics page component

@@ -8,8 +8,10 @@ import { CommentReactionsComponent } from "./CommentReactionsComponent";
 import { useAuth } from "../../../context/AuthContext";
 import { logger } from "../../../utils/logger";
 
+import "./Comment.css";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -47,8 +49,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import "./Comment.css";
 
 export const Comment: React.FC<CommentItemProps> = ({
   comment,

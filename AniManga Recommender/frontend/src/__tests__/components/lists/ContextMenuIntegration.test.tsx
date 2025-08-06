@@ -145,7 +145,7 @@ describe("Context Menu Integration - Real Testing", () => {
     });
 
     // Find and click a specific rating star
-    const ratingStar = await waitFor(() => screen.getByTitle("Rate 8/10"));
+    const ratingStar = await screen.findByTitle("Rate 8/10");
 
     await act(async () => {
       fireEvent.click(ratingStar);

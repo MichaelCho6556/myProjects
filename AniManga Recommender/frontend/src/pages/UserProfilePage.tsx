@@ -12,8 +12,10 @@ import { useAuth } from "../context/AuthContext";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
 import CacheStatusIndicator from "../components/dashboard/CacheStatusIndicator";
 
+import "./UserProfilePage.css";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -51,8 +53,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import "./UserProfilePage.css";
 
 export const UserProfilePage: React.FC = () => {
   const { username } = useParams<{ username: string }>();

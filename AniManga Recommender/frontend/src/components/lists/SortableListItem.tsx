@@ -14,8 +14,10 @@ import { useToastActions } from "../Feedback/ToastProvider";
 import { useBatchOperations } from "../../context/BatchOperationsProvider";
 import { logger } from "../../utils/logger";
 
+import "./SortableListItem.css";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -53,8 +55,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import "./SortableListItem.css";
 
 interface SortableListItemProps {
   item: ListItem;
