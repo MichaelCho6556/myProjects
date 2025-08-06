@@ -169,7 +169,7 @@ class RecommendationComputer:
         """Store a batch of recommendations in the cache table."""
         try:
             # Use upsert to update existing records
-            response = self.client.client.table('recommendations_cache').upsert(
+            response = self.client.table('recommendations_cache').upsert(
                 batch_data,
                 on_conflict='item_uid'
             ).execute()
@@ -207,7 +207,7 @@ class RecommendationComputer:
         
         try:
             # Upsert the single row
-            response = self.client.client.table('distinct_values_cache').upsert(
+            response = self.client.table('distinct_values_cache').upsert(
                 distinct_values,
                 on_conflict='id'
             ).execute()
