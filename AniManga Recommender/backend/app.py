@@ -1171,22 +1171,19 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         Field names are automatically mapped for frontend compatibility.
     """
     # Ensure data is loaded before processing the request
+    # NOTE: This endpoint still needs refactoring to use direct DB queries
+    # For now, we'll keep it but reduce memory usage elsewhere
     ensure_data_loaded()
     
     if df_processed is None:
         return make_response(jsonify({"error": "Dataset not available."}), 503)
     
     if len(df_processed) == 0:
-        # Try to reload data as fallback
-        ensure_data_loaded()
-        
-        # Check if reload worked
-        if df_processed is None or len(df_processed) == 0:
-            return jsonify({
-                "items": [], "page": 1, "per_page": 30,
-                "total_items": 0, "total_pages": 0, "sort_by": "score_desc",
-                "error": "No data available"
-            })
+        return jsonify({
+            "items": [], "page": 1, "per_page": 30,
+            "total_items": 0, "total_pages": 0, "sort_by": "score_desc",
+            "error": "No data available"
+        })
 
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 30, type=int)
@@ -1326,9 +1323,9 @@ def get_distinct_values() -> Union[Response, Tuple[Response, int]]:
     """
     Retrieve distinct/unique values for all filterable fields in the dataset.
     
-    This endpoint provides metadata about available filter options by extracting
-    unique values from all filterable columns in the anime/manga dataset. Used
-    to populate filter dropdowns and search options in the frontend.
+    This endpoint provides metadata about available filter options by using
+    pre-computed cached values to avoid memory overhead. Used to populate
+    filter dropdowns and search options in the frontend.
     
     Returns:
         JSON Response containing distinct values for:
@@ -1390,48 +1387,42 @@ def get_distinct_values() -> Union[Response, Tuple[Response, int]]:
         Values may change when dataset is updated or reloaded.
         Empty dataset returns empty arrays with appropriate status code.
     """
-    # Ensure data is loaded before processing the request
-    ensure_data_loaded()
-    
-    if df_processed is None or len(df_processed) == 0:
-        empty_response = jsonify({
-            "genres": [], "statuses": [], "media_types": [], "themes": [],
-            "demographics": [], "studios": [], "authors": []
-        })
-        status_code = 503 if df_processed is None else 200
-        return make_response(empty_response, status_code)
+    # Try to get cached distinct values from database
+    global supabase_client
+    if supabase_client is None:
+        supabase_client = SupabaseClient()
     
     try:
-        def get_unique_from_lists(column_name):
-            all_values = set()
-            if column_name in df_processed.columns and not df_processed[column_name].dropna().empty:
-                for item_list_val in df_processed[column_name].dropna():
-                    if isinstance(item_list_val, list):
-                        all_values.update(val.strip() for val in item_list_val if isinstance(val, str) and val.strip())
-                    elif isinstance(item_list_val, str) and item_list_val.strip():
-                        all_values.add(item_list_val.strip())
-            return sorted(list(all_values))
-
-        all_genres = get_unique_from_lists('genres')
-        all_themes = get_unique_from_lists('themes')
-        all_demographics = get_unique_from_lists('demographics')
-        all_studios = get_unique_from_lists('studios')
-        all_authors = get_unique_from_lists('authors')
+        # Query the cached distinct values
+        response = supabase_client.client.table('distinct_values_cache').select('*').eq('id', 1).execute()
         
-        all_statuses = sorted(list(set(s.strip() for s in df_processed['status'].dropna().unique() if isinstance(s, str) and s.strip())))
-        all_media_types = sorted(list(set(mt.strip() for mt in df_processed['media_type'].dropna().unique() if isinstance(mt, str) and mt.strip())))
-
-        return jsonify({
-            "genres": all_genres,
-            "themes": all_themes,
-            "demographics": all_demographics,
-            "studios": all_studios,
-            "authors": all_authors,
-            "statuses": all_statuses,
-            "media_types": all_media_types
-        })
+        if response.data and len(response.data) > 0:
+            cached_data = response.data[0]
+            
+            # Parse JSON fields
+            return jsonify({
+                "genres": json.loads(cached_data.get('genres', '[]')),
+                "themes": json.loads(cached_data.get('themes', '[]')),
+                "demographics": json.loads(cached_data.get('demographics', '[]')),
+                "studios": json.loads(cached_data.get('studios', '[]')),
+                "authors": json.loads(cached_data.get('authors', '[]')),
+                "statuses": json.loads(cached_data.get('statuses', '[]')),
+                "media_types": json.loads(cached_data.get('media_types', '[]'))
+            })
+        else:
+            # Fallback: return empty arrays if cache not populated
+            app.logger.warning("Distinct values cache not populated")
+            return jsonify({
+                "genres": [], "themes": [], "demographics": [],
+                "studios": [], "authors": [], "statuses": [], "media_types": []
+            })
     except Exception as e:
-        return make_response(jsonify({"error": "Could not retrieve distinct values."}), 500)
+        app.logger.error(f"Error fetching distinct values: {e}")
+        # Fallback to empty response
+        return jsonify({
+            "genres": [], "themes": [], "demographics": [],
+            "studios": [], "authors": [], "statuses": [], "media_types": []
+        })
 
 @app.route('/api/items/<item_uid>')
 def get_item_details(item_uid: str) -> Union[Response, Tuple[Response, int]]:
@@ -1477,32 +1468,35 @@ def get_item_details(item_uid: str) -> Union[Response, Tuple[Response, int]]:
         Field names are automatically mapped for frontend compatibility.
         Returns None values for missing data instead of NaN.
     """
-    # Ensure data is loaded before processing the request
-    ensure_data_loaded()
+    # Query directly from Supabase instead of loading all data
+    global supabase_client
+    if supabase_client is None:
+        supabase_client = SupabaseClient()
     
-    if df_processed is None or uid_to_idx is None:
-        return jsonify({"error": "Data not loaded or item UID mapping not available."}), 503
-    
-    if item_uid not in uid_to_idx.index:
-        return jsonify({"error": "Item not found."}), 404
-    
-    idx = uid_to_idx[item_uid]
-    item_details_series = df_processed.loc[idx].copy()
-    item_details_series_cleaned = item_details_series.replace({np.nan: None})
-    item_details_dict = item_details_series_cleaned.to_dict()
-    
-    # Map field names for frontend compatibility  
-    item_details_mapped = map_field_names_for_frontend(item_details_dict)
+    try:
+        # Get item from database
+        response = supabase_client.client.table('items').select('*').eq('uid', item_uid).execute()
+        
+        if not response.data or len(response.data) == 0:
+            return jsonify({"error": "Item not found."}), 404
+        
+        item_details_dict = response.data[0]
+        
+        # Map field names for frontend compatibility  
+        item_details_mapped = map_field_names_for_frontend(item_details_dict)
 
-    return jsonify(item_details_mapped)
+        return jsonify(item_details_mapped)
+    except Exception as e:
+        app.logger.error(f"Error fetching item details: {e}")
+        return jsonify({"error": "Could not fetch item details"}), 500
 
 @app.route('/api/recommendations/<item_uid>')
 def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
     """
     Generate content-based related items for a specific anime or manga item.
     
-    This endpoint uses TF-IDF vectorization and cosine similarity to find similar
-    items based on content features like genres, synopsis, themes, and metadata.
+    This endpoint uses pre-computed recommendations from cache to avoid memory
+    overhead. Recommendations are computed offline and stored in database.
     The related items engine provides content-similar suggestions for discovery.
     
     Args:
@@ -1559,85 +1553,105 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
         for frontend compatibility. Image URLs fallback to main_picture if needed.
         API endpoint and response field names maintained for backward compatibility.
     """
-    # Ensure data is loaded (but respect test mocking)
-    ensure_data_loaded()
-    
-    if df_processed is None or tfidf_matrix_global is None or uid_to_idx is None:
-        return jsonify({"error": "Related items system not ready. Data or TF-IDF matrix missing."}), 503
-
-    if item_uid not in uid_to_idx.index:
-        return jsonify({"error": "Target item for related items not found."}), 404
+    # Try to get cached recommendations from database
+    global supabase_client
+    if supabase_client is None:
+        supabase_client = SupabaseClient()
     
     try:
         num_related = request.args.get('n', 10, type=int)
         num_related = min(num_related, 50)  # Cap at 50 for performance
         
-        # Check cache first
-        cached_recommendations = get_recommendations_from_cache(item_uid)
-        if cached_recommendations:
-            # Filter to requested number and return
-            recommendations_data = cached_recommendations.get('recommendations', [])
-            if recommendations_data and len(recommendations_data) >= num_related:
+        # Query the cached recommendations
+        response = supabase_client.client.table('recommendations_cache').select('*').eq('item_uid', item_uid).execute()
+        
+        if response.data and len(response.data) > 0:
+            cached_data = response.data[0]
+            recommendations = json.loads(cached_data.get('recommendations', '[]'))
+            
+            # Get source item title
+            item_response = supabase_client.client.table('items').select('title').eq('uid', item_uid).execute()
+            source_title = item_response.data[0]['title'] if item_response.data else 'Unknown'
+            
+            # Map fields for frontend compatibility
+            mapped_recommendations = []
+            for rec in recommendations[:num_related]:
+                mapped_rec = {
+                    'uid': rec.get('uid'),
+                    'title': rec.get('title'),
+                    'mediaType': rec.get('media_type', rec.get('mediaType')),
+                    'score': rec.get('score'),
+                    'genres': rec.get('genres', []),
+                    'synopsis': rec.get('synopsis'),
+                    'imageUrl': rec.get('image_url', rec.get('imageUrl', ''))
+                }
+                mapped_recommendations.append(mapped_rec)
+            
+            return jsonify({
+                "source_item_uid": item_uid,
+                "source_item_title": source_title,
+                "recommendations": mapped_recommendations
+            })
+        else:
+            # Fallback: Get similar items by genre from database
+            app.logger.info(f"No cached recommendations for {item_uid}, using genre-based fallback")
+            
+            # Get the source item's genres
+            item_response = supabase_client.client.table('items').select('title,genres').eq('uid', item_uid).execute()
+            
+            if not item_response.data:
+                return jsonify({"error": "Target item for related items not found."}), 404
+            
+            source_item = item_response.data[0]
+            source_genres = source_item.get('genres', [])
+            source_title = source_item.get('title', 'Unknown')
+            
+            if source_genres:
+                # Query items with similar genres
+                similar_items = []
+                for genre in source_genres[:2]:  # Use first 2 genres
+                    query = supabase_client.client.table('items').select(
+                        'uid,title,media_type,score,genres,synopsis,image_url'
+                    ).contains('genres', [genre]).neq('uid', item_uid).limit(10)
+                    
+                    result = query.execute()
+                    if result.data:
+                        similar_items.extend(result.data)
+                
+                # Remove duplicates and limit
+                seen = set()
+                unique_items = []
+                for item in similar_items:
+                    if item['uid'] not in seen:
+                        seen.add(item['uid'])
+                        unique_items.append(item)
+                
+                # Map for frontend
+                mapped_recommendations = []
+                for item in unique_items[:num_related]:
+                    mapped_rec = {
+                        'uid': item.get('uid'),
+                        'title': item.get('title'),
+                        'mediaType': item.get('media_type'),
+                        'score': item.get('score'),
+                        'genres': item.get('genres', []),
+                        'synopsis': item.get('synopsis'),
+                        'imageUrl': item.get('image_url', '')
+                    }
+                    mapped_recommendations.append(mapped_rec)
+                
                 return jsonify({
                     "source_item_uid": item_uid,
-                    "source_item_title": cached_recommendations.get('source_item_title', ''),
-                    "recommendations": recommendations_data[:num_related]
+                    "source_item_title": source_title,
+                    "recommendations": mapped_recommendations
                 })
-        
-        # Generate fresh recommendations
-        item_idx = uid_to_idx[item_uid]
-        source_title_value = df_processed.loc[item_idx, 'title']
-        cleaned_source_title = None if pd.isna(source_title_value) else str(source_title_value)
-        
-        # Use cached computation if available
-        def compute_similarity_scores():
-            source_item_vector = tfidf_matrix_global[item_idx].reshape(1, -1)
-            sim_scores_for_item = cosine_similarity(source_item_vector, tfidf_matrix_global)
-            sim_scores = list(enumerate(sim_scores_for_item[0]))
-            return sorted(sim_scores, key=lambda x: x[1], reverse=True)
-        
-        # Apply request-time caching to expensive computation
-        if REQUEST_CACHE_AVAILABLE:
-            @cache_for_expensive_queries
-            def get_similarity_scores_cached(uid):
-                return compute_similarity_scores()
-            sim_scores = get_similarity_scores_cached(item_uid)
-        else:
-            sim_scores = compute_similarity_scores()
-        
-        # Get top 50 recommendations for caching (users typically request 10-20)
-        top_50_indices = [i[0] for i in sim_scores[1:51]]
-        
-        # Generate recommendations for all 50 items for caching
-        all_related_items_df = df_processed.loc[top_50_indices].copy()
-        all_related_items_for_json = all_related_items_df.replace({np.nan: None})
-        
-        # Use main_picture if image_url doesn't exist (for compatibility)
-        columns_to_select = ['uid', 'title', 'media_type', 'score', 'genres', 'synopsis']
-        if 'image_url' in all_related_items_for_json.columns:
-            columns_to_select.append('image_url')
-        elif 'main_picture' in all_related_items_for_json.columns:
-            columns_to_select.append('main_picture')
-        
-        all_related_list_of_dicts = all_related_items_for_json[columns_to_select].to_dict(orient='records')
-        
-        # Map field names for frontend compatibility
-        all_related_mapped = map_records_for_frontend(all_related_list_of_dicts)
-        
-        # Cache the full 50 recommendations
-        cache_data = {
-            'source_item_uid': item_uid,
-            'source_item_title': cleaned_source_title,
-            'recommendations': all_related_mapped
-        }
-        set_recommendations_in_cache(item_uid, all_related_mapped)
-        
-        # Return only the requested number
-        return jsonify({
-            "source_item_uid": item_uid,
-            "source_item_title": cleaned_source_title,
-            "recommendations": all_related_mapped[:num_related]  # Return only requested amount
-        })
+            
+            # No genres, return empty
+            return jsonify({
+                "source_item_uid": item_uid,
+                "source_item_title": source_title,
+                "recommendations": []
+            })
     except Exception as e:
         logger.error(f"Related items error: {e}")
         return jsonify({"error": "Could not generate related items"}), 500
