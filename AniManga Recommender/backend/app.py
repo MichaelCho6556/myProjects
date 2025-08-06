@@ -1322,8 +1322,11 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
             sort_column = 'start_date'
             sort_ascending = True
         
-        # Apply sorting
-        query = query.order(sort_column, desc=(not sort_ascending))
+        # Apply sorting using PostgREST syntax
+        if sort_ascending:
+            query = query.order(sort_column)
+        else:
+            query = query.order(f'{sort_column}.desc')
         
         # Apply pagination
         offset = (page - 1) * per_page
@@ -4937,7 +4940,7 @@ def _generate_database_trending_recommendations(user_preferences: Dict[str, Any]
                 query = supabase_client.table('items').select('*').contains('genres', [genre])
                 if content_type != 'all':
                     query = query.eq('media_type', content_type)
-                query = query.gte('score', 7.0).order('score', desc=False).limit(limit)
+                query = query.gte('score', 7.0).order('score').limit(limit)
                 
                 response = query.execute()
                 if response.data:
@@ -4981,7 +4984,7 @@ def _generate_database_hidden_gems(user_preferences: Dict[str, Any],
             query = query.eq('media_type', content_type)
         
         # High score but higher popularity number (less popular)
-        query = query.gte('score', 7.5).gte('popularity', 1000).order('score', desc=False).limit(limit * 2)
+        query = query.gte('score', 7.5).gte('popularity', 1000).order('score').limit(limit * 2)
         
         response = query.execute()
         items = response.data if response.data else []
@@ -9325,7 +9328,7 @@ def get_comments(parent_type, parent_id) -> Union[Response, Tuple[Response, int]
                 .eq('parent_id', parent_id)
                 .eq('deleted', False)
                 .is_('parent_comment_id', 'null')
-                .order(sort_column, desc=not ascending)
+                .order(sort_column if ascending else f'{sort_column}.desc')
                 .range(offset, offset + limit - 1))
         
         top_level_comments = query.execute()
@@ -9341,7 +9344,7 @@ def get_comments(parent_type, parent_id) -> Union[Response, Tuple[Response, int]
                            ''')
                            .eq('parent_comment_id', comment['id'])
                            .eq('deleted', False)
-                           .order('created_at', desc=False)
+                           .order('created_at')
                            .limit(3))
             
             replies = replies_query.execute()
@@ -10078,7 +10081,7 @@ def get_user_appeals() -> Union[Response, Tuple[Response, int]]:
             query = query.eq('status', status)
         
         # Execute query with pagination
-        result = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+        result = query.order('created_at.desc').range(offset, offset + limit - 1).execute()
         
         # Get total count for pagination
         count_query = supabase_client.table('moderation_appeals').select('id', count='exact')
@@ -10223,7 +10226,7 @@ def get_user_notifications() -> Union[Response, Tuple[Response, int]]:
             query = query.eq('is_read', False)
         
         # Execute query with pagination
-        result = query.order('created_at', desc=True).range(offset, offset + limit - 1).execute()
+        result = query.order('created_at.desc').range(offset, offset + limit - 1).execute()
         
         # Get total count
         count_query = supabase_client.table('user_notifications').select('id', count='exact').eq('user_id', current_user['sub'])
@@ -10567,11 +10570,11 @@ def get_moderation_reports() -> Union[Response, Tuple[Response, int]]:
         
         # Apply sorting
         if sort_by == 'newest':
-            comment_reports_query = comment_reports_query.order('created_at', desc=True)
+            comment_reports_query = comment_reports_query.order('created_at.desc')
         elif sort_by == 'oldest':
-            comment_reports_query = comment_reports_query.order('created_at', desc=False)
+            comment_reports_query = comment_reports_query.order('created_at')
         elif sort_by == 'priority':
-            comment_reports_query = comment_reports_query.order('priority', desc=True).order('created_at', desc=True)
+            comment_reports_query = comment_reports_query.order('priority.desc').order('created_at.desc')
         
         # Get comment reports with joined data
         comment_reports = comment_reports_query.execute()
@@ -10585,11 +10588,11 @@ def get_moderation_reports() -> Union[Response, Tuple[Response, int]]:
             review_reports_query = review_reports_query.eq('priority', priority)
         
         if sort_by == 'newest':
-            review_reports_query = review_reports_query.order('created_at', desc=True)
+            review_reports_query = review_reports_query.order('created_at.desc')
         elif sort_by == 'oldest':
-            review_reports_query = review_reports_query.order('created_at', desc=False)
+            review_reports_query = review_reports_query.order('created_at')
         elif sort_by == 'priority':
-            review_reports_query = review_reports_query.order('priority', desc=True).order('created_at', desc=True)
+            review_reports_query = review_reports_query.order('priority.desc').order('created_at.desc')
         
         review_reports = review_reports_query.execute()
         
@@ -10922,7 +10925,7 @@ def get_moderation_audit_log() -> Union[Response, Tuple[Response, int]]:
             query = query.lte('created_at', end_date)
         
         # Apply pagination and ordering
-        query = query.order('created_at', desc=True).range((page - 1) * limit, page * limit - 1)
+        query = query.order('created_at.desc').range((page - 1) * limit, page * limit - 1)
         
         result = query.execute()
         
@@ -11067,7 +11070,7 @@ def notification_stream() -> Union[Response, Tuple[Response, int]]:
                         .select('*') \
                         .eq('user_id', user_id) \
                         .gte('created_at', last_check.isoformat()) \
-                        .order('created_at', desc=True) \
+                        .order('created_at.desc') \
                         .execute()
                     
                     if notifications_result.data:

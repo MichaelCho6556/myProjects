@@ -746,7 +746,7 @@ def compute_popular_lists():
         # Get lists with metrics
         lists = supabase.client.table('custom_lists').select(
             '*, list_followers(count), custom_list_items(count)'
-        ).eq('privacy', 'public').order('quality_score', desc=True).limit(50).execute()
+        ).eq('privacy', 'public').order('quality_score.desc').limit(50).execute()
         
         popular_lists = []
         for lst in lists.data:
