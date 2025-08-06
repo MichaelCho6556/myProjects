@@ -59,24 +59,47 @@ class RecommendationComputer:
             features = []
             
             # Add synopsis
-            if pd.notna(row.get('synopsis')):
-                features.append(str(row['synopsis']))
+            synopsis = row.get('synopsis')
+            if synopsis is not None and pd.notna(synopsis):
+                features.append(str(synopsis))
                 
-            # Add genres
-            if pd.notna(row.get('genres')) and isinstance(row['genres'], list):
-                features.extend([f"genre_{g}" for g in row['genres']])
+            # Add genres  
+            genres = row.get('genres')
+            if genres is not None:
+                # Convert numpy array to list if needed
+                if hasattr(genres, 'tolist'):
+                    genres = genres.tolist()
+                if isinstance(genres, (list, np.ndarray)):
+                    # Filter out None/NaN values
+                    genres_list = [g for g in genres if g is not None and pd.notna(g)]
+                    features.extend([f"genre_{g}" for g in genres_list])
                 
             # Add themes
-            if pd.notna(row.get('themes')) and isinstance(row['themes'], list):
-                features.extend([f"theme_{t}" for t in row['themes']])
+            themes = row.get('themes')
+            if themes is not None:
+                # Convert numpy array to list if needed
+                if hasattr(themes, 'tolist'):
+                    themes = themes.tolist()
+                if isinstance(themes, (list, np.ndarray)):
+                    # Filter out None/NaN values
+                    themes_list = [t for t in themes if t is not None and pd.notna(t)]
+                    features.extend([f"theme_{t}" for t in themes_list])
                 
             # Add demographics
-            if pd.notna(row.get('demographics')) and isinstance(row['demographics'], list):
-                features.extend([f"demographic_{d}" for d in row['demographics']])
+            demographics = row.get('demographics')
+            if demographics is not None:
+                # Convert numpy array to list if needed
+                if hasattr(demographics, 'tolist'):
+                    demographics = demographics.tolist()
+                if isinstance(demographics, (list, np.ndarray)):
+                    # Filter out None/NaN values
+                    demographics_list = [d for d in demographics if d is not None and pd.notna(d)]
+                    features.extend([f"demographic_{d}" for d in demographics_list])
                 
             # Add media type
-            if pd.notna(row.get('media_type')):
-                features.append(f"type_{row['media_type']}")
+            media_type = row.get('media_type')
+            if media_type is not None and pd.notna(media_type):
+                features.append(f"type_{media_type}")
                 
             text_features.append(' '.join(features))
             
@@ -170,8 +193,7 @@ class RecommendationComputer:
         try:
             # Use upsert to update existing records
             response = self.client.table('recommendations_cache').upsert(
-                batch_data,
-                on_conflict='item_uid'
+                batch_data
             ).execute()
             
             if response.data:
@@ -187,9 +209,12 @@ class RecommendationComputer:
             all_values = set()
             if column_name in self.df.columns:
                 for item_list in self.df[column_name].dropna():
-                    if isinstance(item_list, list):
-                        all_values.update(str(v).strip() for v in item_list if v)
-                    elif item_list:
+                    # Convert numpy array to list if needed
+                    if hasattr(item_list, 'tolist'):
+                        item_list = item_list.tolist()
+                    if isinstance(item_list, (list, np.ndarray)):
+                        all_values.update(str(v).strip() for v in item_list if v and pd.notna(v))
+                    elif item_list and pd.notna(item_list):
                         all_values.add(str(item_list).strip())
             return sorted(list(all_values))
             
@@ -208,8 +233,7 @@ class RecommendationComputer:
         try:
             # Upsert the single row
             response = self.client.table('distinct_values_cache').upsert(
-                distinct_values,
-                on_conflict='id'
+                distinct_values
             ).execute()
             
             if response.data:
