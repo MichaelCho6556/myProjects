@@ -118,7 +118,7 @@ class SupabaseClient:
             "Content-Type": "application/json"
         }
     
-    def _make_request(self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None) -> requests.Response:
+    def _make_request(self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None, headers: Optional[Dict] = None) -> requests.Response:
         """
         Make HTTP request to Supabase API with comprehensive error handling and response parsing.
         
@@ -159,7 +159,7 @@ class SupabaseClient:
         
         url = f"{self.base_url}/rest/v1/{endpoint}"
         
-        headers = {
+        request_headers = {
             # Prefer service role key if provided to avoid permission or header issues
             'apikey': self.service_key or self.api_key,
             'Authorization': f'Bearer {self.service_key or self.api_key}',
@@ -168,6 +168,10 @@ class SupabaseClient:
             'Accept-Encoding': 'gzip, deflate',  # Accept compressed responses
             'Accept': 'application/json'  # Explicitly request JSON
         }
+        
+        # Merge any additional headers passed in
+        if headers:
+            request_headers.update(headers)
         
         # Retry configuration
         max_retries = 3
@@ -179,7 +183,7 @@ class SupabaseClient:
                 response = requests.request(
                     method=method,
                     url=url,
-                    headers=headers,
+                    headers=request_headers,
                     params=params,
                     json=data,
                     timeout=30
@@ -3309,6 +3313,7 @@ class SupabaseTableBuilder:
         self._operation = 'select'
         self._single = False
         self._order = None
+        self._range = None
     
     def select(self, columns: str = '*') -> 'SupabaseTableBuilder':
         """Specify columns to select."""
@@ -3355,9 +3360,37 @@ class SupabaseTableBuilder:
         return self
     
     def order(self, column: str, ascending: bool = True) -> 'SupabaseTableBuilder':
-        """Add order by clause."""
-        direction = 'asc' if ascending else 'desc'
-        self._order = f'{column}.{direction}'
+        """
+        Add order by clause.
+        
+        Args:
+            column: Column name, optionally with .asc or .desc suffix
+            ascending: If True, sort ascending. Ignored if column already has direction.
+        """
+        # Check if column already has a direction suffix
+        if column.endswith('.asc') or column.endswith('.desc'):
+            self._order = column
+        else:
+            direction = 'asc' if ascending else 'desc'
+            self._order = f'{column}.{direction}'
+        return self
+    
+    def range(self, start: int, end: int) -> 'SupabaseTableBuilder':
+        """
+        Limit the query result by starting at an offset (start) and ending at the offset (end).
+        Only records within this range are returned.
+        
+        The start and end values are 0-based and inclusive:
+        range(1, 3) will include the second, third and fourth rows of the query.
+        
+        Args:
+            start: The starting index from which to limit the result (0-based, inclusive)
+            end: The last index to which to limit the result (0-based, inclusive)
+        
+        Returns:
+            Self for method chaining
+        """
+        self._range = (start, end)
         return self
     
     def is_(self, field: str, value: Any) -> 'SupabaseTableBuilder':
@@ -3407,10 +3440,18 @@ class SupabaseTableBuilder:
         if self._single:
             params['limit'] = '1'
         
+        # Add range if specified
+        headers = None
+        if self._range:
+            start, end = self._range
+            # Supabase uses the Range header for pagination
+            headers = {'Range': f'{start}-{end}'}
+        
         response = self.client._make_request(
             'GET',
             self.table_name,
-            params=params
+            params=params,
+            headers=headers
         )
         
         if response.status_code == 200:

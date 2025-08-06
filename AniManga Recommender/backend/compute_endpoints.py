@@ -579,7 +579,7 @@ def compute_platform_statistics():
             stats['active_users_today'] = active.count
             
             # Get popular genres
-            genres = supabase.client.table('genres').select('name').limit(10).execute()
+            genres = supabase.client.table('genres').select('name').range(0, 9).execute()
             stats['popular_genres'] = [g['name'] for g in genres.data]
             
             # Get average rating
@@ -746,7 +746,7 @@ def compute_popular_lists():
         # Get lists with metrics
         lists = supabase.client.table('custom_lists').select(
             '*, list_followers(count), custom_list_items(count)'
-        ).eq('privacy', 'public').order('quality_score.desc').limit(50).execute()
+        ).eq('privacy', 'public').order('quality_score.desc').range(0, 49).execute()
         
         popular_lists = []
         for lst in lists.data:
