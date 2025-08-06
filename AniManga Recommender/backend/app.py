@@ -12533,34 +12533,6 @@ def export_metrics() -> Union[Response, Tuple[Response, int]]:
 
 # Duplicate health check endpoint removed - using system_health_check() at line 7239 instead
 
-@app.route('/lists/<int:list_id>')
-def serve_list_detail(list_id) -> Union[Response, Tuple[Response, int]]:
-    """
-    Serve the frontend app for list detail pages.
-    
-    This route handles frontend navigation to /lists/{id} by serving the React app.
-    The React router will then handle the client-side routing.
-    """
-    # In a production environment, this would serve the built React app
-    # For development, we'll redirect to the frontend development server
-    html_content = f'''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>List Detail - AniManga Recommender</title>
-        <script>
-            // Redirect to the frontend development server
-            window.location.href = 'http://localhost:3000/lists/{list_id}';
-        </script>
-    </head>
-    <body>
-        <p>Redirecting to list detail page...</p>
-        <p>If you are not redirected automatically, <a href="http://localhost:3000/lists/{list_id}">click here</a>.</p>
-    </body>
-    </html>
-    '''
-    return make_response(html_content, 200, {'Content-Type': 'text/html'})
-
 # =============================================================================
 # ERROR HANDLERS FOR PRODUCTION
 # =============================================================================

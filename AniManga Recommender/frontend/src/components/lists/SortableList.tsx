@@ -3,8 +3,32 @@
 
 import React, { useState } from "react";
 
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
+} from "@dnd-kit/core";
+import { logger } from "../../utils/logger";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { restrictToVerticalAxis, restrictToWindowEdges } from "@dnd-kit/modifiers";
+import { SortableListItem } from "./SortableListItem";
+import { BatchOperationsProvider, useBatchOperations } from "../../context/BatchOperationsProvider";
+import { BatchOperationsToolbar } from "./BatchOperationsToolbar";
+import { ListItem } from "../../types/social";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -42,30 +66,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-  DragStartEvent,
-  DragOverlay,
-} from "@dnd-kit/core";
-import { logger } from "../../utils/logger";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { restrictToVerticalAxis, restrictToWindowEdges } from "@dnd-kit/modifiers";
-import { SortableListItem } from "./SortableListItem";
-import { BatchOperationsProvider, useBatchOperations } from "../../context/BatchOperationsProvider";
-import { BatchOperationsToolbar } from "./BatchOperationsToolbar";
-import { ListItem } from "../../types/social";
 
 interface SortableListProps {
   items: ListItem[];

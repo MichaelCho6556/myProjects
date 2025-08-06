@@ -11,6 +11,11 @@
  */
 
 // Basic test to verify setup works
+import "@testing-library/jest-dom";
+
+// Setup for React Testing Library
+import { configure } from "@testing-library/react";
+
 describe("Test Setup Configuration", () => {
   it("should have all required global mocks configured", () => {
     expect(global.IntersectionObserver).toBeDefined();
@@ -56,8 +61,6 @@ describe("Test Setup Configuration", () => {
     expect(mockItem.item).toHaveProperty("mediaType");
   });
 });
-
-import "@testing-library/jest-dom";
 
 // Mock IntersectionObserver for virtual scrolling tests
 global.IntersectionObserver = class MockIntersectionObserver {
@@ -159,9 +162,6 @@ Element.prototype.getBoundingClientRect = jest.fn(() => ({
   y: 0,
   toJSON: () => {},
 }));
-
-// Setup for React Testing Library
-import { configure } from "@testing-library/react";
 
 configure({
   // Increase timeout for performance tests

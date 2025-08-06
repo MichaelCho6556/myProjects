@@ -39,7 +39,9 @@
     "eject": "react-scripts eject",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "build:prod": "cross-env REACT_APP_ENV=production npm run build",
+    "analyze": "source-map-explorer 'build/static/js/*.js'"
   },
   "eslintConfig": {
     "extends": [
@@ -83,8 +85,10 @@
     "@types/react-router-dom": "^5.3.3",
     "autoprefixer": "^10.4.21",
     "babel-jest": "^30.0.0-beta.3",
+    "cross-env": "^10.0.0",
     "identity-obj-proxy": "^3.0.0",
     "postcss": "^8.5.6",
+    "source-map-explorer": "^2.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^4.9.5"
   }

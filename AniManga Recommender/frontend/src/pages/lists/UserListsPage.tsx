@@ -5,8 +5,13 @@ import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
 import { UserItem } from "../../types";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 
+import { sanitizeSearchInput } from "../../utils/security"; // ✅ NEW: Import search sanitization
+import { logger } from "../../utils/logger";
+import Spinner from "../../components/Spinner";
+import "./UserListsPage.css";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -44,11 +49,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import { sanitizeSearchInput } from "../../utils/security"; // ✅ NEW: Import search sanitization
-import { logger } from "../../utils/logger";
-import Spinner from "../../components/Spinner";
-import "./UserListsPage.css";
 
 interface UserListsPageProps {}
 

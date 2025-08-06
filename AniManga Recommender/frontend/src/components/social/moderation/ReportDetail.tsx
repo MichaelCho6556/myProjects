@@ -6,8 +6,10 @@ import { UpdateReportRequest, ReportDetailProps } from "../../../types/moderatio
 import { logger } from "../../../utils/logger";
 import Spinner from "../../Spinner";
 
+import "./ReportDetail.css";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -45,8 +47,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import "./ReportDetail.css";
 
 export const ReportDetail: React.FC<ReportDetailProps> = ({ report, onResolveReport, loading }) => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);

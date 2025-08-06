@@ -8,7 +8,7 @@ import { ReviewModerationComponent } from "./ReviewModerationComponent";
 
 
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks

@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, memo } from "react";
 
+import "./LazyImage.css";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -39,8 +41,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import "./LazyImage.css";
 
 interface LazyImageProps {
   src: string;

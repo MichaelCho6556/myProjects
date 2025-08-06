@@ -6,8 +6,10 @@ import { useAuthenticatedApi } from '../../hooks/useAuthenticatedApi';
 import { useDebounce } from '../../hooks/useDebounce';
 import { logger } from '../../utils/logger';
 
+import './AddItemsModal.css';
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -45,8 +47,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import './AddItemsModal.css';
 
 interface SearchResult {
   uid: string;

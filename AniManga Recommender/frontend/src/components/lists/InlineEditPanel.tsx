@@ -5,8 +5,10 @@ import React, { useState, useEffect, useRef } from "react";
 import { ListItem } from "../../types/social";
 import { logger } from "../../utils/logger";
 
+import "./InlineEditPanel.css";
+
 // URL Sanitization - Prevents XSS through dangerous URL schemes
-export const sanitizeUrl = (url) => {
+export const sanitizeUrl = (url: string) => {
   if (!url) return '';
   
   // Decode URL to catch encoded attacks
@@ -44,8 +46,6 @@ export const sanitizeUrl = (url) => {
   
   return url;
 };
-
-import "./InlineEditPanel.css";
 
 interface InlineEditPanelProps {
   item: ListItem;
