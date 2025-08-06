@@ -171,9 +171,22 @@ if not ALLOWED_ORIGINS or os.getenv('FLASK_ENV') == 'development':
         if origin not in ALLOWED_ORIGINS:
             ALLOWED_ORIGINS.append(origin)
 
-# Production CORS configuration with enhanced security
+# Convert wildcard patterns to regex for Flask-CORS
+CORS_ORIGINS = []
+for origin in ALLOWED_ORIGINS:
+    if '*' in origin:
+        # Convert wildcard to regex pattern for Flask-CORS
+        pattern = origin.replace('.', r'\.')  # Escape dots
+        pattern = pattern.replace('*', '.*')   # Convert * to regex .*
+        pattern = f'^{pattern}$'                # Anchor the pattern
+        CORS_ORIGINS.append(re.compile(pattern))
+    else:
+        # Keep exact origins as-is
+        CORS_ORIGINS.append(origin)
+
+# Production CORS configuration with regex pattern support
 CORS(app, 
-     origins=ALLOWED_ORIGINS,
+     origins=CORS_ORIGINS,
      allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
      supports_credentials=True,
@@ -218,6 +231,40 @@ def add_security_headers(response):
     
     # Permissions Policy (formerly Feature Policy)
     response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    
+    return response
+
+# Ensure CORS headers are present on all responses
+@app.after_request
+def ensure_cors_headers(response):
+    """
+    Ensure CORS headers are added to all responses.
+    Flask-CORS should handle this, but this is a fallback.
+    """
+    # Only add if not already present (Flask-CORS may have already added them)
+    if 'Access-Control-Allow-Origin' not in response.headers:
+        origin = request.headers.get('Origin')
+        
+        # Helper function to check if origin matches allowed patterns
+        def is_origin_allowed(origin, allowed_list):
+            for allowed in allowed_list:
+                if allowed == origin:
+                    return True
+                # Handle wildcard patterns like https://*.vercel.app
+                if "*" in allowed:
+                    # Convert wildcard pattern to regex
+                    pattern = allowed.replace(".", r"\.")  # Escape dots
+                    pattern = pattern.replace("*", ".*")   # Convert * to regex .*
+                    pattern = f"^{pattern}$"                # Anchor pattern
+                    if re.match(pattern, origin):
+                        return True
+            return False
+        
+        if origin and is_origin_allowed(origin, ALLOWED_ORIGINS):
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
     
     return response
 
