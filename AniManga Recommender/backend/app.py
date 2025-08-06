@@ -695,9 +695,9 @@ def load_data_and_tfidf_from_supabase() -> None:
         if supabase_client is None:
             supabase_client = SupabaseClient()
         
-        # Get data as DataFrame from Supabase with all relations loaded
-        # Note: This takes longer on startup but ensures all filters work properly
-        df = supabase_client.items_to_dataframe(include_relations=True, lazy_load=False)
+        # Get data as DataFrame from Supabase with lazy loading enabled
+        # Note: Relations will be loaded on-demand to reduce memory usage
+        df = supabase_client.items_to_dataframe(include_relations=True, lazy_load=True)
         
         if df is None or len(df) == 0:
             return pd.DataFrame(), None, None, pd.Series(dtype='int64')
@@ -1035,8 +1035,10 @@ def ensure_data_loaded() -> None:
 
 # Load data on startup (skip during tests)
 import sys
-if 'pytest' not in sys.modules and 'PYTEST_CURRENT_TEST' not in os.environ:
-    ensure_data_loaded()
+# DISABLED: Data preloading disabled to reduce memory usage on free tier
+# Uncomment the following lines if you have sufficient memory (>1GB)
+# if 'pytest' not in sys.modules and 'PYTEST_CURRENT_TEST' not in os.environ:
+#     ensure_data_loaded()
 
 # Initialize auth client on startup
 initialize_auth_client()
