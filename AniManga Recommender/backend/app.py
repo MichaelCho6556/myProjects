@@ -1328,9 +1328,9 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         else:
             query = query.order(f'{sort_column}.desc')
         
-        # Apply pagination
+        # Apply pagination using range (0-based, inclusive)
         offset = (page - 1) * per_page
-        query = query.offset(offset).limit(per_page)
+        query = query.range(offset, offset + per_page - 1)
         
         # Execute the query
         response = query.execute()
@@ -9329,7 +9329,7 @@ def get_comments(parent_type, parent_id) -> Union[Response, Tuple[Response, int]
                 .eq('deleted', False)
                 .is_('parent_comment_id', 'null')
                 .order(sort_column if ascending else f'{sort_column}.desc')
-                .offset(offset).limit(limit))
+                .range(offset, offset + limit - 1))
         
         top_level_comments = query.execute()
         
@@ -9467,7 +9467,7 @@ def get_comment_replies(comment_id) -> Union[Response, Tuple[Response, int]]:
                        .eq('parent_comment_id', comment_id)
                        .eq('deleted', False)
                        .order('created_at', desc=False)
-                       .offset(offset).limit(limit))
+                       .range(offset, offset + limit - 1))
         
         replies = replies_query.execute()
         
@@ -10081,7 +10081,7 @@ def get_user_appeals() -> Union[Response, Tuple[Response, int]]:
             query = query.eq('status', status)
         
         # Execute query with pagination
-        result = query.order('created_at.desc').offset(offset).limit(limit).execute()
+        result = query.order('created_at.desc').range(offset, offset + limit - 1).execute()
         
         # Get total count for pagination
         count_query = supabase_client.table('moderation_appeals').select('id', count='exact')
@@ -10226,7 +10226,7 @@ def get_user_notifications() -> Union[Response, Tuple[Response, int]]:
             query = query.eq('is_read', False)
         
         # Execute query with pagination
-        result = query.order('created_at.desc').offset(offset).limit(limit).execute()
+        result = query.order('created_at.desc').range(offset, offset + limit - 1).execute()
         
         # Get total count
         count_query = supabase_client.table('user_notifications').select('id', count='exact').eq('user_id', current_user['sub'])
@@ -10925,7 +10925,8 @@ def get_moderation_audit_log() -> Union[Response, Tuple[Response, int]]:
             query = query.lte('created_at', end_date)
         
         # Apply pagination and ordering
-        query = query.order('created_at.desc').offset((page - 1) * limit).limit(limit)
+        offset = (page - 1) * limit
+        query = query.order('created_at.desc').range(offset, offset + limit - 1)
         
         result = query.execute()
         
