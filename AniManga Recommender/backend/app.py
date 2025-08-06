@@ -1291,7 +1291,7 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
             supabase_client = SupabaseClient()
         
         # Build the query using direct Supabase API
-        # Start with base query - select all columns we need
+        # Note: Custom client doesn't support PostgREST join syntax, so we'll handle relations manually
         query = supabase_client.table('items').select('*')
         
         # Apply text search filter
@@ -1382,18 +1382,48 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         # Execute the query
         response = query.execute()
         
-        # Extract items 
+        # Extract items
         items_list = response.data if response.data else []
         
-        # For now, we'll estimate total count based on returned items
-        # In production, you'd want a separate count query or use Supabase's count feature properly
-        total_items = len(items_list)
-        if total_items == per_page:
-            # If we got a full page, there might be more
-            total_items = per_page * 10  # Estimate for pagination UI
+        # Get total count with a separate query (since we can't use count='exact' with custom client)
+        # For better performance, we'll estimate if we got a full page
+        if len(items_list) == per_page:
+            # Got a full page, there are likely more items
+            # Do a count query to get exact number
+            count_query = supabase_client.table('items').select('uid')
+            # Apply same filters as main query for accurate count
+            if search_query:
+                count_query = count_query.ilike('title', f'%{search_query}%')
+            if media_type_filter and media_type_filter.lower() != 'all':
+                count_query = count_query.eq('media_type', media_type_filter)
+            # Execute count query
+            count_response = count_query.execute()
+            total_items = len(count_response.data) if count_response.data else 0
+        else:
+            # Didn't get a full page, so this is all there is
+            total_items = offset + len(items_list)
+        
         total_pages = max(1, (total_items + per_page - 1) // per_page) if per_page > 0 else 0
         
-        # Map field names for frontend compatibility
+        # Transform normalized data to frontend format
+        for item in items_list:
+            # Convert media_type_id to media_type string
+            if 'media_type_id' in item:
+                # Map ID to type name (based on database values)
+                media_type_map = {1: 'anime', 2: 'manga'}
+                item['media_type'] = media_type_map.get(item['media_type_id'], 'unknown')
+            else:
+                item['media_type'] = 'unknown'
+            
+            # For now, set empty arrays for related data
+            # TODO: In production, these should be fetched via joins or separate queries
+            item['genres'] = []
+            item['themes'] = []
+            item['demographics'] = []
+            item['studios'] = []
+            item['authors'] = []
+        
+        # Map field names for frontend compatibility (handles image_url -> main_picture)
         items_mapped = map_records_for_frontend(items_list)
     
     except Exception as e:
@@ -1575,6 +1605,22 @@ def get_item_details(item_uid: str) -> Union[Response, Tuple[Response, int]]:
             return jsonify({"error": "Item not found."}), 404
         
         item_details_dict = response.data[0]
+        
+        # Transform normalized data to frontend format
+        # Convert media_type_id to media_type string
+        if 'media_type_id' in item_details_dict:
+            media_type_map = {1: 'anime', 2: 'manga'}
+            item_details_dict['media_type'] = media_type_map.get(item_details_dict['media_type_id'], 'unknown')
+        else:
+            item_details_dict['media_type'] = 'unknown'
+        
+        # For now, set empty arrays for related data
+        # TODO: In production, these should be fetched via joins or separate queries
+        item_details_dict['genres'] = []
+        item_details_dict['themes'] = []
+        item_details_dict['demographics'] = []
+        item_details_dict['studios'] = []
+        item_details_dict['authors'] = []
         
         # Map field names for frontend compatibility  
         item_details_mapped = map_field_names_for_frontend(item_details_dict)
