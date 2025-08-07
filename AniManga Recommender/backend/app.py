@@ -1387,7 +1387,7 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         
         # Get total count using proper PostgREST count functionality
         # Build a count query with the same filters
-        count_query = supabase_client.table('items').select('uid', count='exact')
+        count_query = supabase_client.table('items').select('uid').count('exact')
         
         # Apply same filters as main query for accurate count
         if search_query:
@@ -9664,7 +9664,7 @@ def get_comments(parent_type, parent_id) -> Union[Response, Tuple[Response, int]
             
             # Get total reply count
             reply_count_query = (supabase_client.table('comments')
-                               .select('id', count='exact')
+                               .select('id').count('exact')
                                .eq('parent_comment_id', comment['id'])
                                .eq('deleted', False))
             
@@ -9701,7 +9701,7 @@ def get_comments(parent_type, parent_id) -> Union[Response, Tuple[Response, int]
         
         # Get total count for pagination
         total_count_query = (supabase_client.table('comments')
-                           .select('id', count='exact')
+                           .select('id').count('exact')
                            .eq('parent_type', parent_type)
                            .eq('parent_id', parent_id)
                            .eq('deleted', False)
@@ -9786,7 +9786,7 @@ def get_comment_replies(comment_id) -> Union[Response, Tuple[Response, int]]:
         
         # Get total count
         total_count_query = (supabase_client.table('comments')
-                           .select('id', count='exact')
+                           .select('id').count('exact')
                            .eq('parent_comment_id', comment_id)
                            .eq('deleted', False))
         
@@ -10397,7 +10397,7 @@ def get_user_appeals() -> Union[Response, Tuple[Response, int]]:
         result = query.order('created_at.desc').range(offset, offset + limit - 1).execute()
         
         # Get total count for pagination
-        count_query = supabase_client.table('moderation_appeals').select('id', count='exact')
+        count_query = supabase_client.table('moderation_appeals').select('id').count('exact')
         if not is_moderator:
             count_query = count_query.eq('user_id', current_user['sub'])
         if status:
@@ -10542,7 +10542,7 @@ def get_user_notifications() -> Union[Response, Tuple[Response, int]]:
         result = query.order('created_at.desc').range(offset, offset + limit - 1).execute()
         
         # Get total count
-        count_query = supabase_client.table('user_notifications').select('id', count='exact').eq('user_id', current_user['sub'])
+        count_query = supabase_client.table('user_notifications').select('id').count('exact').eq('user_id', current_user['sub'])
         if unread_only:
             count_query = count_query.eq('is_read', False)
         
@@ -11259,7 +11259,7 @@ def get_moderation_audit_log() -> Union[Response, Tuple[Response, int]]:
             enriched_logs.append(enriched_entry)
         
         # Get total count for pagination
-        count_query = supabase_client.table('moderation_audit_log').select('id', count='exact')
+        count_query = supabase_client.table('moderation_audit_log').select('id').count('exact')
         if moderator_id:
             count_query = count_query.eq('moderator_id', moderator_id)
         if action_type:

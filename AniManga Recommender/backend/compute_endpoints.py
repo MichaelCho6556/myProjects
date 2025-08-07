@@ -567,15 +567,15 @@ def compute_platform_statistics():
         
         try:
             # Get counts
-            stats['total_users'] = supabase.client.table('user_profiles').select('id', count='exact').execute().count
-            stats['total_items'] = supabase.client.table('items').select('uid', count='exact').execute().count
-            stats['total_lists'] = supabase.client.table('custom_lists').select('id', count='exact').execute().count
-            stats['total_reviews'] = supabase.client.table('reviews').select('id', count='exact').execute().count
-            stats['total_comments'] = supabase.client.table('comments').select('id', count='exact').execute().count
+            stats['total_users'] = supabase.client.table('user_profiles').select('id').count('exact').execute().count
+            stats['total_items'] = supabase.client.table('items').select('uid').count('exact').execute().count
+            stats['total_lists'] = supabase.client.table('custom_lists').select('id').count('exact').execute().count
+            stats['total_reviews'] = supabase.client.table('reviews').select('id').count('exact').execute().count
+            stats['total_comments'] = supabase.client.table('comments').select('id').count('exact').execute().count
             
             # Get active users (logged in within 24 hours)
             yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat()
-            active = supabase.client.table('user_profiles').select('id', count='exact').gte('last_active', yesterday).execute()
+            active = supabase.client.table('user_profiles').select('id').count('exact').gte('last_active', yesterday).execute()
             stats['active_users_today'] = active.count
             
             # Get popular genres
