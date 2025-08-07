@@ -3290,9 +3290,10 @@ class SupabaseClient:
 class SupabaseResponse:
     """Response wrapper to match Supabase SDK API."""
     
-    def __init__(self, data=None, error=None):
+    def __init__(self, data=None, error=None, count=None):
         self.data = data
         self.error = error
+        self.count = count
 
 
 class SupabaseTableBuilder:
@@ -3314,6 +3315,7 @@ class SupabaseTableBuilder:
         self._single = False
         self._order = None
         self._range = None
+        self._count_option = None  # Can be 'exact', 'planned', or 'estimated'
     
     def select(self, columns: str = '*') -> 'SupabaseTableBuilder':
         """Specify columns to select."""
@@ -3409,6 +3411,42 @@ class SupabaseTableBuilder:
         self._filters[field] = f'lte.{value}'
         return self
     
+    def ilike(self, field: str, pattern: str) -> 'SupabaseTableBuilder':
+        """Add case-insensitive pattern matching filter."""
+        self._filters[field] = f'ilike.{pattern}'
+        return self
+    
+    def contains(self, field: str, values: list) -> 'SupabaseTableBuilder':
+        """Add array contains filter."""
+        # Format as JSON array for PostgREST
+        import json
+        formatted_values = json.dumps(values)
+        self._filters[field] = f'cs.{formatted_values}'
+        return self
+    
+    def or_(self, filters: str) -> 'SupabaseTableBuilder':
+        """Add OR filter condition."""
+        self._filters['or'] = f'({filters})'
+        return self
+    
+    def count(self, option: str = 'exact') -> 'SupabaseTableBuilder':
+        """
+        Request count information in the response.
+        
+        Args:
+            option: Count option - 'exact', 'planned', or 'estimated'
+                   'exact': Returns exact count (slower for large tables)
+                   'planned': Returns planned count from query planner
+                   'estimated': Returns estimated count (fastest)
+        
+        Returns:
+            Self for method chaining
+        """
+        if option not in ['exact', 'planned', 'estimated']:
+            raise ValueError(f"Invalid count option: {option}. Must be 'exact', 'planned', or 'estimated'")
+        self._count_option = option
+        return self
+    
     def execute(self) -> SupabaseResponse:
         """Execute the built query."""
         try:
@@ -3440,26 +3478,45 @@ class SupabaseTableBuilder:
         if self._single:
             params['limit'] = '1'
         
+        # Prepare headers
+        headers = {}
+        
         # Add range if specified
-        headers = None
         if self._range:
             start, end = self._range
             # Supabase uses the Range header for pagination
-            headers = {'Range': f'{start}-{end}'}
+            headers['Range'] = f'{start}-{end}'
+        
+        # Add count preference if specified
+        if self._count_option:
+            headers['Prefer'] = f'count={self._count_option}'
         
         response = self.client._make_request(
             'GET',
             self.table_name,
             params=params,
-            headers=headers
+            headers=headers if headers else None
         )
         
-        if response.status_code == 200:
+        if response.status_code in [200, 206]:  # 206 for partial content with range
             data = response.json()
             # If single was requested, return just the first item or None
             if self._single and data:
                 data = data[0] if len(data) > 0 else None
-            return SupabaseResponse(data=data)
+            
+            # Create response with count information if available
+            result = SupabaseResponse(data=data)
+            
+            # Extract count from content-range header if present
+            if self._count_option and 'content-range' in response.headers:
+                content_range = response.headers['content-range']
+                # Format: "0-9/1234" where 1234 is the total count
+                if '/' in content_range:
+                    total_count = content_range.split('/')[1]
+                    if total_count != '*':  # '*' means count not available
+                        result.count = int(total_count)
+            
+            return result
         else:
             return SupabaseResponse(data=None, error=f"HTTP {response.status_code}")
     

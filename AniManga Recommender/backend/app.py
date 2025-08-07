@@ -1291,7 +1291,7 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
             supabase_client = SupabaseClient()
         
         # Build the query using direct Supabase API
-        # Note: Custom client doesn't support PostgREST join syntax, so we'll handle relations manually
+        # We'll fetch items first, then enrich with related data
         query = supabase_client.table('items').select('*')
         
         # Apply text search filter
@@ -1385,43 +1385,166 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         # Extract items
         items_list = response.data if response.data else []
         
-        # Get total count with a separate query (since we can't use count='exact' with custom client)
-        # For better performance, we'll estimate if we got a full page
-        if len(items_list) == per_page:
-            # Got a full page, there are likely more items
-            # Do a count query to get exact number
-            count_query = supabase_client.table('items').select('uid')
-            # Apply same filters as main query for accurate count
-            if search_query:
-                count_query = count_query.ilike('title', f'%{search_query}%')
-            if media_type_filter and media_type_filter.lower() != 'all':
-                count_query = count_query.eq('media_type', media_type_filter)
-            # Execute count query
-            count_response = count_query.execute()
-            total_items = len(count_response.data) if count_response.data else 0
-        else:
-            # Didn't get a full page, so this is all there is
-            total_items = offset + len(items_list)
+        # Get total count using proper PostgREST count functionality
+        # Build a count query with the same filters
+        count_query = supabase_client.table('items').select('uid', count='exact')
+        
+        # Apply same filters as main query for accurate count
+        if search_query:
+            count_query = count_query.ilike('title', f'%{search_query}%')
+        if media_type_filter and media_type_filter.lower() != 'all':
+            count_query = count_query.eq('media_type', media_type_filter)
+        if genre_filter_str and genre_filter_str.lower() != 'all':
+            genres = [g.strip() for g in genre_filter_str.split(',') if g.strip()]
+            for genre in genres:
+                count_query = count_query.contains('genres', [genre])
+        if theme_filter_str and theme_filter_str.lower() != 'all':
+            themes = [t.strip() for t in theme_filter_str.split(',') if t.strip()]
+            for theme in themes:
+                count_query = count_query.contains('themes', [theme])
+        if demographic_filter_str and demographic_filter_str.lower() != 'all':
+            demographics = [d.strip() for d in demographic_filter_str.split(',') if d.strip()]
+            for demographic in demographics:
+                count_query = count_query.contains('demographics', [demographic])
+        if studio_filter_str and studio_filter_str.lower() != 'all':
+            studios = [s.strip() for s in studio_filter_str.split(',') if s.strip()]
+            for studio in studios:
+                count_query = count_query.contains('studios', [studio])
+        if author_filter_str and author_filter_str.lower() != 'all':
+            authors = [a.strip() for a in author_filter_str.split(',') if a.strip()]
+            for author in authors:
+                count_query = count_query.contains('authors', [author])
+        if status_filter and status_filter.lower() != 'all':
+            count_query = count_query.eq('status', status_filter)
+        if min_score_filter is not None:
+            count_query = count_query.gte('score', min_score_filter)
+        if year_filter is not None:
+            count_query = count_query.or_(f'start_year_num.eq.{year_filter},start_date.like.{year_filter}%')
+        
+        # Execute count query with limit 0 to get only count
+        count_query = count_query.count('exact').range(0, 0)
+        count_response = count_query.execute()
+        
+        # Extract total count from response
+        total_items = count_response.count if hasattr(count_response, 'count') and count_response.count is not None else len(items_list)
         
         total_pages = max(1, (total_items + per_page - 1) // per_page) if per_page > 0 else 0
         
-        # Transform normalized data to frontend format
-        for item in items_list:
-            # Convert media_type_id to media_type string
-            if 'media_type_id' in item:
-                # Map ID to type name (based on database values)
-                media_type_map = {1: 'anime', 2: 'manga'}
-                item['media_type'] = media_type_map.get(item['media_type_id'], 'unknown')
-            else:
-                item['media_type'] = 'unknown'
+        # Transform normalized data to frontend format and fetch related data
+        if items_list:
+            # Get all item IDs for batch fetching related data
+            item_ids = [item['id'] for item in items_list if 'id' in item]
             
-            # For now, set empty arrays for related data
-            # TODO: In production, these should be fetched via joins or separate queries
-            item['genres'] = []
-            item['themes'] = []
-            item['demographics'] = []
-            item['studios'] = []
-            item['authors'] = []
+            # Fetch related data in batch for better performance
+            genres_data = {}
+            themes_data = {}
+            demographics_data = {}
+            studios_data = {}
+            authors_data = {}
+            
+            if item_ids:
+                # Fetch genres
+                try:
+                    genre_response = supabase_client._make_request(
+                        'GET',
+                        'item_genres',
+                        params={'select': 'item_id,genres(name)', 'item_id': f'in.({",".join(map(str, item_ids))})'}
+                    )
+                    if genre_response.status_code == 200:
+                        for entry in genre_response.json():
+                            item_id = entry.get('item_id')
+                            if item_id not in genres_data:
+                                genres_data[item_id] = []
+                            if entry.get('genres') and entry['genres'].get('name'):
+                                genres_data[item_id].append(entry['genres']['name'])
+                except Exception as e:
+                    app.logger.warning(f"Failed to fetch genres: {e}")
+                
+                # Fetch themes
+                try:
+                    theme_response = supabase_client._make_request(
+                        'GET',
+                        'item_themes',
+                        params={'select': 'item_id,themes(name)', 'item_id': f'in.({",".join(map(str, item_ids))})'}
+                    )
+                    if theme_response.status_code == 200:
+                        for entry in theme_response.json():
+                            item_id = entry.get('item_id')
+                            if item_id not in themes_data:
+                                themes_data[item_id] = []
+                            if entry.get('themes') and entry['themes'].get('name'):
+                                themes_data[item_id].append(entry['themes']['name'])
+                except Exception as e:
+                    app.logger.warning(f"Failed to fetch themes: {e}")
+                
+                # Fetch demographics
+                try:
+                    demographic_response = supabase_client._make_request(
+                        'GET',
+                        'item_demographics',
+                        params={'select': 'item_id,demographics(name)', 'item_id': f'in.({",".join(map(str, item_ids))})'}
+                    )
+                    if demographic_response.status_code == 200:
+                        for entry in demographic_response.json():
+                            item_id = entry.get('item_id')
+                            if item_id not in demographics_data:
+                                demographics_data[item_id] = []
+                            if entry.get('demographics') and entry['demographics'].get('name'):
+                                demographics_data[item_id].append(entry['demographics']['name'])
+                except Exception as e:
+                    app.logger.warning(f"Failed to fetch demographics: {e}")
+                
+                # Fetch studios
+                try:
+                    studio_response = supabase_client._make_request(
+                        'GET',
+                        'item_studios',
+                        params={'select': 'item_id,studios(name)', 'item_id': f'in.({",".join(map(str, item_ids))})'}
+                    )
+                    if studio_response.status_code == 200:
+                        for entry in studio_response.json():
+                            item_id = entry.get('item_id')
+                            if item_id not in studios_data:
+                                studios_data[item_id] = []
+                            if entry.get('studios') and entry['studios'].get('name'):
+                                studios_data[item_id].append(entry['studios']['name'])
+                except Exception as e:
+                    app.logger.warning(f"Failed to fetch studios: {e}")
+                
+                # Fetch authors
+                try:
+                    author_response = supabase_client._make_request(
+                        'GET',
+                        'item_authors',
+                        params={'select': 'item_id,authors(name)', 'item_id': f'in.({",".join(map(str, item_ids))})'}
+                    )
+                    if author_response.status_code == 200:
+                        for entry in author_response.json():
+                            item_id = entry.get('item_id')
+                            if item_id not in authors_data:
+                                authors_data[item_id] = []
+                            if entry.get('authors') and entry['authors'].get('name'):
+                                authors_data[item_id].append(entry['authors']['name'])
+                except Exception as e:
+                    app.logger.warning(f"Failed to fetch authors: {e}")
+            
+            # Apply related data to items
+            for item in items_list:
+                # Convert media_type_id to media_type string
+                if 'media_type_id' in item:
+                    # Map ID to type name (based on database values)
+                    media_type_map = {1: 'anime', 2: 'manga'}
+                    item['media_type'] = media_type_map.get(item['media_type_id'], 'unknown')
+                else:
+                    item['media_type'] = 'unknown'
+                
+                # Add related data from batch fetch
+                item_id = item.get('id')
+                item['genres'] = genres_data.get(item_id, [])
+                item['themes'] = themes_data.get(item_id, [])
+                item['demographics'] = demographics_data.get(item_id, [])
+                item['studios'] = studios_data.get(item_id, [])
+                item['authors'] = authors_data.get(item_id, [])
         
         # Map field names for frontend compatibility (handles image_url -> main_picture)
         items_mapped = map_records_for_frontend(items_list)
@@ -1605,6 +1728,7 @@ def get_item_details(item_uid: str) -> Union[Response, Tuple[Response, int]]:
             return jsonify({"error": "Item not found."}), 404
         
         item_details_dict = response.data[0]
+        item_id = item_details_dict.get('id')
         
         # Transform normalized data to frontend format
         # Convert media_type_id to media_type string
@@ -1614,13 +1738,109 @@ def get_item_details(item_uid: str) -> Union[Response, Tuple[Response, int]]:
         else:
             item_details_dict['media_type'] = 'unknown'
         
-        # For now, set empty arrays for related data
-        # TODO: In production, these should be fetched via joins or separate queries
-        item_details_dict['genres'] = []
-        item_details_dict['themes'] = []
-        item_details_dict['demographics'] = []
-        item_details_dict['studios'] = []
-        item_details_dict['authors'] = []
+        # Fetch related data for this item
+        if item_id:
+            # Fetch genres
+            try:
+                genre_response = supabase_client._make_request(
+                    'GET',
+                    'item_genres',
+                    params={'select': 'genres(name)', 'item_id': f'eq.{item_id}'}
+                )
+                if genre_response.status_code == 200:
+                    item_details_dict['genres'] = [
+                        entry['genres']['name'] 
+                        for entry in genre_response.json() 
+                        if entry.get('genres') and entry['genres'].get('name')
+                    ]
+                else:
+                    item_details_dict['genres'] = []
+            except Exception as e:
+                app.logger.warning(f"Failed to fetch genres for item {item_uid}: {e}")
+                item_details_dict['genres'] = []
+            
+            # Fetch themes
+            try:
+                theme_response = supabase_client._make_request(
+                    'GET',
+                    'item_themes',
+                    params={'select': 'themes(name)', 'item_id': f'eq.{item_id}'}
+                )
+                if theme_response.status_code == 200:
+                    item_details_dict['themes'] = [
+                        entry['themes']['name'] 
+                        for entry in theme_response.json() 
+                        if entry.get('themes') and entry['themes'].get('name')
+                    ]
+                else:
+                    item_details_dict['themes'] = []
+            except Exception as e:
+                app.logger.warning(f"Failed to fetch themes for item {item_uid}: {e}")
+                item_details_dict['themes'] = []
+            
+            # Fetch demographics
+            try:
+                demographic_response = supabase_client._make_request(
+                    'GET',
+                    'item_demographics',
+                    params={'select': 'demographics(name)', 'item_id': f'eq.{item_id}'}
+                )
+                if demographic_response.status_code == 200:
+                    item_details_dict['demographics'] = [
+                        entry['demographics']['name'] 
+                        for entry in demographic_response.json() 
+                        if entry.get('demographics') and entry['demographics'].get('name')
+                    ]
+                else:
+                    item_details_dict['demographics'] = []
+            except Exception as e:
+                app.logger.warning(f"Failed to fetch demographics for item {item_uid}: {e}")
+                item_details_dict['demographics'] = []
+            
+            # Fetch studios
+            try:
+                studio_response = supabase_client._make_request(
+                    'GET',
+                    'item_studios',
+                    params={'select': 'studios(name)', 'item_id': f'eq.{item_id}'}
+                )
+                if studio_response.status_code == 200:
+                    item_details_dict['studios'] = [
+                        entry['studios']['name'] 
+                        for entry in studio_response.json() 
+                        if entry.get('studios') and entry['studios'].get('name')
+                    ]
+                else:
+                    item_details_dict['studios'] = []
+            except Exception as e:
+                app.logger.warning(f"Failed to fetch studios for item {item_uid}: {e}")
+                item_details_dict['studios'] = []
+            
+            # Fetch authors
+            try:
+                author_response = supabase_client._make_request(
+                    'GET',
+                    'item_authors',
+                    params={'select': 'authors(name)', 'item_id': f'eq.{item_id}'}
+                )
+                if author_response.status_code == 200:
+                    item_details_dict['authors'] = [
+                        entry['authors']['name'] 
+                        for entry in author_response.json() 
+                        if entry.get('authors') and entry['authors'].get('name')
+                    ]
+                else:
+                    item_details_dict['authors'] = []
+            except Exception as e:
+                app.logger.warning(f"Failed to fetch authors for item {item_uid}: {e}")
+                item_details_dict['authors'] = []
+        else:
+            # Set empty arrays if no item ID
+            item_details_dict['genres'] = []
+            item_details_dict['themes'] = []
+            item_details_dict['demographics'] = []
+            item_details_dict['studios'] = []
+            item_details_dict['authors'] = []
         
         # Map field names for frontend compatibility  
         item_details_mapped = map_field_names_for_frontend(item_details_dict)
