@@ -30,7 +30,19 @@ except Exception as e:
     auth_client = None
     logger.error(f"Failed to initialize auth client: {e}")
 
-supabase_client = SupabaseClient()
+# Initialize client lazily when needed
+supabase_client = None
+
+def get_supabase_client():
+    """Get or create the supabase client instance."""
+    global supabase_client
+    if supabase_client is None:
+        try:
+            supabase_client = SupabaseClient()
+        except ValueError:
+            # In test environment or when credentials are missing
+            supabase_client = None
+    return supabase_client
 
 def require_privacy_check(content_type: str = 'general'):
     """

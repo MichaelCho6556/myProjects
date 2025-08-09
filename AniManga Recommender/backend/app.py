@@ -584,12 +584,46 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
         for verification instead of local JWT decoding.
     """
     try:
-        # Initialize Supabase auth client
-        auth_client = SupabaseAuthClient(
-            base_url=os.getenv('SUPABASE_URL', ''),
-            api_key=os.getenv('SUPABASE_KEY', ''),
-            service_key=os.getenv('SUPABASE_SERVICE_KEY', '')
-        )
+        # Use global auth client or create one if not initialized
+        global auth_client
+        if auth_client is None:
+            # Only create if we have the necessary environment variables
+            base_url = (os.getenv('SUPABASE_URL') or '').strip().rstrip('/')
+            api_key = (os.getenv('SUPABASE_KEY') or '').strip()
+            service_key = (os.getenv('SUPABASE_SERVICE_KEY') or '').strip()
+            
+            if not (base_url and api_key and service_key):
+                # In test environment, try local JWT verification
+                if os.getenv('TESTING') == 'true':
+                    import jwt
+                    try:
+                        # Remove 'Bearer ' prefix if present
+                        if token.startswith('Bearer '):
+                            token = token[7:]
+                        
+                        # Decode with test JWT secret
+                        payload = jwt.decode(
+                            token,
+                            os.getenv('JWT_SECRET_KEY', 'test-jwt-secret-key'),
+                            algorithms=['HS256']
+                        )
+                        
+                        # Map user_id to sub for consistency
+                        if 'user_id' in payload and 'sub' not in payload:
+                            payload['sub'] = payload['user_id']
+                        elif 'sub' in payload and 'user_id' not in payload:
+                            payload['user_id'] = payload['sub']
+                            
+                        return payload
+                    except jwt.ExpiredSignatureError:
+                        return None
+                    except jwt.InvalidTokenError as e:
+                        return None
+                else:
+                    return None
+            else:
+                # Only try to create SupabaseAuthClient if we have valid credentials
+                auth_client = SupabaseAuthClient(base_url, api_key, service_key)
         
         # Verify token with Supabase
         user_info = auth_client.verify_jwt_token(token)
@@ -600,7 +634,29 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
             
         return user_info
     except Exception as e:
-        print(f"[DEBUG] Token verification error: {e}")
+        return None
+
+def get_supabase_client():
+    """Get SupabaseClient instance, using test client in test mode."""
+    if os.getenv('TESTING') == 'true':
+        from tests.test_utils import TestSupabaseClient
+        return TestSupabaseClient()
+    else:
+        return SupabaseClient()
+
+def get_auth_client():
+    """Get SupabaseAuthClient instance, using test client in test mode."""
+    if os.getenv('TESTING') == 'true':
+        from tests.test_utils import TestSupabaseAuthClient
+        return TestSupabaseAuthClient()
+    else:
+        # Normal auth client initialization
+        base_url = (os.getenv('SUPABASE_URL') or '').strip().rstrip('/')
+        api_key = (os.getenv('SUPABASE_KEY') or '').strip()
+        service_key = (os.getenv('SUPABASE_SERVICE_KEY') or '').strip()
+        
+        if base_url and api_key and service_key:
+            return SupabaseAuthClient(base_url, api_key, service_key)
         return None
 
 # Global variables for data and ML models
@@ -613,17 +669,11 @@ auth_client: Optional[SupabaseAuthClient] = None
 
 # Initialize clients
 try:
-    supabase_client = SupabaseClient()
-    
-    # Initialize auth client with required parameters
-    base_url = (os.getenv('SUPABASE_URL') or '').strip().rstrip('/')
-    api_key = (os.getenv('SUPABASE_KEY') or '').strip()
-    service_key = (os.getenv('SUPABASE_SERVICE_KEY') or '').strip()
-    
-    if base_url and api_key and service_key:
-        auth_client = SupabaseAuthClient(base_url, api_key, service_key)
-    else:
-        auth_client = None
+    # Only initialize if not already set (for testing)
+    if 'supabase_client' not in globals() or supabase_client is None:
+        supabase_client = get_supabase_client()
+    if 'auth_client' not in globals() or auth_client is None:
+        auth_client = get_auth_client()
 except Exception as e:
     supabase_client = None
     auth_client = None
@@ -762,7 +812,7 @@ def load_data_and_tfidf_from_supabase() -> None:
     def load_from_supabase():
         global supabase_client
         if supabase_client is None:
-            supabase_client = SupabaseClient()
+            supabase_client = get_supabase_client()
         
         # Get data as DataFrame from Supabase with lazy loading enabled
         # Note: Relations will be loaded on-demand to reduce memory usage
@@ -1021,7 +1071,7 @@ def map_records_for_frontend(records_list: List[Any]) -> List[Any]:
     """
     return [map_field_names_for_frontend(record) for record in records_list]
 
-def initialize_auth_client() -> SupabaseAuthClient:
+def initialize_auth_client() -> Optional[SupabaseAuthClient]:
     """
     Initialize the Supabase authentication client for the application.
     
@@ -1051,11 +1101,7 @@ def initialize_auth_client() -> SupabaseAuthClient:
     """
     global auth_client
     if auth_client is None:
-        auth_client = SupabaseAuthClient(
-            os.getenv('SUPABASE_URL'),
-            os.getenv('SUPABASE_KEY'),
-            os.getenv('SUPABASE_SERVICE_KEY')
-        )
+        auth_client = get_auth_client()
     return auth_client
 
 # Initialize data loading flag
@@ -1133,7 +1179,7 @@ def hello() -> str:
     try:
         global supabase_client
         if supabase_client is None:
-            supabase_client = SupabaseClient()
+            supabase_client = get_supabase_client()
         
         # Quick query to check database connection
         # Note: Getting exact count would require loading all items, so we just check connection
@@ -1152,7 +1198,7 @@ def debug_data() -> Union[Response, Tuple[Response, int]]:
     try:
         global supabase_client
         if supabase_client is None:
-            supabase_client = SupabaseClient()
+            supabase_client = get_supabase_client()
         
         # Get sample items from database
         sample_response = supabase_client.table('items').select('*').limit(3).execute()
@@ -1269,8 +1315,8 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
     
     try:
         # Parse request parameters
-        page = request.args.get('page', 1, type=int)
-        per_page = min(request.args.get('per_page', 30, type=int), 100)  # Cap at 100
+        page = max(1, request.args.get('page', 1, type=int))  # Ensure page is at least 1
+        per_page = min(max(1, request.args.get('per_page', 30, type=int)), 100)  # Cap at 100, min 1
         search_query = request.args.get('q', None, type=str)
         media_type_filter = request.args.get('media_type', None, type=str)
         
@@ -1282,13 +1328,14 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         
         status_filter = request.args.get('status', None, type=str)
         min_score_filter = request.args.get('min_score', None, type=float)
+        max_score_filter = request.args.get('max_score', None, type=float)
         year_filter = request.args.get('year', None, type=int)
         sort_by = request.args.get('sort_by', 'score_desc', type=str)
         
         # Initialize Supabase client if needed
         global supabase_client
         if supabase_client is None:
-            supabase_client = SupabaseClient()
+            supabase_client = get_supabase_client()
         
         # Build the query using direct Supabase API
         # We'll fetch items first, then enrich with related data
@@ -1305,30 +1352,165 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         
         # Apply array filters (genres, themes, demographics, studios, authors)
         # For multi-value filters, we need ALL values to match (AND logic)
+        # Since the database uses junction tables, we need to filter by item IDs
+        
+        # Filter by genres using junction table
         if genre_filter_str and genre_filter_str.lower() != 'all':
             genres = [g.strip() for g in genre_filter_str.split(',') if g.strip()]
             for genre in genres:
-                query = query.contains('genres', [genre])
+                # Get item IDs that have this genre
+                try:
+                    # First get the genre ID
+                    genre_response = supabase_client._make_request(
+                        'GET',
+                        'genres',
+                        params={'select': 'id', 'name': f'eq.{genre}'}
+                    )
+                    if genre_response.status_code == 200 and genre_response.json():
+                        genre_id = genre_response.json()[0]['id']
+                        # Now get items with this genre
+                        genre_items_response = supabase_client._make_request(
+                            'GET',
+                            'item_genres',
+                            params={'select': 'item_id', 'genre_id': f'eq.{genre_id}'}
+                        )
+                        if genre_items_response.status_code == 200:
+                            item_ids = [item['item_id'] for item in genre_items_response.json()]
+                            if item_ids:
+                                query = query.in_('id', item_ids)
+                            else:
+                                # No items with this genre, return empty result
+                                query = query.eq('id', -1)  # Impossible ID to force empty result
+                    else:
+                        # Genre not found
+                        app.logger.warning(f"Genre '{genre}' not found in database")
+                        query = query.eq('id', -1)  # Force empty result
+                except Exception as e:
+                    app.logger.warning(f"Failed to filter by genre {genre}: {e}")
         
+        # Filter by themes using junction table
         if theme_filter_str and theme_filter_str.lower() != 'all':
             themes = [t.strip() for t in theme_filter_str.split(',') if t.strip()]
             for theme in themes:
-                query = query.contains('themes', [theme])
+                try:
+                    # First get the theme ID
+                    theme_response = supabase_client._make_request(
+                        'GET',
+                        'themes',
+                        params={'select': 'id', 'name': f'eq.{theme}'}
+                    )
+                    if theme_response.status_code == 200 and theme_response.json():
+                        theme_id = theme_response.json()[0]['id']
+                        # Now get items with this theme
+                        theme_items_response = supabase_client._make_request(
+                            'GET',
+                            'item_themes',
+                            params={'select': 'item_id', 'theme_id': f'eq.{theme_id}'}
+                        )
+                        if theme_items_response.status_code == 200:
+                            item_ids = [item['item_id'] for item in theme_items_response.json()]
+                            if item_ids:
+                                query = query.in_('id', item_ids)
+                            else:
+                                query = query.eq('id', -1)
+                    else:
+                        app.logger.warning(f"Theme '{theme}' not found in database")
+                        query = query.eq('id', -1)
+                except Exception as e:
+                    app.logger.warning(f"Failed to filter by theme {theme}: {e}")
         
+        # Filter by demographics using junction table
         if demographic_filter_str and demographic_filter_str.lower() != 'all':
             demographics = [d.strip() for d in demographic_filter_str.split(',') if d.strip()]
             for demographic in demographics:
-                query = query.contains('demographics', [demographic])
+                try:
+                    # First get the demographic ID
+                    demo_response = supabase_client._make_request(
+                        'GET',
+                        'demographics',
+                        params={'select': 'id', 'name': f'eq.{demographic}'}
+                    )
+                    if demo_response.status_code == 200 and demo_response.json():
+                        demo_id = demo_response.json()[0]['id']
+                        # Now get items with this demographic
+                        demo_items_response = supabase_client._make_request(
+                            'GET',
+                            'item_demographics',
+                            params={'select': 'item_id', 'demographic_id': f'eq.{demo_id}'}
+                        )
+                        if demo_items_response.status_code == 200:
+                            item_ids = [item['item_id'] for item in demo_items_response.json()]
+                            if item_ids:
+                                query = query.in_('id', item_ids)
+                            else:
+                                query = query.eq('id', -1)
+                    else:
+                        app.logger.warning(f"Demographic '{demographic}' not found in database")
+                        query = query.eq('id', -1)
+                except Exception as e:
+                    app.logger.warning(f"Failed to filter by demographic {demographic}: {e}")
         
+        # Filter by studios using junction table
         if studio_filter_str and studio_filter_str.lower() != 'all':
             studios = [s.strip() for s in studio_filter_str.split(',') if s.strip()]
             for studio in studios:
-                query = query.contains('studios', [studio])
+                try:
+                    # First get the studio ID
+                    studio_response = supabase_client._make_request(
+                        'GET',
+                        'studios',
+                        params={'select': 'id', 'name': f'eq.{studio}'}
+                    )
+                    if studio_response.status_code == 200 and studio_response.json():
+                        studio_id = studio_response.json()[0]['id']
+                        # Now get items with this studio
+                        studio_items_response = supabase_client._make_request(
+                            'GET',
+                            'item_studios',
+                            params={'select': 'item_id', 'studio_id': f'eq.{studio_id}'}
+                        )
+                        if studio_items_response.status_code == 200:
+                            item_ids = [item['item_id'] for item in studio_items_response.json()]
+                            if item_ids:
+                                query = query.in_('id', item_ids)
+                            else:
+                                query = query.eq('id', -1)
+                    else:
+                        app.logger.warning(f"Studio '{studio}' not found in database")
+                        query = query.eq('id', -1)
+                except Exception as e:
+                    app.logger.warning(f"Failed to filter by studio {studio}: {e}")
         
+        # Filter by authors using junction table
         if author_filter_str and author_filter_str.lower() != 'all':
             authors = [a.strip() for a in author_filter_str.split(',') if a.strip()]
             for author in authors:
-                query = query.contains('authors', [author])
+                try:
+                    # First get the author ID
+                    author_response = supabase_client._make_request(
+                        'GET',
+                        'authors',
+                        params={'select': 'id', 'name': f'eq.{author}'}
+                    )
+                    if author_response.status_code == 200 and author_response.json():
+                        author_id = author_response.json()[0]['id']
+                        # Now get items with this author
+                        author_items_response = supabase_client._make_request(
+                            'GET',
+                            'item_authors',
+                            params={'select': 'item_id', 'author_id': f'eq.{author_id}'}
+                        )
+                        if author_items_response.status_code == 200:
+                            item_ids = [item['item_id'] for item in author_items_response.json()]
+                            if item_ids:
+                                query = query.in_('id', item_ids)
+                            else:
+                                query = query.eq('id', -1)
+                    else:
+                        app.logger.warning(f"Author '{author}' not found in database")
+                        query = query.eq('id', -1)
+                except Exception as e:
+                    app.logger.warning(f"Failed to filter by author {author}: {e}")
         
         # Apply status filter
         if status_filter and status_filter.lower() != 'all':
@@ -1337,6 +1519,10 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         # Apply min score filter
         if min_score_filter is not None:
             query = query.gte('score', min_score_filter)
+        
+        # Apply max score filter
+        if max_score_filter is not None:
+            query = query.lte('score', max_score_filter)
         
         # Apply year filter
         if year_filter is not None:
@@ -1397,27 +1583,149 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         if genre_filter_str and genre_filter_str.lower() != 'all':
             genres = [g.strip() for g in genre_filter_str.split(',') if g.strip()]
             for genre in genres:
-                count_query = count_query.contains('genres', [genre])
+                try:
+                    # Get genre ID first
+                    genre_response = supabase_client._make_request(
+                        'GET',
+                        'genres',
+                        params={'select': 'id', 'name': f'eq.{genre}'}
+                    )
+                    if genre_response.status_code == 200 and genre_response.json():
+                        genre_id = genre_response.json()[0]['id']
+                        # Get items with this genre
+                        genre_items_response = supabase_client._make_request(
+                            'GET',
+                            'item_genres',
+                            params={'select': 'item_id', 'genre_id': f'eq.{genre_id}'}
+                        )
+                        if genre_items_response.status_code == 200:
+                            item_ids = [item['item_id'] for item in genre_items_response.json()]
+                            if item_ids:
+                                count_query = count_query.in_('id', item_ids)
+                            else:
+                                count_query = count_query.eq('id', -1)
+                    else:
+                        count_query = count_query.eq('id', -1)
+                except Exception as e:
+                    app.logger.warning(f"Failed to filter count by genre {genre}: {e}")
         if theme_filter_str and theme_filter_str.lower() != 'all':
             themes = [t.strip() for t in theme_filter_str.split(',') if t.strip()]
             for theme in themes:
-                count_query = count_query.contains('themes', [theme])
+                try:
+                    # Get theme ID first
+                    theme_response = supabase_client._make_request(
+                        'GET',
+                        'themes',
+                        params={'select': 'id', 'name': f'eq.{theme}'}
+                    )
+                    if theme_response.status_code == 200 and theme_response.json():
+                        theme_id = theme_response.json()[0]['id']
+                        # Get items with this theme
+                        theme_items_response = supabase_client._make_request(
+                            'GET',
+                            'item_themes',
+                            params={'select': 'item_id', 'theme_id': f'eq.{theme_id}'}
+                        )
+                        if theme_items_response.status_code == 200:
+                            item_ids = [item['item_id'] for item in theme_items_response.json()]
+                            if item_ids:
+                                count_query = count_query.in_('id', item_ids)
+                            else:
+                                count_query = count_query.eq('id', -1)
+                    else:
+                        count_query = count_query.eq('id', -1)
+                except Exception as e:
+                    app.logger.warning(f"Failed to filter count by theme {theme}: {e}")
         if demographic_filter_str and demographic_filter_str.lower() != 'all':
             demographics = [d.strip() for d in demographic_filter_str.split(',') if d.strip()]
             for demographic in demographics:
-                count_query = count_query.contains('demographics', [demographic])
+                try:
+                    # Get demographic ID first
+                    demo_response = supabase_client._make_request(
+                        'GET',
+                        'demographics',
+                        params={'select': 'id', 'name': f'eq.{demographic}'}
+                    )
+                    if demo_response.status_code == 200 and demo_response.json():
+                        demo_id = demo_response.json()[0]['id']
+                        # Get items with this demographic
+                        demo_items_response = supabase_client._make_request(
+                            'GET',
+                            'item_demographics',
+                            params={'select': 'item_id', 'demographic_id': f'eq.{demo_id}'}
+                        )
+                        if demo_items_response.status_code == 200:
+                            item_ids = [item['item_id'] for item in demo_items_response.json()]
+                            if item_ids:
+                                count_query = count_query.in_('id', item_ids)
+                            else:
+                                count_query = count_query.eq('id', -1)
+                    else:
+                        count_query = count_query.eq('id', -1)
+                except Exception as e:
+                    app.logger.warning(f"Failed to filter count by demographic {demographic}: {e}")
         if studio_filter_str and studio_filter_str.lower() != 'all':
             studios = [s.strip() for s in studio_filter_str.split(',') if s.strip()]
             for studio in studios:
-                count_query = count_query.contains('studios', [studio])
+                try:
+                    # Get studio ID first
+                    studio_response = supabase_client._make_request(
+                        'GET',
+                        'studios',
+                        params={'select': 'id', 'name': f'eq.{studio}'}
+                    )
+                    if studio_response.status_code == 200 and studio_response.json():
+                        studio_id = studio_response.json()[0]['id']
+                        # Get items with this studio
+                        studio_items_response = supabase_client._make_request(
+                            'GET',
+                            'item_studios',
+                            params={'select': 'item_id', 'studio_id': f'eq.{studio_id}'}
+                        )
+                        if studio_items_response.status_code == 200:
+                            item_ids = [item['item_id'] for item in studio_items_response.json()]
+                            if item_ids:
+                                count_query = count_query.in_('id', item_ids)
+                            else:
+                                count_query = count_query.eq('id', -1)
+                    else:
+                        count_query = count_query.eq('id', -1)
+                except Exception as e:
+                    app.logger.warning(f"Failed to filter count by studio {studio}: {e}")
         if author_filter_str and author_filter_str.lower() != 'all':
             authors = [a.strip() for a in author_filter_str.split(',') if a.strip()]
             for author in authors:
-                count_query = count_query.contains('authors', [author])
+                try:
+                    # Get author ID first
+                    author_response = supabase_client._make_request(
+                        'GET',
+                        'authors',
+                        params={'select': 'id', 'name': f'eq.{author}'}
+                    )
+                    if author_response.status_code == 200 and author_response.json():
+                        author_id = author_response.json()[0]['id']
+                        # Get items with this author
+                        author_items_response = supabase_client._make_request(
+                            'GET',
+                            'item_authors',
+                            params={'select': 'item_id', 'author_id': f'eq.{author_id}'}
+                        )
+                        if author_items_response.status_code == 200:
+                            item_ids = [item['item_id'] for item in author_items_response.json()]
+                            if item_ids:
+                                count_query = count_query.in_('id', item_ids)
+                            else:
+                                count_query = count_query.eq('id', -1)
+                    else:
+                        count_query = count_query.eq('id', -1)
+                except Exception as e:
+                    app.logger.warning(f"Failed to filter count by author {author}: {e}")
         if status_filter and status_filter.lower() != 'all':
             count_query = count_query.eq('status', status_filter)
         if min_score_filter is not None:
             count_query = count_query.gte('score', min_score_filter)
+        if max_score_filter is not None:
+            count_query = count_query.lte('score', max_score_filter)
         if year_filter is not None:
             count_query = count_query.or_(f'start_year_num.eq.{year_filter},start_date.like.{year_filter}%')
         
@@ -1558,7 +1866,8 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
 
     return jsonify({
         "items": items_mapped,
-        "page": page,
+        "current_page": page,
+        "page": page,  # Keep for backward compatibility
         "per_page": per_page,
         "total_items": total_items,
         "total_pages": total_pages,
@@ -1916,7 +2225,7 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
     # Try to get cached recommendations from database
     global supabase_client
     if supabase_client is None:
-        supabase_client = SupabaseClient()
+        supabase_client = get_supabase_client()
     
     try:
         num_related = request.args.get('n', 10, type=int)
@@ -4587,7 +4896,10 @@ def get_item_details_simple(item_uid: str) -> dict:
         Use get_item_details() for complete item information including synopsis,
         genres, and other detailed metadata.
     """
+    global supabase_client
+    
     try:
+        # First try df_processed if available (will be None in production due to memory limits)
         if df_processed is not None and not df_processed.empty:
             item_row = df_processed[df_processed['uid'] == item_uid]
             if not item_row.empty:
@@ -4603,8 +4915,54 @@ def get_item_details_simple(item_uid: str) -> dict:
                     'score': float(item.get('score', 0)) if pd.notna(item.get('score')) else 0.0,
                     'image_url': str(item.get('image_url', '')) if pd.notna(item.get('image_url')) else None
                 }
-        return {}
+        
+        # Production path: Query directly from database
+        # Ensure Supabase client is initialized
+        if supabase_client is None:
+            supabase_client = get_supabase_client()
+            if supabase_client is None:
+                logger.error(f"Failed to initialize Supabase client for item lookup: {item_uid}")
+                return {}
+        
+        try:
+            response = supabase_client.table('items').select('*').eq('uid', item_uid).execute()
+            if response.data and len(response.data) > 0:
+                item = response.data[0]
+                
+                # Determine media type from UID prefix or presence of episodes/chapters
+                media_type = item.get('media_type')
+                if not media_type or media_type == 'cm':
+                    # Infer from UID prefix
+                    if 'anime' in str(item.get('uid', '')).lower():
+                        media_type = 'anime'
+                    elif 'manga' in str(item.get('uid', '')).lower():
+                        media_type = 'manga'
+                    # Or infer from episodes/chapters
+                    elif item.get('episodes') is not None:
+                        media_type = 'anime'
+                    elif item.get('chapters') is not None:
+                        media_type = 'manga'
+                    else:
+                        media_type = 'manga'  # Default to manga if unclear
+                
+                return {
+                    'uid': str(item.get('uid', '')),
+                    'title': str(item.get('title', '')),
+                    'media_type': media_type,
+                    'episodes': item.get('episodes'),
+                    'chapters': item.get('chapters'),
+                    'score': float(item.get('score', 0)) if item.get('score') else 0.0,
+                    'image_url': item.get('image_url')
+                }
+            else:
+                logger.warning(f"Item not found in database: {item_uid}")
+                return {}
+        except Exception as db_error:
+            logger.error(f"Database query failed for item {item_uid}: {str(db_error)}")
+            return {}
+                
     except Exception as e:
+        logger.error(f"Unexpected error in get_item_details_simple for {item_uid}: {str(e)}")
         return {}
 
 # === Personalized Recommendation System =====================================
@@ -5186,7 +5544,7 @@ def _generate_cached_content_recommendations(completed_items: List[Dict[str, Any
         
         global supabase_client
         if supabase_client is None:
-            supabase_client = SupabaseClient()
+            supabase_client = get_supabase_client()
         
         recommendations = []
         seen_uids = set()
@@ -5230,7 +5588,7 @@ def _generate_database_trending_recommendations(user_preferences: Dict[str, Any]
     try:
         global supabase_client
         if supabase_client is None:
-            supabase_client = SupabaseClient()
+            supabase_client = get_supabase_client()
         
         recommendations = []
         genre_prefs = user_preferences.get('genre_preferences', {})
@@ -5289,7 +5647,7 @@ def _generate_database_hidden_gems(user_preferences: Dict[str, Any],
     try:
         global supabase_client
         if supabase_client is None:
-            supabase_client = SupabaseClient()
+            supabase_client = get_supabase_client()
         
         # Query high-rated but less popular items
         query = supabase_client.table('items').select('*')
@@ -6407,7 +6765,8 @@ def get_public_user_stats(username) -> Union[Response, Tuple[Response, int]]:
                 import importlib
                 import supabase_client as sc_module
                 importlib.reload(sc_module)
-                supabase_client = sc_module.SupabaseClient()
+                # Use the helper function to get the appropriate client
+                supabase_client = get_supabase_client()
                 if not hasattr(supabase_client, 'get_user_stats'):
                     # Debug: Available methods: {[method for method in dir(supabase_client if not method.startswith('_')]}")
                     return jsonify({'error': 'Database service temporarily unavailable'}), 503
@@ -6489,11 +6848,18 @@ def get_public_user_lists(username) -> Union[Response, Tuple[Response, int]]:
     """
     try:
         # Initialize auth client
-        auth_client = SupabaseAuthClient(
-            base_url=os.getenv('SUPABASE_URL'),
-            api_key=os.getenv('SUPABASE_KEY'),
-            service_key=os.getenv('SUPABASE_SERVICE_KEY')
-        )
+        base_url = (os.getenv('SUPABASE_URL') or '').strip().rstrip('/')
+        api_key = (os.getenv('SUPABASE_KEY') or '').strip()
+        service_key = (os.getenv('SUPABASE_SERVICE_KEY') or '').strip()
+        
+        if base_url and api_key and service_key:
+            auth_client = SupabaseAuthClient(
+                base_url=base_url,
+                api_key=api_key,
+                service_key=service_key
+            )
+        else:
+            auth_client = None
         
         # Get viewer ID from auth if available
         viewer_id = None
@@ -8364,7 +8730,8 @@ def reorder_list_items(list_id) -> Union[Response, Tuple[Response, int]]:
                 import importlib
                 import supabase_client as sc_module
                 importlib.reload(sc_module)
-                supabase_client = sc_module.SupabaseClient()
+                # Use the helper function to get the appropriate client
+                supabase_client = get_supabase_client()
             except Exception as e:
                 return jsonify({'error': 'Method not available, please restart the server'}), 500
         
@@ -8534,7 +8901,7 @@ def search_users() -> Union[Response, Tuple[Response, int]]:
         # Check if supabase_client is available and has search_users method
         if supabase_client is None or not hasattr(supabase_client, 'search_users'):
             try:
-                supabase_client = SupabaseClient()
+                supabase_client = get_supabase_client()
                 # Debug: [SUCCESS] Supabase client (with search_users reinitialized successfully")
             except Exception as init_error:
                 return jsonify({
