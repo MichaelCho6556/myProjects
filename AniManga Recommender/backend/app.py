@@ -642,7 +642,15 @@ def get_supabase_client():
         from tests.test_utils import TestSupabaseClient
         return TestSupabaseClient()
     else:
-        return SupabaseClient()
+        try:
+            return SupabaseClient()
+        except ValueError as e:
+            logger.error(f"Failed to initialize SupabaseClient: {e}")
+            logger.error("Please ensure SUPABASE_URL and SUPABASE_KEY environment variables are set")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error initializing SupabaseClient: {e}")
+            return None
 
 def get_auth_client():
     """Get SupabaseAuthClient instance, using test client in test mode."""
@@ -1337,6 +1345,20 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         if supabase_client is None:
             supabase_client = get_supabase_client()
         
+        # Check if client initialization failed
+        if supabase_client is None:
+            logger.error("Unable to connect to database for items")
+            return jsonify({
+                "error": "Database connection unavailable",
+                "items": [],
+                "page": page,
+                "per_page": per_page,
+                "current_page": page,
+                "total_items": 0,
+                "total_pages": 0,
+                "sort_by": sort_by
+            }), 503
+        
         # Build the query using direct Supabase API
         # We'll fetch items first, then enrich with related data
         query = supabase_client.table('items').select('*')
@@ -1945,10 +1967,20 @@ def get_distinct_values() -> Union[Response, Tuple[Response, int]]:
     """
     # Try to get cached distinct values from database
     global supabase_client
-    if supabase_client is None:
-        supabase_client = SupabaseClient()
     
     try:
+        if supabase_client is None:
+            supabase_client = get_supabase_client()
+        
+        # Check if client initialization failed
+        if supabase_client is None:
+            logger.error("Unable to connect to database for distinct values")
+            return jsonify({
+                "error": "Database connection unavailable",
+                "genres": [], "themes": [], "demographics": [],
+                "studios": [], "authors": [], "statuses": [], "media_types": []
+            }), 503
+        
         # Query the cached distinct values
         response = supabase_client.table('distinct_values_cache').select('*').eq('id', 1).execute()
         
@@ -2027,7 +2059,12 @@ def get_item_details(item_uid: str) -> Union[Response, Tuple[Response, int]]:
     # Query directly from Supabase instead of loading all data
     global supabase_client
     if supabase_client is None:
-        supabase_client = SupabaseClient()
+        supabase_client = get_supabase_client()
+    
+    # Check if client initialization failed
+    if supabase_client is None:
+        logger.error(f"Unable to connect to database for item details: {item_uid}")
+        return jsonify({"error": "Database connection unavailable"}), 503
     
     try:
         # Get item from database
@@ -13475,13 +13512,25 @@ def internal_error(error) -> Tuple[Response, int]:
     # Log the full error for debugging
     logger.error(f"Internal server error: {str(error)}", exc_info=True)
     
-    # Return a generic error message to avoid exposing internals
-    return jsonify({
+    # Create response with generic error message to avoid exposing internals
+    response = make_response(jsonify({
         'error': 'Internal Server Error',
         'message': 'An unexpected error occurred. Please try again later.',
         'status': 500,
         'timestamp': datetime.utcnow().isoformat()
-    }), 500
+    }), 500)
+    
+    # Ensure CORS headers are added even on 500 errors
+    origin = request.headers.get('Origin')
+    if origin and is_origin_allowed(origin, ALLOWED_ORIGINS):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    elif not ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = '*'
+    
+    return response
 
 @app.errorhandler(Exception)
 def handle_unexpected_error(error) -> Tuple[Response, int]:
@@ -13502,13 +13551,25 @@ def handle_unexpected_error(error) -> Tuple[Response, int]:
     if hasattr(error, 'code'):
         status_code = error.code
     
-    # Return a safe error response
-    return jsonify({
+    # Create response
+    response = make_response(jsonify({
         'error': error.__class__.__name__,
         'message': 'An error occurred processing your request',
         'status': status_code,
         'timestamp': datetime.utcnow().isoformat()
-    }), status_code
+    }), status_code)
+    
+    # Ensure CORS headers are added even on exceptions
+    origin = request.headers.get('Origin')
+    if origin and is_origin_allowed(origin, ALLOWED_ORIGINS):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    elif not ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = '*'
+    
+    return response
 
 @app.errorhandler(400)
 def bad_request_error(error) -> Tuple[Response, int]:
