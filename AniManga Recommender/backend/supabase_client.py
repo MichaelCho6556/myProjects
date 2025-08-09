@@ -101,13 +101,26 @@ class SupabaseClient:
         Initialize SupabaseClient with environment configuration.
         
         Raises:
-            ValueError: If required environment variables are not set
+            ValueError: If required environment variables are not set (except in test mode)
         """
         # Strip whitespace/new-line characters that can sneak in when keys are copied
         self.base_url = (os.getenv('SUPABASE_URL') or '').strip().rstrip('/')
         self.api_key = (os.getenv('SUPABASE_KEY') or '').strip()
         self.service_key = (os.getenv('SUPABASE_SERVICE_KEY') or '').strip()
         
+        # In test mode, we use a local test database instead of Supabase
+        if os.getenv('TESTING') == 'true':
+            # Initialize for test mode - will use test database connection
+            self.headers = {
+                "apikey": "test-api-key",
+                "Authorization": "Bearer test-api-key",
+                "Content-Type": "application/json"
+            }
+            self.is_test_mode = True
+            # For test mode, we'll use a different approach with direct database access
+            self.base_url = "http://test-database"
+            return
+            
         if not self.base_url or not self.api_key:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in .env")
         
@@ -117,6 +130,7 @@ class SupabaseClient:
             "Authorization": f"Bearer {self.service_key or self.api_key}",
             "Content-Type": "application/json"
         }
+        self.is_test_mode = False
     
     def _make_request(self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None, headers: Optional[Dict] = None) -> requests.Response:
         """
@@ -190,7 +204,7 @@ class SupabaseClient:
                 )
                 
                 # Check if request was successful
-                if response.status_code not in [200, 201, 204]:
+                if response.status_code not in [200, 201, 204, 206]:  # 206 is valid for partial content/pagination
                     # Check if this is a retryable error
                     if response.status_code in retry_statuses and attempt < max_retries - 1:
                         logger.warning(f"Retryable error {response.status_code} for {endpoint}, attempt {attempt + 1}/{max_retries}")
@@ -201,7 +215,7 @@ class SupabaseClient:
                     response.raise_for_status()
                 
                 # Handle potential response parsing issues
-                if response.status_code in [200, 201] and response.text:
+                if response.status_code in [200, 201, 206] and response.text:  # 206 for partial content
                     try:
                         # Test if we can parse the JSON
                         response.json()

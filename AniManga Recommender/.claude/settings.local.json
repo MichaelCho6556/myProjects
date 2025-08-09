@@ -27,7 +27,21 @@
       "Bash(npm install:*)",
       "Bash(npm run lint:*)",
       "Bash(npm run type-check:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(venvScripts:*)",
+      "Bash(venv/Scripts/python.exe -m pytest tests_integration/test_utilities_real.py::TestBatchOperationsReal::test_bulk_user_item_update -v --tb=short)",
+      "Bash(venv/Scripts/python.exe -m pytest tests_integration/test_utilities_real.py::TestContentAnalysisReal::test_toxicity_detection -v --tb=short)",
+      "Bash(venv/Scripts/python.exe -m pytest tests_integration/test_utilities_real.py -v --tb=no)",
+      "Bash(venv/Scripts/python.exe -m pytest tests_integration/test_utilities_real.py::TestBatchOperationsReal::test_bulk_user_item_update -v -s)",
+      "Bash(venv/Scripts/python.exe -m pytest tests_integration/test_utilities_real.py::TestBatchOperationsReal -v --tb=short)",
+      "Bash(venv/Scripts/python.exe -m pytest tests_integration/test_utilities_real.py::TestBatchOperationsReal -v --tb=no)",
+      "Bash(venv/Scripts/python.exe -m pytest tests_integration/test_utilities_real.py::TestContentAnalysisReal::test_content_moderation_pipeline -v --tb=short)",
+      "Bash(venv/Scripts/python.exe -m pytest tests_integration/test_utilities_real.py::TestDataProcessingUtilities::test_user_statistics_calculator -v --tb=short)",
+      "Bash(venv/Scripts/python.exe -m pytest tests_integration/test_utilities_real.py -v --tb=no -m \"not skip\")",
+      "Bash(./run_tests.bat single tests_unit/test_cross_component_integration.py)",
+      "Bash(.run_tests.bat single tests_unit/test_cross_component_integration.py)",
+      "Bash(cmd /c:*)",
+      "Bash(set TESTING=true)"
     ],
     "deny": []
   },

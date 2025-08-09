@@ -95,6 +95,7 @@ class BatchOperationsManager:
                     "success": True,
                     "operation_type": operation_type,
                     "affected_items": len(item_ids),
+                    "total_processed": len(item_ids),  # For test compatibility
                     "result": result,
                     "timestamp": datetime.utcnow().isoformat()
                 }
@@ -381,4 +382,319 @@ class BatchOperationsManager:
 
 def create_batch_operations_manager(db_connection, cache_client=None):
     """Factory function to create a BatchOperationsManager instance"""
-    return BatchOperationsManager(db_connection, cache_client) 
+    return BatchOperationsManager(db_connection, cache_client)
+
+
+class BulkUserItemUpdater:
+    """Handles bulk updates for user items (watchlist/readlist)."""
+    
+    def __init__(self, db_connection):
+        self.db = db_connection
+        
+    def bulk_update_user_items(self, user_id: str, updates: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Bulk update user items with new status, ratings, and progress.
+        
+        Args:
+            user_id: The user ID
+            updates: List of update dictionaries with item_uid, status, rating, progress
+            
+        Returns:
+            Dictionary with success_count, error_count, updated_items
+        """
+        success_count = 0
+        error_count = 0
+        updated_items = []
+        errors = []
+        
+        try:
+            from sqlalchemy import text
+            
+            # Process each item with savepoint isolation for transaction safety
+            for update in updates:
+                try:
+                    # Use savepoint to isolate each item's transaction
+                    # This prevents one error from aborting the entire batch
+                    with self.db.begin_nested():  # Creates a savepoint
+                        item_uid = update.get('item_uid')
+                        status = update.get('status')
+                        score = update.get('rating')  # Map 'rating' from test to 'score' in DB
+                        progress = update.get('progress', 0)
+                        
+                        # Check if the item exists in user_items
+                        result = self.db.execute(
+                            text("""
+                                SELECT * FROM user_items 
+                                WHERE user_id = :user_id AND item_uid = :item_uid
+                            """),
+                            {'user_id': user_id, 'item_uid': item_uid}
+                        )
+                        
+                        existing = result.fetchone()
+                        
+                        if existing:
+                            # Update existing item
+                            self.db.execute(
+                                text("""
+                                    UPDATE user_items 
+                                    SET status = :status, score = :score, progress = :progress, updated_at = NOW()
+                                    WHERE user_id = :user_id AND item_uid = :item_uid
+                                """),
+                                {'status': status, 'score': score, 'progress': progress, 
+                                 'user_id': user_id, 'item_uid': item_uid}
+                            )
+                        else:
+                            # Insert new item
+                            self.db.execute(
+                                text("""
+                                    INSERT INTO user_items (user_id, item_uid, status, score, progress, created_at, updated_at)
+                                    VALUES (:user_id, :item_uid, :status, :score, :progress, NOW(), NOW())
+                                """),
+                                {'user_id': user_id, 'item_uid': item_uid, 'status': status, 
+                                 'score': score, 'progress': progress}
+                            )
+                        
+                        success_count += 1
+                        updated_items.append({
+                            'item_uid': item_uid,
+                            'status': status,
+                            'rating': score,  # Return as 'rating' to match API
+                            'progress': progress
+                        })
+                    
+                except Exception as e:
+                    # Savepoint automatically rolls back on exception
+                    # Transaction remains valid for next item
+                    error_count += 1
+                    errors.append(f"Error updating {update.get('item_uid', 'unknown')}: {str(e)}")
+                    import traceback
+                    print(f"Error in bulk_update_user_items: {str(e)}")
+                    print(f"Traceback: {traceback.format_exc()}")
+                
+        except Exception as e:
+            raise BatchOperationError(f"Bulk update failed: {str(e)}")
+        
+        return {
+            'success_count': success_count,
+            'error_count': error_count,
+            'updated_items': updated_items,
+            'errors': errors,
+            'total_processed': success_count + error_count  # Add for test compatibility
+        }
+
+
+class BulkStatusChanger:
+    """Handles bulk status changes for user items."""
+    
+    def __init__(self, db_connection):
+        self.db = db_connection
+        
+    def bulk_change_status(self, user_id: str, item_uids: List[str], new_status: str) -> Dict[str, Any]:
+        """
+        Change status for multiple items at once.
+        
+        Args:
+            user_id: The user ID
+            item_uids: List of item UIDs to update
+            new_status: The new status to apply
+            
+        Returns:
+            Dictionary with success_count and updated_items
+        """
+        valid_statuses = ['plan_to_watch', 'watching', 'completed', 'on_hold', 'dropped']
+        if new_status not in valid_statuses:
+            raise BatchOperationError(f"Invalid status: {new_status}")
+        
+        try:
+            from sqlalchemy import text
+            
+            # Transaction is already managed by test fixture or connection
+            # Update all items in one query
+            # Build IN clause manually for parameterized query
+            in_clause = ', '.join([f':uid_{i}' for i in range(len(item_uids))])
+            params = {'new_status': new_status, 'user_id': user_id}
+            for i, uid in enumerate(item_uids):
+                params[f'uid_{i}'] = uid
+            
+            result = self.db.execute(
+                text(f"""
+                    UPDATE user_items 
+                    SET status = :new_status, updated_at = NOW()
+                    WHERE user_id = :user_id AND item_uid IN ({in_clause})
+                """),
+                params
+            )
+            
+            affected_count = result.rowcount
+            
+            return {
+                'success': True,
+                'affected_count': affected_count,
+                'new_status': new_status,
+                'item_uids': item_uids
+            }
+                
+        except Exception as e:
+            raise BatchOperationError(f"Status change failed: {str(e)}")
+
+
+class BulkListItemManager:
+    """Handles bulk operations for custom list items."""
+    
+    def __init__(self, db_connection):
+        self.db = db_connection
+        self.manager = BatchOperationsManager(db_connection, None)
+        
+    def bulk_add_items(self, user_id: str, list_id: str, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Add multiple items to a custom list.
+        
+        Args:
+            user_id: The user ID
+            list_id: The custom list ID
+            items: List of items to add with item_uid, title, media_type, etc.
+            
+        Returns:
+            Dictionary with success_count and added_items
+        """
+        try:
+            from sqlalchemy import text
+            
+            # Transaction is already managed by test fixture or connection
+            # Verify list ownership
+            result = self.db.execute(
+                text("""
+                    SELECT id FROM custom_lists 
+                    WHERE id = :list_id AND user_id = :user_id
+                """),
+                {'list_id': list_id, 'user_id': user_id}
+            )
+            
+            if not result.fetchone():
+                raise BatchOperationError("List not found or access denied")
+            
+            # Get current max position
+            result = self.db.execute(
+                text("""
+                    SELECT COALESCE(MAX(position), 0) as max_pos 
+                    FROM custom_list_items 
+                    WHERE list_id = :list_id
+                """),
+                {'list_id': list_id}
+            )
+            
+            max_position = result.fetchone().max_pos
+            added_count = 0
+            
+            for idx, item in enumerate(items):
+                try:
+                    # Use savepoint to isolate each item's transaction
+                    # This prevents one error from aborting the entire batch
+                    with self.db.begin_nested():  # Creates a savepoint
+                        # Build personal_data from individual fields if not provided
+                        personal_data = item.get('personal_data', {})
+                        if not personal_data:
+                            personal_data = {}
+                            if 'personal_rating' in item:
+                                personal_data['personalRating'] = item['personal_rating']
+                            if 'status' in item:
+                                personal_data['watchStatus'] = item['status']
+                            if 'notes' in item:
+                                personal_data['notes'] = item['notes']
+                        
+                        result = self.db.execute(
+                            text("""
+                                INSERT INTO custom_list_items 
+                                (list_id, item_uid, title, media_type, image_url, position, 
+                                 personal_rating, status, notes, personal_data, created_at, updated_at)
+                                VALUES (:list_id, :item_uid, :title, :media_type, :image_url, :position,
+                                        :personal_rating, :status, :notes, :personal_data, NOW(), NOW())
+                                ON CONFLICT (list_id, item_uid) DO NOTHING
+                            """),
+                            {
+                                'list_id': list_id,
+                                'item_uid': item['item_uid'],
+                                'title': item.get('title', ''),
+                                'media_type': item.get('media_type', 'anime'),
+                                'image_url': item.get('image_url', ''),
+                                'position': max_position + idx + 1,
+                                'personal_rating': item.get('personal_rating'),
+                                'status': item.get('status'),
+                                'notes': item.get('notes'),
+                                'personal_data': json.dumps(personal_data)
+                            }
+                        )
+                        
+                        if result.rowcount > 0:
+                            added_count += 1
+                        
+                except Exception as e:
+                    # Savepoint automatically rolls back on exception
+                    # Transaction remains valid for next item
+                    logger.warning(f"Failed to add item {item.get('item_uid')}: {e}")
+            
+            # Update list item count
+            self.db.execute(
+                text("""
+                    UPDATE custom_lists 
+                    SET item_count = item_count + :added_count, updated_at = NOW() 
+                    WHERE id = :list_id
+                """),
+                {'added_count': added_count, 'list_id': list_id}
+            )
+            
+            return {
+                'success': True,
+                'added_count': added_count,
+                'list_id': list_id
+            }
+                
+        except Exception as e:
+            raise BatchOperationError(f"Bulk add failed: {str(e)}")
+    
+    def bulk_remove_items(self, user_id: str, list_id: str, item_uids: List[str]) -> Dict[str, Any]:
+        """
+        Remove multiple items from a custom list.
+        
+        Args:
+            user_id: The user ID
+            list_id: The custom list ID
+            item_uids: List of item UIDs to remove
+            
+        Returns:
+            Dictionary with removed_count
+        """
+        # Get item IDs from UIDs
+        try:
+            from sqlalchemy import text
+            
+            # Transaction is already managed by test fixture or connection
+            # Get item IDs for the given UIDs
+            in_clause = ', '.join([f':uid_{i}' for i in range(len(item_uids))])
+            params = {'list_id': list_id}
+            for i, uid in enumerate(item_uids):
+                params[f'uid_{i}'] = uid
+            
+            result = self.db.execute(
+                text(f"""
+                    SELECT id FROM custom_list_items 
+                    WHERE list_id = :list_id AND item_uid IN ({in_clause})
+                """),
+                params
+            )
+            
+            item_ids = [str(row.id) for row in result.fetchall()]
+            
+            if item_ids:
+                # Use the existing manager to remove items
+                return self.manager.perform_batch_operation(
+                    user_id, list_id, 'bulk_remove', item_ids, {}
+                )
+            else:
+                return {
+                    'success': True,
+                    'removed_count': 0
+                }
+                    
+        except Exception as e:
+            raise BatchOperationError(f"Bulk remove failed: {str(e)}") 
