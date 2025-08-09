@@ -2541,6 +2541,129 @@ def update_user_profile() -> Union[Response, Tuple[Response, int]]:
         return jsonify({'error': 'An error occurred processing your request'}), 500
     
 
+@app.route('/api/auth/complete-signup', methods=['POST'])
+@require_auth
+def complete_signup() -> Union[Response, Tuple[Response, int]]:
+    """
+    Complete the signup process by creating a user profile.
+    
+    This endpoint is called after successful Supabase Auth signup to create
+    the corresponding user_profiles entry. It ensures new users have a complete
+    profile record for dashboard and other features to work properly.
+    
+    Authentication:
+        Required: Bearer JWT token from newly signed up user
+        
+    Request Body:
+        JSON with optional fields:
+            - username (str): Desired username (auto-generated if not provided)
+            - display_name (str): Display name (defaults to username)
+            
+    Returns:
+        JSON Response containing:
+            - success (bool): Whether profile was created successfully
+            - profile (dict): Created profile data
+            - message (str): Success or error message
+            
+    HTTP Status Codes:
+        201: Created - Profile created successfully
+        200: Success - Profile already exists (idempotent)
+        400: Bad Request - Invalid data or username taken
+        401: Unauthorized - Invalid or missing authentication token
+        500: Server Error - Database or processing error
+    """
+    try:
+        user_id = g.user_id
+        data = request.get_json() or {}
+        
+        # Check if profile already exists
+        existing_profile = supabase_client.get_user_profile(user_id)
+        if existing_profile:
+            # Profile already exists, return success (idempotent)
+            return jsonify({
+                'success': True,
+                'profile': existing_profile,
+                'message': 'Profile already exists'
+            }), 200
+        
+        # Generate username if not provided
+        username = data.get('username')
+        if not username:
+            # Generate username from email or user_id
+            user_email = g.user.get('email', '') if hasattr(g, 'user') else ''
+            if user_email:
+                username = user_email.split('@')[0]
+                # Ensure username is unique by appending numbers if needed
+                base_username = username
+                counter = 1
+                while True:
+                    # Check if username exists
+                    existing = supabase_client.get_user_profile_by_username(username, user_id)
+                    if not existing:
+                        break
+                    username = f"{base_username}{counter}"
+                    counter += 1
+            else:
+                # Fallback to user_id based username
+                username = f"user_{user_id[:8]}"
+        
+        # Validate username format
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]{3,30}$', username):
+            return jsonify({
+                'success': False,
+                'error': 'Username must be 3-30 characters and contain only letters, numbers, underscores, and hyphens'
+            }), 400
+        
+        # Get display name
+        display_name = data.get('display_name', username)
+        
+        # Create the user profile
+        profile_result = auth_client.create_user_profile(
+            user_id=user_id,
+            username=username,
+            display_name=display_name
+        )
+        
+        if profile_result and profile_result.get('success'):
+            # Also create default privacy settings for the user
+            try:
+                privacy_data = {
+                    'user_id': user_id,
+                    'profile_visibility': 'public',
+                    'list_visibility': 'public',
+                    'activity_visibility': 'public',
+                    'show_statistics': True,
+                    'show_following': True,
+                    'allow_friend_requests': True
+                }
+                supabase_client.create_privacy_settings(user_id, privacy_data)
+            except Exception as privacy_error:
+                logger.warning(f"Could not create default privacy settings: {privacy_error}")
+                # Don't fail the whole request if privacy settings fail
+            
+            # Return the created profile
+            created_profile = supabase_client.get_user_profile(user_id)
+            return jsonify({
+                'success': True,
+                'profile': created_profile,
+                'message': 'Profile created successfully'
+            }), 201
+        else:
+            error_msg = profile_result.get('error', 'Failed to create profile') if profile_result else 'Failed to create profile'
+            return jsonify({
+                'success': False,
+                'error': error_msg
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Error completing signup: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'An error occurred while creating your profile'
+        }), 500
+
+
 @app.route('/api/auth/dashboard', methods=['GET'])
 @require_auth
 @monitor_endpoint("dashboard")
