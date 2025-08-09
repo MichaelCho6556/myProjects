@@ -1,463 +1,456 @@
-"""
-Test configuration and fixtures for AniManga Recommender backend tests.
+# ABOUTME: Real integration test configuration - NO MOCKS
+# ABOUTME: Provides real database connections and test fixtures
 
-CRITICAL: Environment variables must be set BEFORE any app imports!
 """
+Real Test Configuration for AniManga Recommender Backend
+
+Provides real database connections and test fixtures for all tests.
+NO MOCKS - All fixtures connect to actual test databases.
+"""
+
 import os
 import sys
-import importlib
+import pytest
+from pathlib import Path
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
-# Set test environment variables FIRST, before any other imports
-os.environ['SUPABASE_URL'] = 'https://test.supabase.co'
-os.environ['SUPABASE_KEY'] = 'test_key'
-os.environ['SUPABASE_SERVICE_KEY'] = 'test_service_key'
-os.environ['JWT_SECRET_KEY'] = 'test-jwt-secret'
+# Set test environment variables BEFORE importing app
 os.environ['TESTING'] = 'true'
+os.environ['JWT_SECRET_KEY'] = 'test-jwt-secret-key'
+# Clear Supabase URLs to force local JWT verification in tests
+os.environ['SUPABASE_URL'] = ''
+os.environ['SUPABASE_KEY'] = ''
+os.environ['SUPABASE_SERVICE_KEY'] = ''
 
-# Add the parent directory to the Python path so we can import our app
+# Add the parent directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pytest
-import pandas as pd
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from unittest.mock import Mock, patch, MagicMock, PropertyMock
+from app import app as flask_app
+from tests.test_utils import TestDataManager, generate_jwt_token, create_auth_headers
 
-# Global test session cleanup
-@pytest.fixture(scope="session", autouse=True)
-def setup_test_environment():
-    """Set up test environment for the entire session."""
-    # Force reload app modules to ensure they use test environment variables
-    modules_to_reload = ['app', 'supabase_client', 'config']
-    
-    for module_name in modules_to_reload:
-        if module_name in sys.modules:
-            importlib.reload(sys.modules[module_name])
-    
-    yield
-    
-    # Cleanup after session
-    for module_name in modules_to_reload:
-        if module_name in sys.modules:
-            del sys.modules[module_name]
 
-# Auto-use fixture to ensure proper test isolation
-@pytest.fixture(autouse=True)
-def reset_test_state():
-    """Reset test state before each test."""
-    # Clear any cached imports
-    modules_to_clear = [name for name in sys.modules.keys() if name.startswith('app') or name.startswith('supabase_client')]
+# ======================== Environment Configuration ========================
+
+# Test database configuration
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql://test_user:test_password@localhost:5433/animanga_test"
+)
+
+
+# ======================== Database Fixtures ========================
+
+@pytest.fixture(scope="session")
+def database_engine():
+    """Create a real database engine for the test session."""
+    engine = create_engine(TEST_DATABASE_URL)
     
-    yield
-    
-    # Cleanup after each test
+    # Create tables if they don't exist
     try:
-        # Force garbage collection of any hanging contexts
-        import gc
-        gc.collect()
-    except:
-        pass
+        with engine.connect() as conn:
+            # Check if tables exist
+            result = conn.execute(text("""
+                SELECT COUNT(*) FROM information_schema.tables 
+                WHERE table_schema = 'public' AND table_name = 'user_profiles'
+            """))
+            
+            if result.scalar() == 0:
+                # Tables don't exist, create them
+                _create_test_schema(conn)
+                
+    except Exception as e:
+        print(f"Warning: Could not check/create database schema: {e}")
+    
+    yield engine
+    engine.dispose()
 
 
-@pytest.fixture
-def client():
-    """Create a test client for the Flask application with proper mocking."""
-    # Import app fresh for each test
-    import importlib
-    import sys
+@pytest.fixture(scope="function")
+def database_connection(database_engine):
+    """Provide a real database connection without transaction rollback."""
+    connection = database_engine.connect()
     
-    # Reload modules to ensure clean state
-    for module_name in ['app', 'supabase_client']:
-        if module_name in sys.modules:
-            importlib.reload(sys.modules[module_name])
+    yield connection
     
-    from app import app
+    # Close connection after test
+    connection.close()
+
+
+@pytest.fixture(scope="function")
+def database_session(database_connection):
+    """Provide a database session for ORM operations."""
+    Session = sessionmaker(bind=database_connection)
+    session = Session()
     
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    app.config['JWT_SECRET_KEY'] = 'test-jwt-secret'
+    yield session
     
+    session.close()
+
+
+# ======================== Flask App Fixtures ========================
+
+@pytest.fixture(scope="function")
+def app():
+    """Create a Flask app instance for testing."""
+    flask_app.config['TESTING'] = True
+    flask_app.config['WTF_CSRF_ENABLED'] = False
+    flask_app.config['JWT_SECRET_KEY'] = 'test-jwt-secret-key'
+    
+    # Configure database connection
+    flask_app.config['DATABASE_URL'] = TEST_DATABASE_URL
+    
+    yield flask_app
+
+
+@pytest.fixture(scope="function")
+def client(app):
+    """Create a test client for the Flask application."""
     with app.test_client() as test_client:
         with app.app_context():
             yield test_client
 
 
-@pytest.fixture
-def mock_auth_client():
-    """Mock the Supabase authentication client for testing."""
-    mock = Mock()
+# ======================== Authentication Fixtures ========================
+
+@pytest.fixture(scope="function")
+def auth_client(app):
+    """Provide a real authentication client for testing."""
+    from supabase_client import SupabaseAuthClient
     
-    # Mock verify_jwt_token to return a valid user
-    mock.verify_jwt_token.return_value = {
-        'sub': 'test-user-123',
-        'user_id': 'test-user-123', 
-        'email': 'test@example.com',
-        'role': 'authenticated'
+    client = SupabaseAuthClient(
+        os.environ['SUPABASE_URL'],
+        os.environ['SUPABASE_KEY'],
+        os.environ['SUPABASE_SERVICE_KEY']
+    )
+    
+    # Set JWT secret for testing
+    client.jwt_secret = app.config['JWT_SECRET_KEY']
+    
+    yield client
+
+
+@pytest.fixture(scope="function")
+def authenticated_user(database_connection, app):
+    """Create an authenticated test user with JWT token."""
+    manager = TestDataManager(database_connection)
+    
+    # Create test user
+    user = manager.create_test_user(
+        email="auth_fixture@example.com",
+        username="auth_fixture_user"
+    )
+    
+    # Generate JWT token
+    jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+    token = generate_jwt_token(
+        user_id=user['id'],
+        email=user['email'],
+        secret_key=jwt_secret
+    )
+    
+    # Create auth headers
+    headers = create_auth_headers(token)
+    
+    yield {
+        'user': user,
+        'token': token,
+        'headers': headers,
+        'manager': manager
     }
     
-    # Mock get_user_items to return empty list by default
-    mock.get_user_items.return_value = []
+    # Cleanup
+    manager.cleanup()
+
+
+@pytest.fixture(scope="function")
+def auth_headers(authenticated_user):
+    """Generate test authentication headers with real JWT."""
+    return authenticated_user['headers']
+
+
+# ======================== Test Data Fixtures ========================
+
+@pytest.fixture(scope="function")
+def test_data_manager(database_connection):
+    """Provide a test data manager for creating test data."""
+    manager = TestDataManager(database_connection)
     
-    # Mock update_user_item_status_comprehensive to return success
-    mock.update_user_item_status_comprehensive.return_value = {
-        'success': True,
-        'data': {'status': 'watching', 'progress': 0}
-    }
+    yield manager
     
-    # Mock get_user_profile
-    mock.get_user_profile.return_value = {
-        'id': 'test-user-123',
-        'username': 'testuser',
-        'email': 'test@example.com'
-    }
+    # Cleanup all created test data
+    manager.cleanup()
+
+
+@pytest.fixture(scope="function")
+def sample_items(test_data_manager):
+    """Create sample items for testing."""
+    items = []
     
-    # Mock update_user_profile
-    mock.update_user_profile.return_value = {
-        'id': 'test-user-123',
-        'username': 'testuser',
-        'email': 'test@example.com'
-    }
+    # Create anime items
+    items.append(test_data_manager.create_test_item(
+        uid="sample_anime_1",
+        title="Sample Anime One",
+        item_type="anime",
+        score=8.5,
+        episodes=24,
+        genres=["Action", "Adventure"],
+        themes=["School"]
+    ))
     
-    return mock
-
-
-@pytest.fixture
-def auth_headers():
-    """Generate test authentication headers."""
-    return {
-        'Authorization': 'Bearer test-jwt-token',
-        'Content-Type': 'application/json'
-    }
-
-@pytest.fixture(autouse=True)
-def mock_authentication_globally():
-    """Mock authentication globally for all tests."""
-    with patch('app.auth_client') as mock_auth_client, \
-         patch('supabase_client.SupabaseAuthClient') as mock_supabase_auth:
-        
-        # Set up comprehensive auth mocking
-        mock_auth_client.verify_jwt_token.return_value = {
-            'sub': 'test-user-123',
-            'user_id': 'test-user-123', 
-            'email': 'test@example.com',
-            'role': 'authenticated'
-        }
-        
-        mock_auth_client.get_user_items.return_value = []
-        mock_auth_client.get_user_profile.return_value = {
-            'id': 'test-user-123',
-            'username': 'testuser',
-            'email': 'test@example.com'
-        }
-        
-        # Mock privacy settings methods with stateful behavior
-        privacy_settings_state = {
-            'profile_visibility': 'public',
-            'list_visibility': 'public',
-            'activity_visibility': 'public',
-            'show_statistics': True,
-            'show_following': True,
-            'show_followers': True,
-            'allow_friend_requests': True,
-            'show_recently_watched': True
-        }
-        
-        def mock_get_privacy_settings(user_id):
-            return privacy_settings_state.copy()
-        
-        def mock_update_privacy_settings(user_id, settings):
-            # Update the state with new settings
-            privacy_settings_state.update(settings)
-            return privacy_settings_state.copy()
-        
-        mock_auth_client.get_privacy_settings.side_effect = mock_get_privacy_settings
-        mock_auth_client.update_privacy_settings.side_effect = mock_update_privacy_settings
-        
-        # Mock the class and instance methods
-        mock_supabase_auth.return_value.verify_jwt_token.return_value = {
-            'sub': 'test-user-123',
-            'user_id': 'test-user-123'
-        }
-        
-        yield {
-            'auth_client': mock_auth_client,
-            'supabase_auth': mock_supabase_auth
-        }
-
-
-@pytest.fixture
-def test_app_with_mocks(mock_auth_client, sample_dataframe):
-    """Create test app with all necessary mocks applied."""
-    # Import app fresh for each test
-    import importlib
-    import sys
+    items.append(test_data_manager.create_test_item(
+        uid="sample_anime_2",
+        title="Sample Anime Two",
+        item_type="anime",
+        score=7.8,
+        episodes=12,
+        genres=["Comedy", "Romance"],
+        themes=["Love"]
+    ))
     
-    # Force reload app modules to ensure fresh state with test environment
-    for module_name in ['app', 'supabase_client']:
-        if module_name in sys.modules:
-            importlib.reload(sys.modules[module_name])
+    # Create manga item
+    items.append(test_data_manager.create_test_item(
+        uid="sample_manga_1",
+        title="Sample Manga One",
+        item_type="manga",
+        score=8.2,
+        genres=["Drama", "Mystery"],
+        themes=["Detective"]
+    ))
     
-    # NOW import app after ensuring clean state
-    from app import app
+    return items
+
+
+@pytest.fixture(scope="function")
+def sample_users(test_data_manager):
+    """Create sample users for testing."""
+    users = []
     
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    app.config['JWT_SECRET_KEY'] = 'test-jwt-secret'
+    users.append(test_data_manager.create_test_user(
+        email="sample_user1@example.com",
+        username="sample_user1",
+        bio="First sample user"
+    ))
     
-    with app.test_client() as client:
-        with app.app_context():
-            # Create TF-IDF data for recommendations
-            vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
-            tfidf_matrix = vectorizer.fit_transform(sample_dataframe['combined_text_features'])
-            uid_mapping = pd.Series(sample_dataframe.index, index=sample_dataframe['uid'])
-            
-            # Patch global variables with test data
-            with patch('app.df_processed', sample_dataframe), \
-                 patch('app.auth_client', mock_auth_client), \
-                 patch('app.supabase_client', Mock()), \
-                 patch('app.tfidf_vectorizer_global', vectorizer), \
-                 patch('app.tfidf_matrix_global', tfidf_matrix), \
-                 patch('app.uid_to_idx', uid_mapping), \
-                 patch('supabase_client.SupabaseAuthClient.verify_jwt_token', 
-                       return_value={'sub': 'test-user-123', 'user_id': 'test-user-123'}):
-                    yield client
-
-
-@pytest.fixture
-def sample_dataframe():
-    """Create a sample DataFrame for testing."""
-    data = {
-        'uid': ['anime_1', 'anime_2', 'manga_1', 'manga_2', 'anime_3'],
-        'title': ['Test Anime 1', 'Test Anime 2', 'Test Manga 1', 'Test Manga 2', 'Test Anime 3'],
-        'media_type': ['anime', 'anime', 'manga', 'manga', 'anime'],
-        'genres': [
-            ['Action', 'Adventure'],
-            ['Comedy', 'Romance'],
-            ['Drama', 'Action'],
-            ['Romance', 'Slice of Life'],
-            ['Action', 'Comedy']
-        ],
-        'themes': [
-            ['School', 'Military'],
-            ['High School', 'Romance'],
-            ['Historical'],
-            ['School', 'Romance'],
-            ['Comedy', 'Adventure']
-        ],
-        'demographics': [
-            ['Shounen'],
-            ['Shoujo'],
-            ['Seinen'],
-            ['Josei'],
-            ['Shounen']
-        ],
-        'studios': [
-            ['Studio A', 'Studio B'],
-            ['Studio C'],
-            [],  # Manga doesn't have studios
-            [],
-            ['Studio A']
-        ],
-        'authors': [
-            [],  # Anime doesn't have authors
-            [],
-            ['Author X', 'Author Y'],
-            ['Author Z'],
-            []
-        ],
-        'producers': [
-            ['Producer A'],
-            ['Producer B'],
-            [],
-            [],
-            ['Producer A']
-        ],
-        'licensors': [
-            ['Licensor X'],
-            [],
-            [],
-            [],
-            ['Licensor Y']
-        ],
-        'serializations': [
-            [],
-            [],
-            ['Magazine A'],
-            ['Magazine B'],
-            []
-        ],
-        'title_synonyms': [
-            ['Alt Title 1'],
-            [],
-            ['Alt Manga 1'],
-            [],
-            ['Alt Title 3']
-        ],
-        'status': ['Finished Airing', 'Currently Airing', 'Publishing', 'Finished', 'Finished Airing'],
-        'score': [8.5, 7.2, 9.1, 6.8, 7.9],
-        'scored_by': [10000, 5000, 15000, 3000, 8000],
-        'members': [50000, 25000, 75000, 15000, 40000],
-        'popularity': [100, 200, 50, 300, 150],
-        'favorites': [5000, 2000, 8000, 1000, 3500],
-        'synopsis': [
-            'An epic adventure anime about heroes',
-            'A romantic comedy in high school',
-            'A dramatic manga with historical elements',
-            'A slice of life romance manga',
-            'An action comedy adventure'
-        ],
-        'background': [
-            'Background info for anime 1',
-            'Background info for anime 2',
-            'Background info for manga 1',
-            'Background info for manga 2',
-            'Background info for anime 3'
-        ],
-        'start_date': ['2020-01-01', '2023-04-01', '2019-06-01', '2021-02-01', '2022-07-01'],
-        'end_date': ['2020-12-31', None, None, '2023-01-01', '2022-12-31'],
-        'start_year_num': [2020, 2023, 2019, 2021, 2022],
-        'rating': ['PG-13', 'PG', 'PG-13', 'G', 'PG-13'],
-        'episodes': [24, 12, None, None, 13],
-        'chapters': [None, None, 150, 80, None],
-        'volumes': [None, None, 15, 8, None],
-        'duration': ['24 min', '24 min', None, None, '24 min'],
-        'season': ['Winter', 'Spring', None, None, 'Summer'],
-        'year': [2020, 2023, None, None, 2022],
-        'broadcast': ['Sundays at 17:00', 'Fridays at 23:30', None, None, 'Wednesdays at 19:00'],
-        'source': ['Manga', 'Light Novel', 'Original', 'Novel', 'Game'],
-        'main_picture': [
-            'https://example.com/anime1.jpg',
-            'https://example.com/anime2.jpg',
-            'https://example.com/manga1.jpg',
-            'https://example.com/manga2.jpg',
-            'https://example.com/anime3.jpg'
-        ],
-        'trailer_url': [
-            'https://youtube.com/watch?v=test1',
-            'https://youtube.com/watch?v=test2',
-            None,
-            None,
-            'https://youtube.com/watch?v=test3'
-        ],
-        'title_english': ['Test Anime 1 EN', 'Test Anime 2 EN', 'Test Manga 1 EN', 'Test Manga 2 EN', 'Test Anime 3 EN'],
-        'title_japanese': ['テストアニメ1', 'テストアニメ2', 'テストマンガ1', 'テストマンガ2', 'テストアニメ3'],
-        'type': ['TV', 'TV', 'Manga', 'Manga', 'ONA'],
-        'aired': ['Jan 1, 2020 to Dec 31, 2020', 'Apr 1, 2023 to ?', None, None, 'Jul 1, 2022 to Dec 31, 2022'],
-        'published': [None, None, 'Jun 1, 2019 to ?', 'Feb 1, 2021 to Jan 1, 2023', None],
-        'url': [
-            'https://myanimelist.net/anime/test1',
-            'https://myanimelist.net/anime/test2',
-            'https://myanimelist.net/manga/test1',
-            'https://myanimelist.net/manga/test2',
-            'https://myanimelist.net/anime/test3'
-        ],
-        'sfw': [True, True, True, True, True],
-        'combined_text_features': [
-            'Action Adventure School Military Shounen heroes epic',
-            'Comedy Romance High School Romance Shoujo romantic high school',
-            'Drama Action Historical Seinen dramatic historical elements',
-            'Romance Slice of Life School Romance Josei slice life romance',
-            'Action Comedy Comedy Adventure Shounen action comedy adventure'
-        ]
-    }
+    users.append(test_data_manager.create_test_user(
+        email="sample_user2@example.com",
+        username="sample_user2",
+        bio="Second sample user"
+    ))
     
-    return pd.DataFrame(data)
+    return users
 
 
-@pytest.fixture
-def sample_tfidf_data(sample_dataframe):
-    """Create sample TF-IDF data for testing."""
-    vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
-    tfidf_matrix = vectorizer.fit_transform(sample_dataframe['combined_text_features'])
-    uid_mapping = pd.Series(sample_dataframe.index, index=sample_dataframe['uid'])
+# ======================== Helper Functions ========================
+
+def _create_test_schema(connection):
+    """Create database schema for testing."""
+    schema_sql = """
+    -- User profiles table
+    CREATE TABLE IF NOT EXISTS user_profiles (
+        id UUID PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        bio TEXT,
+        avatar_url TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
     
-    return {
-        'vectorizer': vectorizer,
-        'matrix': tfidf_matrix,
-        'uid_to_idx': uid_mapping,
-        'dataframe': sample_dataframe
-    }
-
-
-@pytest.fixture
-def mock_empty_dataframe():
-    """Create an empty DataFrame for testing empty state scenarios."""
-    columns = ['uid', 'title', 'media_type', 'genres', 'themes', 'demographics', 
-               'studios', 'authors', 'status', 'score', 'scored_by', 'members',
-               'synopsis', 'main_picture', 'combined_text_features', 'sfw']
-    return pd.DataFrame(columns=columns)
-
-
-@pytest.fixture
-def sample_list_data():
-    """Sample data for testing list parsing functions."""
-    return {
-        'valid_list_string': "['Action', 'Adventure', 'Comedy']",
-        'invalid_list_string': "Action, Adventure, Comedy",
-        'empty_list_string': "[]",
-        'mixed_data': ["['Action', 'Adventure']", "Comedy, Drama", "[]"]
-    }
-
-
-@pytest.fixture
-def sample_filter_data():
-    """Sample filter data for testing filter functions."""
-    return {
-        'genres': ['Action', 'Comedy', 'Drama'],
-        'themes': ['School', 'Military'],
-        'demographics': ['Shounen', 'Shoujo'],
-        'media_types': ['anime', 'manga'],
-        'statuses': ['Finished Airing', 'Currently Airing', 'Publishing']
-    }
-
-
-@pytest.fixture
-def mock_globals(monkeypatch, sample_dataframe):
-    """Mock global variables with sample data."""
-    vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
-    tfidf_matrix = vectorizer.fit_transform(sample_dataframe['combined_text_features'])
-    uid_mapping = pd.Series(sample_dataframe.index, index=sample_dataframe['uid'])
+    -- User privacy settings
+    CREATE TABLE IF NOT EXISTS user_privacy_settings (
+        user_id UUID PRIMARY KEY REFERENCES user_profiles(id) ON DELETE CASCADE,
+        profile_visibility VARCHAR(20) DEFAULT 'public',
+        list_visibility VARCHAR(20) DEFAULT 'public',
+        activity_visibility VARCHAR(20) DEFAULT 'public',
+        stats_visibility VARCHAR(20) DEFAULT 'public',
+        following_visibility VARCHAR(20) DEFAULT 'public',
+        allow_friend_requests BOOLEAN DEFAULT true
+    );
     
-    monkeypatch.setattr('app.df_processed', sample_dataframe)
-    monkeypatch.setattr('app.tfidf_vectorizer_global', vectorizer)
-    monkeypatch.setattr('app.tfidf_matrix_global', tfidf_matrix)
-    monkeypatch.setattr('app.uid_to_idx', uid_mapping)
+    -- User statistics
+    CREATE TABLE IF NOT EXISTS user_statistics (
+        user_id UUID PRIMARY KEY REFERENCES user_profiles(id) ON DELETE CASCADE,
+        total_anime INTEGER DEFAULT 0,
+        total_manga INTEGER DEFAULT 0,
+        anime_days_watched DECIMAL DEFAULT 0,
+        manga_chapters_read INTEGER DEFAULT 0,
+        mean_score DECIMAL DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
     
-    return {
-        'dataframe': sample_dataframe,
-        'vectorizer': vectorizer,
-        'tfidf_matrix': tfidf_matrix,
-        'uid_to_idx': uid_mapping
-    }
-
-
-@pytest.fixture
-def mock_empty_globals(monkeypatch, mock_empty_dataframe):
-    """Mock global variables with empty data."""
-    monkeypatch.setattr('app.df_processed', mock_empty_dataframe)
-    monkeypatch.setattr('app.tfidf_vectorizer_global', None)
-    monkeypatch.setattr('app.tfidf_matrix_global', None)
-    monkeypatch.setattr('app.uid_to_idx', None)
+    -- User reputation
+    CREATE TABLE IF NOT EXISTS user_reputation (
+        user_id UUID PRIMARY KEY REFERENCES user_profiles(id) ON DELETE CASCADE,
+        reputation_score INTEGER DEFAULT 0,
+        helpful_reviews INTEGER DEFAULT 0,
+        quality_lists INTEGER DEFAULT 0
+    );
     
-    return {
-        'dataframe': mock_empty_dataframe,
-        'vectorizer': None,
-        'tfidf_matrix': None,
-        'uid_to_idx': None
-    }
-
-
-@pytest.fixture
-def mock_none_globals(monkeypatch):
-    """Mock global variables as None for testing uninitialized state."""
-    monkeypatch.setattr('app.df_processed', None)
-    monkeypatch.setattr('app.tfidf_vectorizer_global', None)
-    monkeypatch.setattr('app.tfidf_matrix_global', None)
-    monkeypatch.setattr('app.uid_to_idx', None)
+    -- Items table
+    CREATE TABLE IF NOT EXISTS items (
+        uid VARCHAR(100) PRIMARY KEY,
+        title TEXT NOT NULL,
+        type VARCHAR(20),
+        media_type VARCHAR(20),
+        synopsis TEXT,
+        score DECIMAL,
+        scored_by INTEGER,
+        rank INTEGER,
+        popularity INTEGER,
+        members INTEGER,
+        favorites INTEGER,
+        episodes INTEGER,
+        genres TEXT[],
+        themes TEXT[],
+        demographics TEXT[],
+        studios TEXT[],
+        authors TEXT[],
+        aired VARCHAR(100),
+        source VARCHAR(100),
+        rating VARCHAR(50),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
     
-    return {
-        'dataframe': None,
-        'vectorizer': None,
-        'tfidf_matrix': None,
-        'uid_to_idx': None
-    } 
+    -- User items
+    CREATE TABLE IF NOT EXISTS user_items (
+        user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+        item_uid VARCHAR(100) REFERENCES items(uid) ON DELETE CASCADE,
+        status VARCHAR(50),
+        score DECIMAL,
+        progress INTEGER DEFAULT 0,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        PRIMARY KEY (user_id, item_uid)
+    );
+    
+    -- Custom lists
+    CREATE TABLE IF NOT EXISTS custom_lists (
+        id UUID PRIMARY KEY,
+        user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        is_public BOOLEAN DEFAULT true,
+        is_collaborative BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    -- Custom list items
+    CREATE TABLE IF NOT EXISTS custom_list_items (
+        list_id UUID REFERENCES custom_lists(id) ON DELETE CASCADE,
+        item_uid VARCHAR(100) REFERENCES items(uid) ON DELETE CASCADE,
+        added_by UUID REFERENCES user_profiles(id),
+        position INTEGER,
+        personal_rating DECIMAL,
+        status VARCHAR(50),
+        tags TEXT[],
+        added_at TIMESTAMP DEFAULT NOW(),
+        PRIMARY KEY (list_id, item_uid)
+    );
+    
+    -- Comments
+    CREATE TABLE IF NOT EXISTS comments (
+        id UUID PRIMARY KEY,
+        user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+        parent_type VARCHAR(50),
+        parent_id VARCHAR(100),
+        content TEXT NOT NULL,
+        is_spoiler BOOLEAN DEFAULT false,
+        likes INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    -- Reviews
+    CREATE TABLE IF NOT EXISTS reviews (
+        id UUID PRIMARY KEY,
+        user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+        item_uid VARCHAR(100) REFERENCES items(uid) ON DELETE CASCADE,
+        overall_rating INTEGER NOT NULL,
+        story_rating INTEGER,
+        animation_rating INTEGER,
+        character_rating INTEGER,
+        enjoyment_rating INTEGER,
+        review_text TEXT,
+        contains_spoilers BOOLEAN DEFAULT false,
+        helpful_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    -- User follows
+    CREATE TABLE IF NOT EXISTS user_follows (
+        follower_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+        following_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        PRIMARY KEY (follower_id, following_id)
+    );
+    
+    -- Notifications
+    CREATE TABLE IF NOT EXISTS notifications (
+        id UUID PRIMARY KEY,
+        user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+        type VARCHAR(50),
+        message TEXT,
+        is_read BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    -- User activity
+    CREATE TABLE IF NOT EXISTS user_activity (
+        id UUID PRIMARY KEY,
+        user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+        activity_type VARCHAR(50),
+        activity_data JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    -- Recommendations cache table
+    CREATE TABLE IF NOT EXISTS recommendations_cache (
+        item_uid VARCHAR PRIMARY KEY,
+        recommendations JSONB NOT NULL,
+        computed_at TIMESTAMP DEFAULT NOW(),
+        similarity_scores JSONB,
+        version INTEGER DEFAULT 1
+    );
+    
+    -- Create index for faster lookups
+    CREATE INDEX IF NOT EXISTS idx_recommendations_cache_computed ON recommendations_cache(computed_at);
+    
+    -- Distinct values cache table
+    CREATE TABLE IF NOT EXISTS distinct_values_cache (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        genres JSONB NOT NULL DEFAULT '[]',
+        themes JSONB NOT NULL DEFAULT '[]',
+        demographics JSONB NOT NULL DEFAULT '[]',
+        studios JSONB NOT NULL DEFAULT '[]',
+        authors JSONB NOT NULL DEFAULT '[]',
+        statuses JSONB NOT NULL DEFAULT '[]',
+        media_types JSONB NOT NULL DEFAULT '[]',
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    -- Ensure only one row exists
+    ALTER TABLE distinct_values_cache ADD CONSTRAINT single_row CHECK (id = 1);
+    
+    -- Create index for update timestamp
+    CREATE INDEX IF NOT EXISTS idx_distinct_values_updated ON distinct_values_cache(updated_at);
+    """
+    
+    connection.execute(text(schema_sql))
+    connection.commit()
+
+
+# ======================== Pytest Configuration ========================
+
+def pytest_configure(config):
+    """Configure pytest with custom markers."""
+    config.addinivalue_line(
+        "markers", "real_integration: mark test as using real database connections"
+    )
+    config.addinivalue_line(
+        "markers", "requires_db: mark test as requiring database access"
+    )

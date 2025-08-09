@@ -223,15 +223,65 @@ export const useUpdateUserItemMutation = () => {
 
       // Snapshot previous values
       const previousItems = queryClient.getQueryData(createQueryKey.userItems());
-      const previousDashboard = queryClient.getQueryData(createQueryKey.dashboard());
+      const previousDashboard = queryClient.getQueryData(createQueryKey.dashboard()) as DashboardData;
 
-      // Optimistically update the cache
+      // Optimistically update the userItems cache
       queryClient.setQueryData(createQueryKey.userItems(), (old: any) => {
         if (!old) return old;
         return old.map((item: UserItem) =>
           item.item_uid === itemUid ? { ...item, ...data } : item
         );
       });
+
+      // Optimistically update the dashboard cache
+      if (previousDashboard) {
+        const updatedDashboard = { ...previousDashboard };
+        
+        // Find the item in all lists and update/move it
+        const findAndRemoveItem = (list: UserItem[] | undefined): UserItem | null => {
+          if (!list) return null;
+          const index = list.findIndex(item => item.item_uid === itemUid);
+          if (index !== -1) {
+            const [item] = list.splice(index, 1);
+            return item;
+          }
+          return null;
+        };
+
+        // Remove item from all lists first
+        let targetItem: UserItem | null = null;
+        targetItem = findAndRemoveItem(updatedDashboard.in_progress) || targetItem;
+        targetItem = findAndRemoveItem(updatedDashboard.plan_to_watch) || targetItem;
+        targetItem = findAndRemoveItem(updatedDashboard.on_hold) || targetItem;
+        targetItem = findAndRemoveItem(updatedDashboard.completed_recently) || targetItem;
+
+        // If we found the item, update it and add to the appropriate list
+        if (targetItem) {
+          const updatedItem = { ...targetItem, ...data };
+          
+          // Add to the correct list based on new status
+          switch (data.status) {
+            case 'watching':
+              updatedDashboard.in_progress = [...(updatedDashboard.in_progress || []), updatedItem];
+              break;
+            case 'plan_to_watch':
+              updatedDashboard.plan_to_watch = [...(updatedDashboard.plan_to_watch || []), updatedItem];
+              break;
+            case 'on_hold':
+              updatedDashboard.on_hold = [...(updatedDashboard.on_hold || []), updatedItem];
+              break;
+            case 'completed':
+              updatedDashboard.completed_recently = [...(updatedDashboard.completed_recently || []), updatedItem];
+              break;
+            case 'dropped':
+              // Dropped items don't appear in dashboard lists
+              break;
+          }
+
+          // Update the dashboard cache
+          queryClient.setQueryData(createQueryKey.dashboard(), updatedDashboard);
+        }
+      }
 
       // Return context with snapshots
       return { previousItems, previousDashboard };
@@ -245,10 +295,11 @@ export const useUpdateUserItemMutation = () => {
         queryClient.setQueryData(createQueryKey.dashboard(), context.previousDashboard);
       }
     },
-    onSettled: () => {
-      // Refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: createQueryKey.userItems() });
+    onSuccess: () => {
+      // Immediately invalidate and refetch dashboard to ensure consistency
+      // This is faster than onSettled and ensures immediate updates
       queryClient.invalidateQueries({ queryKey: createQueryKey.dashboard() });
+      queryClient.invalidateQueries({ queryKey: createQueryKey.userItems() });
       queryClient.invalidateQueries({ queryKey: ['user', 'stats'] });
     },
   });

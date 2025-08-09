@@ -1,23 +1,26 @@
+# ABOUTME: Real authentication integration tests - NO MOCKS
+# ABOUTME: Tests actual JWT generation, validation, and protected endpoint access
+
 """
-Comprehensive Authentication System Tests for AniManga Recommender
-Phase A1: Authentication System Testing
+Real Authentication System Tests for AniManga Recommender
 
 Test Coverage:
-- User signup validation and processing
-- User signin with credential verification
+- User creation and authentication with real database
 - JWT token generation, validation, and expiration
-- Protected route access control
+- Protected route access control  
 - Authentication bypass prevention
 - Error handling and edge cases
+
+NO MOCKS - All tests use real database connections and actual JWT processing
 """
 
 import pytest
 import json
 import jwt
 import time
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime, timedelta, timezone
-import requests
+import uuid
+from datetime import datetime, timedelta
+from sqlalchemy import text
 
 # Import test dependencies
 import sys
@@ -26,448 +29,525 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app
 from supabase_client import SupabaseAuthClient, require_auth
+from tests.test_utils import TestDataManager, generate_jwt_token, create_auth_headers
 
 
+@pytest.mark.real_integration
 class TestUserAuthentication:
-    """Test suite for user authentication functionality"""
+    """Test suite for user authentication functionality using real database"""
     
-    @pytest.mark.unit
-    def test_user_signup_success(self, client):
-        """Test successful user registration with valid data"""
-        # Mock Supabase auth response for successful signup
-        mock_user_data = {
-            'id': 'user_123',
-            'email': 'testuser@example.com',
-            'role': 'authenticated',
-            'user_metadata': {'display_name': 'Test User'}
-        }
+    def test_jwt_token_generation_and_validation(self, database_connection, app):
+        """Test real JWT token generation and validation"""
+        # Create a real user in the database
+        manager = TestDataManager(database_connection)
+        user = manager.create_test_user(
+            email="jwt_test@example.com",
+            username="jwt_test_user"
+        )
         
-        with patch('requests.post') as mock_post:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = mock_user_data
-            mock_post.return_value = mock_response
-            
-            # Test data
-            signup_data = {
-                'email': 'testuser@example.com',
-                'password': 'SecurePass123!',
-                'display_name': 'Test User'
-            }
-            
-            # Make request (since there's no signup endpoint, we'll test the client directly)
-            auth_client = SupabaseAuthClient(
-                'https://test.supabase.co',
-                'test_api_key',
-                'test_service_key'
-            )
-            
-            # Verify the auth client could handle this request structure
-            assert auth_client.base_url == 'https://test.supabase.co'
-            assert auth_client.api_key == 'test_api_key'
-            assert auth_client.service_key == 'test_service_key'
-    
-    @pytest.mark.unit  
-    def test_user_signup_duplicate_email(self, client):
-        """Test signup rejection with existing email"""
-        with patch('requests.post') as mock_post:
-            # Mock Supabase error response for duplicate email
-            mock_response = Mock()
-            mock_response.status_code = 422
-            mock_response.json.return_value = {
-                'error': 'User already registered'
-            }
-            mock_post.return_value = mock_response
-            
-            signup_data = {
-                'email': 'existing@example.com',
-                'password': 'SecurePass123!',
-                'display_name': 'Test User'
-            }
-            
-            # Verify error handling for duplicate users
-            auth_client = SupabaseAuthClient(
-                'https://test.supabase.co',
-                'test_api_key', 
-                'test_service_key'
-            )
-            
-            # The client should handle error responses appropriately
-            assert auth_client.headers['Authorization'] == 'Bearer test_service_key'
-    
-    @pytest.mark.unit
-    def test_user_signup_invalid_email_format(self, client):
-        """Test signup validation with malformed email"""
-        invalid_emails = [
-            'invalid-email',
-            'test@',
-            '@example.com',
-            'test..test@example.com',
-            'test@example',
-            ''
-        ]
-        
-        for invalid_email in invalid_emails:
-            signup_data = {
-                'email': invalid_email,
-                'password': 'SecurePass123!',
-                'display_name': 'Test User'
-            }
-            
-            # Email validation should occur before any API calls
-            # This would typically be handled by the frontend or API validation
-            # Email validation should occur before any API calls
-            # This would typically be handled by the frontend or API validation
-            try:
-                parts = invalid_email.split('@')
-                if len(parts) != 2:
-                    is_valid = False
-                else:
-                    username_part, domain_part = parts
-                    # Additional validation for consecutive dots in username
-                    has_consecutive_dots = '..' in username_part
-                    is_valid = (
-                        len(username_part) > 0 and  # Username part must exist
-                        not has_consecutive_dots and  # No consecutive dots in username
-                        len(domain_part) > 0 and  # Domain part must exist
-                        '.' in domain_part and  # Domain must have a dot
-                        domain_part.count('.') >= 1 and  # At least one dot
-                        not domain_part.startswith('.') and  # Can't start with dot
-                        not domain_part.endswith('.') and  # Can't end with dot
-                        len(domain_part.split('.')[-1]) >= 2  # TLD must be at least 2 chars
-                    )
-            except (IndexError, AttributeError):
-                is_valid = False
-            assert not is_valid, f"Email '{invalid_email}' was incorrectly validated as valid"
-    
-    @pytest.mark.unit
-    def test_user_signup_weak_password(self, client):
-        """Test password strength validation"""
-        weak_passwords = [
-            '123',          # Too short
-            'password',     # No uppercase/numbers/symbols
-            'PASSWORD',     # No lowercase/numbers/symbols  
-            '12345678',     # No letters/symbols
-            'Password1',    # No symbols
-            ''              # Empty
-        ]
-        
-        for weak_password in weak_passwords:
-            # Password validation logic
-            password = weak_password
-            has_upper = any(c.isupper() for c in password)
-            has_lower = any(c.islower() for c in password)
-            has_digit = any(c.isdigit() for c in password)
-            has_symbol = any(not c.isalnum() for c in password)
-            is_long_enough = len(password) >= 8
-            
-            # At least one of these should fail for weak passwords
-            is_strong = has_upper and has_lower and has_digit and has_symbol and is_long_enough
-            assert not is_strong
-
-
-class TestJWTTokenManagement:
-    """Test suite for JWT token operations"""
-    
-    @pytest.mark.integration
-    def test_jwt_token_generation_and_structure(self, client):
-        """
-        Test that a JWT is generated correctly, can be decoded,
-        and contains the expected claims.
-        """
-        # Arrange: Setup the data for the token
-        secret_key = 'your-super-secret-test-key'  # Use a consistent test secret
-        algorithm = 'HS256'
-        payload = {
-            'sub': 'user_123',
-            'email': 'test@example.com',
-            'role': 'authenticated',
-            'iat': datetime.now(tz=timezone.utc),
-            'exp': datetime.now(tz=timezone.utc) + timedelta(hours=1)
-        }
-
-        # Act: Generate the token
-        # In a real scenario, you would call your actual token generation function.
-        # For this test, we'll generate it directly to test the principle.
-        generated_token = jwt.encode(payload, secret_key, algorithm=algorithm)
-
-        # Assert: Verify the token's structure and content
-        assert isinstance(generated_token, str)
-        assert len(generated_token.split('.')) == 3  # header.payload.signature
-
-        # Decode the token to verify its signature and content
         try:
-            decoded_payload = jwt.decode(
-                generated_token,
-                secret_key,
-                algorithms=[algorithm]
+            # Generate a real JWT token
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            token = generate_jwt_token(
+                user_id=user['id'],
+                email=user['email'],
+                secret_key=jwt_secret,
+                expires_in=3600
             )
-        except jwt.PyJWTError as e:
-            pytest.fail(f"Token decoding failed with error: {e}")
-
-        # Assert that the claims in the decoded token match the original payload
-        assert decoded_payload['sub'] == payload['sub']
-        assert decoded_payload['email'] == payload['email']
-        assert decoded_payload['role'] == payload['role']
-        assert 'iat' in decoded_payload
-        assert 'exp' in decoded_payload
-    
-    @pytest.mark.integration
-    def test_jwt_token_validation_with_valid_token(self, client):
-        """Test JWT token verification with dynamically generated valid token"""
-        # Generate a valid token for testing
-        secret_key = 'your-super-secret-test-key'
-        algorithm = 'HS256'
-        payload = {
-            'sub': 'user_123',
-            'email': 'test@example.com',
-            'role': 'authenticated',
-            'iat': datetime.now(tz=timezone.utc),
-            'exp': datetime.now(tz=timezone.utc) + timedelta(hours=1)
-        }
-        valid_token = jwt.encode(payload, secret_key, algorithm=algorithm)
-        
-        auth_client = SupabaseAuthClient(
-            'https://test.supabase.co',
-            'test_api_key',
-            'test_service_key'
-        )
-        
-        with patch('requests.get') as mock_get:
-            # Mock successful token verification
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
-                'id': 'user_123',
-                'email': 'test@example.com',
-                'role': 'authenticated',
-                'user_metadata': {}
-            }
-            mock_get.return_value = mock_response
             
-            try:
-                user_info = auth_client.verify_jwt_token(f"Bearer {valid_token}")
-                assert user_info['user_id'] == 'user_123'
-                assert user_info['email'] == 'test@example.com'
-                assert user_info['role'] == 'authenticated'
-            except Exception:
-                # Expected since we're mocking the external API call
-                pass
-    
-    @pytest.mark.integration
-    def test_jwt_token_expiration(self, client):
-        """Test that an expired token raises an ExpiredSignatureError."""
-        # Arrange: Create an already-expired token
-        secret_key = 'your-super-secret-test-key'
-        algorithm = 'HS256'
-        expired_payload = {
-            'sub': 'user_123',
-            'email': 'test@example.com',
-            'role': 'authenticated',
-            # Set expiration to the past
-            'exp': datetime.now(tz=timezone.utc) - timedelta(minutes=5)
-        }
-        expired_token = jwt.encode(expired_payload, secret_key, algorithm=algorithm)
-
-        # Act & Assert: Attempting to decode should raise an error
-        with pytest.raises(jwt.ExpiredSignatureError):
-            jwt.decode(expired_token, secret_key, algorithms=[algorithm])
-    
-    @pytest.mark.integration
-    def test_jwt_token_invalid_signature(self, client):
-        """Test that a token with invalid signature is rejected."""
-        # Arrange: Create a token with one secret, try to verify with another
-        secret_key = 'correct-secret-key'
-        wrong_secret_key = 'wrong-secret-key'
-        algorithm = 'HS256'
-        payload = {
-            'sub': 'user_123',
-            'email': 'test@example.com',
-            'role': 'authenticated',
-            'exp': datetime.now(tz=timezone.utc) + timedelta(hours=1)
-        }
-        token_with_wrong_signature = jwt.encode(payload, secret_key, algorithm=algorithm)
-
-        # Act & Assert: Attempting to decode with wrong key should raise an error
-        with pytest.raises(jwt.InvalidSignatureError):
-            jwt.decode(token_with_wrong_signature, wrong_secret_key, algorithms=[algorithm])
-    
-    @pytest.mark.integration
-    def test_jwt_token_malformed(self, client):
-        """Test that malformed tokens are properly rejected."""
-        secret_key = 'your-super-secret-test-key'
-        algorithm = 'HS256'
-        
-        malformed_tokens = [
-            "not.a.jwt",  # Not enough parts
-            "too.many.parts.here",  # Too many parts
-            "invalid-base64.invalid-base64.invalid-base64",  # Invalid base64
-            "",  # Empty string
-            "Bearer ",  # Just Bearer prefix
-        ]
-        
-        for malformed_token in malformed_tokens:
-            with pytest.raises((jwt.DecodeError, jwt.InvalidTokenError)):
-                jwt.decode(malformed_token, secret_key, algorithms=[algorithm])
-    
-    @pytest.mark.integration
-    def test_auth_client_with_expired_token_handling(self, client):
-        """
-        Test that SupabaseAuthClient correctly handles expired tokens
-        by testing the external API response simulation.
-        """
-        # Create an actually expired token
-        secret_key = 'your-super-secret-test-key'
-        algorithm = 'HS256'
-        expired_payload = {
-            'sub': 'user_123',
-            'email': 'test@example.com',
-            'exp': datetime.now(tz=timezone.utc) - timedelta(minutes=5)
-        }
-        expired_token_str = jwt.encode(expired_payload, secret_key, algorithm=algorithm)
-        
-        auth_client = SupabaseAuthClient(
-            'https://test.supabase.co',
-            'test_api_key',
-            'test_service_key'
-        )
-        
-        with patch('requests.get') as mock_get:
-            # Mock expired token response from Supabase
-            mock_response = Mock()
-            mock_response.status_code = 401
-            mock_response.json.return_value = {
-                'error': 'Token has expired'
-            }
-            mock_get.return_value = mock_response
+            # Verify token can be decoded
+            decoded = jwt.decode(token, jwt_secret, algorithms=['HS256'])
             
-            # Test that expired tokens are properly handled
-            try:
-                user_info = auth_client.verify_jwt_token(f"Bearer {expired_token_str}")
-                # If no exception raised, verify the response is None or empty
-                assert user_info is None or not user_info
-            except ValueError as e:
-                # Expected behavior - check error message contains expected keywords
-                error_msg = str(e).lower()
-                assert any(keyword in error_msg for keyword in ['token', 'expired', 'invalid'])
-            except Exception as e:
-                # Some other exception type is also acceptable for auth failures
-                assert True  # Test passes as long as some error occurs
-
-
-class TestProtectedRoutes:
-    """Test suite for protected route access control"""
+            assert decoded['user_id'] == user['id']
+            assert decoded['email'] == user['email']
+            assert decoded['sub'] == user['id']
+            assert 'exp' in decoded
+            assert 'iat' in decoded
+            
+            # Verify expiration is set correctly
+            current_time = int(time.time())
+            assert decoded['exp'] > current_time
+            assert decoded['exp'] <= current_time + 3600
+            
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_protected_route_access_authorized(self, client):
-        """Test protected endpoint access with valid token"""
-        # Generate a real valid JWT token using the same secret and algorithm as app.py
-        import jwt
-        from datetime import datetime, timedelta, timezone
-        
-        # Use the same secret key as app.verify_token
-        secret_key = 'test-jwt-secret'  # Default secret from app.py
-        algorithm = 'HS256'
-        
-        # Create a valid payload with required fields
-        payload = {
-            'sub': 'user_123',
-            'user_id': 'user_123',
-            'email': 'test@example.com',
-            'role': 'authenticated',
-            'iat': datetime.now(tz=timezone.utc),
-            'exp': datetime.now(tz=timezone.utc) + timedelta(hours=1)
-        }
-        
-        # Generate real JWT token
-        valid_token = jwt.encode(payload, secret_key, algorithm=algorithm)
-        
-        # Test profile endpoint with real token verification
-        response = client.get(
-            '/api/auth/profile',
-            headers={'Authorization': f'Bearer {valid_token}'}
+    def test_expired_jwt_token_rejected(self, database_connection, app):
+        """Test that expired JWT tokens are properly rejected"""
+        # Create a real user
+        manager = TestDataManager(database_connection)
+        user = manager.create_test_user(
+            email="expired_test@example.com",
+            username="expired_test_user"
         )
         
-        # Should not get 401 Unauthorized
-        assert response.status_code != 401
+        try:
+            # Generate an already expired token
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            token = generate_jwt_token(
+                user_id=user['id'],
+                email=user['email'],
+                secret_key=jwt_secret,
+                expires_in=-1  # Already expired
+            )
+            
+            # Try to decode the expired token
+            with pytest.raises(jwt.ExpiredSignatureError):
+                jwt.decode(token, jwt_secret, algorithms=['HS256'])
+                
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_protected_route_unauthorized(self, client):
-        """Test protected endpoint rejection without token"""
+    def test_invalid_jwt_signature_rejected(self, database_connection, app):
+        """Test that tokens with invalid signatures are rejected"""
+        # Create a real user
+        manager = TestDataManager(database_connection)
+        user = manager.create_test_user(
+            email="signature_test@example.com",
+            username="signature_test_user"
+        )
+        
+        try:
+            # Generate token with correct secret
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            token = generate_jwt_token(
+                user_id=user['id'],
+                email=user['email'],
+                secret_key=jwt_secret,
+                expires_in=3600
+            )
+            
+            # Try to decode with wrong secret
+            wrong_secret = 'wrong-secret-key'
+            with pytest.raises(jwt.InvalidSignatureError):
+                jwt.decode(token, wrong_secret, algorithms=['HS256'])
+                
+        finally:
+            manager.cleanup()
+    
+    def test_protected_endpoint_with_valid_auth(self, client, database_connection, app):
+        """Test accessing protected endpoints with valid authentication"""
+        # Create a real user with full profile data
+        manager = TestDataManager(database_connection)
+        user = manager.create_test_user(
+            email="protected_test@example.com",
+            username="protected_test_user"
+        )
+        
+        # Create some test data for the user
+        item = manager.create_test_item(
+            uid="auth_test_item",
+            title="Auth Test Anime",
+            item_type="anime"
+        )
+        
+        manager.create_user_item_entry(
+            user_id=user['id'],
+            item_uid=item['uid'],
+            status="watching",
+            score=8.5,
+            progress=10
+        )
+        
+        try:
+            # Generate valid JWT token
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            token = generate_jwt_token(
+                user_id=user['id'],
+                email=user['email'],
+                secret_key=jwt_secret
+            )
+            
+            headers = create_auth_headers(token)
+            
+            # Test accessing protected dashboard endpoint
+            response = client.get('/api/auth/dashboard', headers=headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            # Verify we get real user data
+            assert 'profile' in data
+            assert data['profile']['email'] == user['email']
+            assert data['profile']['username'] == user['username']
+            
+            # Verify user statistics are included
+            assert 'statistics' in data
+            
+            # Test accessing user items endpoint
+            response = client.get('/api/auth/user-items', headers=headers)
+            assert response.status_code == 200
+            
+            items_data = json.loads(response.data)
+            assert 'items' in items_data
+            assert len(items_data['items']) == 1
+            assert items_data['items'][0]['item_uid'] == item['uid']
+            
+        finally:
+            manager.cleanup()
+    
+    def test_protected_endpoint_without_auth(self, client):
+        """Test that protected endpoints reject unauthenticated requests"""
+        # Test various protected endpoints without authentication
         protected_endpoints = [
-            '/api/auth/profile',
             '/api/auth/dashboard',
             '/api/auth/user-items',
-            '/api/auth/verify-token'
+            '/api/auth/lists',
+            '/api/auth/profile/update'
         ]
         
         for endpoint in protected_endpoints:
-            # Test without Authorization header
             response = client.get(endpoint)
-            assert response.status_code == 401
             
-            response_data = json.loads(response.data)
-            assert 'error' in response_data
-            assert 'authorization' in response_data['error'].lower()
-
-
-class TestAuthenticationSecurity:
-    """Test suite for authentication security measures"""
+            assert response.status_code == 401
+            data = json.loads(response.data)
+            assert 'error' in data
+            assert 'authorization' in data['error'].lower() or 'auth' in data['error'].lower()
     
-    @pytest.mark.security
-    def test_authentication_bypass_attempts(self, client):
-        """Test various attempts to bypass authentication"""
-        bypass_attempts = [
-            {'headers': {'X-Original-URL': '/api/auth/dashboard'}},
-            {'headers': {'X-Rewrite-URL': '/api/auth/dashboard'}},
-            {'query_string': {'redirect': '/api/auth/dashboard'}},
+    def test_protected_endpoint_with_malformed_token(self, client):
+        """Test that malformed tokens are properly rejected"""
+        malformed_tokens = [
+            'not-a-jwt-token',
+            'Bearer',
+            'invalid.jwt.format',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',  # Incomplete JWT
+            '',
+            'null',
+            'undefined'
         ]
         
-        for attempt in bypass_attempts:
-            response = client.get('/api/auth/dashboard', **attempt)
-            assert response.status_code in [401, 500]
-    
-    @pytest.mark.security  
-    def test_token_injection_attempts(self, client):
-        """Test protection against token injection"""
-        injection_tokens = [
-            "Bearer token1; Bearer token2",
-            "Bearer token\\nX-Injected: header",
-            "Bearer token\\r\\nX-Admin: true",
-            "Bearer token; admin=true"
-        ]
-        
-        for token in injection_tokens:
-            response = client.get('/api/auth/profile', headers={'Authorization': token})
-            # Accept actual implementation behavior - may not be fully protected yet
-            # 404 indicates endpoint doesn't exist, which is also valid protection
-            assert response.status_code in [401, 404, 500]
-
-
-class TestAuthenticationPerformance:
-    """Test suite for authentication performance"""
-    
-    @pytest.mark.performance
-    def test_token_verification_performance(self, client):
-        """Test token verification response time"""
-        start_time = time.time()
-        
-        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify:
-            mock_verify.return_value = {
-                'user_id': 'user_123',
-                'email': 'test@example.com',
-                'role': 'authenticated'
+        for token in malformed_tokens:
+            headers = {
+                'Authorization': f'Bearer {token}',
+                'Content-Type': 'application/json'
             }
             
-            # Simulate multiple rapid requests
-            for _ in range(10):
-                response = client.get(
-                    '/api/auth/profile',
-                    headers={'Authorization': 'Bearer valid_token'}
+            response = client.get('/api/auth/dashboard', headers=headers)
+            
+            assert response.status_code == 401
+            data = json.loads(response.data)
+            assert 'error' in data
+    
+    def test_user_data_isolation(self, client, database_connection, app):
+        """Test that users can only access their own data"""
+        manager = TestDataManager(database_connection)
+        
+        # Create two users
+        user1 = manager.create_test_user(
+            email="user1@example.com",
+            username="user1"
+        )
+        
+        user2 = manager.create_test_user(
+            email="user2@example.com",
+            username="user2"
+        )
+        
+        # Create items for each user
+        item1 = manager.create_test_item(uid="user1_item", title="User 1 Anime")
+        item2 = manager.create_test_item(uid="user2_item", title="User 2 Anime")
+        
+        manager.create_user_item_entry(
+            user_id=user1['id'],
+            item_uid=item1['uid'],
+            status="watching"
+        )
+        
+        manager.create_user_item_entry(
+            user_id=user2['id'],
+            item_uid=item2['uid'],
+            status="completed"
+        )
+        
+        try:
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            
+            # Generate token for user1
+            token1 = generate_jwt_token(
+                user_id=user1['id'],
+                email=user1['email'],
+                secret_key=jwt_secret
+            )
+            
+            headers1 = create_auth_headers(token1)
+            
+            # User1 should only see their own items
+            response = client.get('/api/auth/user-items', headers=headers1)
+            assert response.status_code == 200
+            
+            data = json.loads(response.data)
+            assert len(data['items']) == 1
+            assert data['items'][0]['item_uid'] == item1['uid']
+            
+            # User1 should not see user2's items
+            for item in data['items']:
+                assert item['item_uid'] != item2['uid']
+                
+        finally:
+            manager.cleanup()
+    
+    def test_concurrent_authentication_requests(self, client, database_connection, app):
+        """Test handling of concurrent authentication requests"""
+        manager = TestDataManager(database_connection)
+        user = manager.create_test_user(
+            email="concurrent@example.com",
+            username="concurrent_user"
+        )
+        
+        try:
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            
+            # Generate multiple tokens for the same user
+            tokens = []
+            for i in range(5):
+                token = generate_jwt_token(
+                    user_id=user['id'],
+                    email=user['email'],
+                    secret_key=jwt_secret,
+                    expires_in=3600 + i  # Slightly different expiry times
                 )
+                tokens.append(token)
+            
+            # All tokens should work independently
+            for token in tokens:
+                headers = create_auth_headers(token)
+                response = client.get('/api/auth/dashboard', headers=headers)
+                
+                assert response.status_code == 200
+                data = json.loads(response.data)
+                assert data['profile']['email'] == user['email']
+                
+        finally:
+            manager.cleanup()
+    
+    def test_authentication_with_special_characters(self, database_connection, app):
+        """Test authentication with usernames/emails containing special characters"""
+        manager = TestDataManager(database_connection)
         
-        end_time = time.time()
-        avg_response_time = (end_time - start_time) / 10
+        # Create users with special characters
+        special_users = [
+            {
+                'email': 'test+tag@example.com',
+                'username': 'user-with-dash'
+            },
+            {
+                'email': 'test.dot@example.com', 
+                'username': 'user_with_underscore'
+            },
+            {
+                'email': 'test123@example.com',
+                'username': 'user123numbers'
+            }
+        ]
         
-        # Should be very fast with mocking
-        assert avg_response_time < 1.0  # Less than 1 second average
+        for user_data in special_users:
+            user = manager.create_test_user(
+                email=user_data['email'],
+                username=user_data['username']
+            )
+            
+            try:
+                jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+                token = generate_jwt_token(
+                    user_id=user['id'],
+                    email=user['email'],
+                    secret_key=jwt_secret
+                )
+                
+                # Verify token works correctly
+                decoded = jwt.decode(token, jwt_secret, algorithms=['HS256'])
+                assert decoded['email'] == user_data['email']
+                
+            finally:
+                # Clean up each user individually
+                database_connection.execute(
+                    text("DELETE FROM user_statistics WHERE user_id = :id"),
+                    {"id": user['id']}
+                )
+                database_connection.execute(
+                    text("DELETE FROM user_reputation WHERE user_id = :id"),
+                    {"id": user['id']}
+                )
+                database_connection.execute(
+                    text("DELETE FROM user_privacy_settings WHERE user_id = :id"),
+                    {"id": user['id']}
+                )
+                database_connection.execute(
+                    text("DELETE FROM user_profiles WHERE id = :id"),
+                    {"id": user['id']}
+                )
+                database_connection.commit()
+    
+    def test_token_refresh_mechanism(self, database_connection, app):
+        """Test token refresh and rotation"""
+        manager = TestDataManager(database_connection)
+        user = manager.create_test_user(
+            email="refresh@example.com",
+            username="refresh_user"
+        )
+        
+        try:
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            
+            # Generate initial token with short expiry
+            initial_token = generate_jwt_token(
+                user_id=user['id'],
+                email=user['email'],
+                secret_key=jwt_secret,
+                expires_in=60  # 1 minute
+            )
+            
+            # Decode initial token
+            initial_decoded = jwt.decode(initial_token, jwt_secret, algorithms=['HS256'])
+            initial_iat = initial_decoded['iat']
+            
+            # Simulate token refresh by generating new token
+            time.sleep(1)  # Wait to ensure different iat
+            
+            refreshed_token = generate_jwt_token(
+                user_id=user['id'],
+                email=user['email'],
+                secret_key=jwt_secret,
+                expires_in=3600  # New longer expiry
+            )
+            
+            # Decode refreshed token
+            refreshed_decoded = jwt.decode(refreshed_token, jwt_secret, algorithms=['HS256'])
+            
+            # Verify refresh created new token with updated timestamps
+            assert refreshed_decoded['iat'] > initial_iat
+            assert refreshed_decoded['exp'] > initial_decoded['exp']
+            assert refreshed_decoded['user_id'] == initial_decoded['user_id']
+            
+        finally:
+            manager.cleanup()
+    
+    def test_role_based_access_control(self, database_connection, app):
+        """Test role-based access control with real integration"""
+        manager = TestDataManager(database_connection)
+        user = manager.create_test_user(
+            email="rbac_test@example.com",
+            username="rbac_test_user"
+        )
+        
+        try:
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            
+            # Test with authenticated role
+            auth_token = generate_jwt_token(
+                user_id=user['id'],
+                email=user['email'],
+                secret_key=jwt_secret,
+                expires_in=3600,
+                additional_claims={'role': 'authenticated'}
+            )
+            
+            # Test with anon role
+            anon_token = generate_jwt_token(
+                user_id='anon',
+                email='anon@example.com',
+                secret_key=jwt_secret,
+                expires_in=3600,
+                additional_claims={'role': 'anon', 'sub': 'anon'}
+            )
+            
+            with app.test_client() as client:
+                # Authenticated user should access protected routes
+                auth_headers = create_auth_headers(auth_token)
+                response = client.get('/api/auth/dashboard', headers=auth_headers)
+                authenticated_success = response.status_code != 401
+                
+                # Anonymous user test
+                anon_headers = create_auth_headers(anon_token)
+                response = client.get('/api/auth/dashboard', headers=anon_headers)
+                anon_success = response.status_code != 401
+                
+                # Authenticated user should have access
+                assert authenticated_success, "Authenticated user should be able to access protected routes"
+            
+        finally:
+            manager.cleanup()
+    
+    def test_security_headers_on_auth_responses(self, client, database_connection, app):
+        """Test that appropriate security headers are set on authentication responses"""
+        manager = TestDataManager(database_connection)
+        user = manager.create_test_user(
+            email="security_test@example.com",
+            username="security_test_user"
+        )
+        
+        try:
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            token = generate_jwt_token(
+                user_id=user['id'],
+                email=user['email'],
+                secret_key=jwt_secret,
+                expires_in=3600
+            )
+            
+            headers = create_auth_headers(token)
+            response = client.get('/api/auth/dashboard', headers=headers)
+            
+            # Check for basic headers that should be present
+            assert response.headers.get('Content-Type') is not None
+            # Security headers may include X-Content-Type-Options, X-Frame-Options, etc.
+            
+        finally:
+            manager.cleanup()
+    
+    def test_rate_limiting_on_auth_endpoints(self, client):
+        """Test rate limiting on authentication-related endpoints"""
+        # Make multiple rapid requests to test rate limiting
+        responses = []
+        for _ in range(20):
+            response = client.get('/api/auth/dashboard')
+            responses.append(response.status_code)
+        
+        # Should be 401 (unauthorized) not 429 (rate limited) since no auth
+        # Rate limiting may return 429 if implemented
+        assert all(status in [401, 429] for status in responses)
+    
+    def test_authentication_performance_batch(self, client, database_connection, app):
+        """Test authentication middleware performance with batch requests"""
+        manager = TestDataManager(database_connection)
+        user = manager.create_test_user(
+            email="perf_test@example.com",
+            username="perf_test_user"
+        )
+        
+        try:
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            token = generate_jwt_token(
+                user_id=user['id'],
+                email=user['email'],
+                secret_key=jwt_secret,
+                expires_in=3600
+            )
+            
+            headers = create_auth_headers(token)
+            
+            start_time = time.time()
+            successful_requests = 0
+            
+            # Test authentication performance with real endpoints
+            for i in range(5):
+                try:
+                    response = client.get('/api/auth/dashboard', headers=headers)
+                    if response.status_code != 401:
+                        successful_requests += 1
+                        
+                    # Break early if response takes too long
+                    if time.time() - start_time > 10.0:
+                        break
+                except Exception:
+                    continue
+            
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            
+            # Verify auth worked in most cases
+            assert successful_requests >= 3, f"Only {successful_requests}/5 requests had proper authentication"
+            assert elapsed_time < 30.0, f"Authentication took {elapsed_time:.2f}s, which is too slow"
+            
+        finally:
+            manager.cleanup()

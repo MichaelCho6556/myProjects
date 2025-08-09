@@ -190,7 +190,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    *
    * This method handles user registration with optional metadata such as
    * display name. It integrates with Supabase authentication and provides
-   * error handling for common registration issues.
+   * error handling for common registration issues. After successful signup,
+   * it also creates the user profile in the backend.
    *
    * @async
    * @function signUp
@@ -222,7 +223,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    * ```
    */
   const signUp = async (email: string, password: string, metadata?: any) => {
-    const { error } = await authApi.signUp(email, password, metadata);
+    const { data, error } = await authApi.signUp(email, password, metadata);
+    
+    if (!error && data?.user) {
+      // After successful signup, create the user profile in our backend
+      try {
+        // Get the session to have the auth token
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.access_token) {
+          // Call the backend to complete profile creation
+          const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/auth/complete-signup`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify({
+              username: metadata?.display_name?.toLowerCase().replace(/\s+/g, '_') || email.split('@')[0],
+              display_name: metadata?.display_name || email.split('@')[0]
+            })
+          });
+
+          if (!response.ok) {
+            console.warn('Could not create user profile, but signup was successful');
+            // Don't return an error here as the auth signup was successful
+            // The user can still use the app, and profile will be created on first access
+          }
+        }
+      } catch (profileError) {
+        console.warn('Error creating user profile:', profileError);
+        // Don't fail the signup if profile creation fails
+        // The backend will auto-create it when needed
+      }
+    }
+    
     return { error };
   };
 

@@ -13,6 +13,14 @@ Test Coverage:
 - Real-world production scenario simulation
 """
 
+# ABOUTME: Real integration tests - NO MOCKS
+# ABOUTME: Tests with actual database and service operations
+
+import pytest
+from sqlalchemy import text
+from tests.test_utils import TestDataManager, generate_jwt_token, create_auth_headers
+
+
 import pytest
 import asyncio
 import time
@@ -24,7 +32,7 @@ import psutil
 import pandas as pd
 import requests
 from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import patch, MagicMock
+# Mock imports removed - using real integration
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -365,6 +373,8 @@ def auth_headers():
     return {'Authorization': f'Bearer {token}'}
 
 
+@pytest.mark.real_integration
+@pytest.mark.requires_db
 class TestAdvancedScenariosD2:
     """Advanced testing scenarios for Phase D2"""
     
