@@ -475,6 +475,27 @@ class TestSupabaseClient:
             print(f"Error creating custom list: {e}")
             return None
     
+    def update_user_item_status_comprehensive(self, user_id: str, item_uid: str, status_data: dict) -> dict:
+        """Update user item status comprehensively."""
+        try:
+            # For test mode, just return success
+            # In a real implementation, this would update the test database
+            return {
+                'success': True,
+                'data': {
+                    'user_id': user_id,
+                    'item_uid': item_uid,
+                    'status': status_data.get('status'),
+                    'progress': status_data.get('progress', 0),
+                    'rating': status_data.get('rating'),
+                    'notes': status_data.get('notes', ''),
+                    'completion_date': status_data.get('completion_date')
+                }
+            }
+        except Exception as e:
+            print(f"Error updating user item status: {e}")
+            return {'success': False, 'error': str(e)}
+    
     def items_to_dataframe(self, include_relations=False, lazy_load=False):
         """Convert items to pandas DataFrame."""
         import pandas as pd

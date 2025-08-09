@@ -11,6 +11,7 @@ to actual services (PostgreSQL) for true integration testing.
 import os
 import sys
 import time
+import uuid
 import pytest
 import pandas as pd
 import psycopg
@@ -43,6 +44,9 @@ TEST_CACHE_MEMORY_MB = int(os.getenv("TEST_CACHE_MEMORY_MB", "10"))
 TEST_SUPABASE_URL = os.getenv("TEST_SUPABASE_URL", "http://localhost:8000")
 TEST_SUPABASE_KEY = os.getenv("TEST_SUPABASE_KEY", "test-anon-key")
 TEST_SUPABASE_SERVICE_KEY = os.getenv("TEST_SUPABASE_SERVICE_KEY", "test-service-key")
+
+# Redis test configuration
+TEST_REDIS_URL = os.getenv("TEST_REDIS_URL", "redis://localhost:6380/0")
 
 
 # ======================== pytest-databases Configuration ========================
@@ -127,14 +131,223 @@ def setup_database_schema(database_engine):
         conn.execute(text(drop_statements))
         conn.commit()
         
-        # Load and execute schema SQL
-        schema_path = Path(__file__).parent / "fixtures" / "schema.sql"
-        if schema_path.exists():
-            with open(schema_path, 'r') as f:
-                schema_sql = f.read()
-            
+        # Create schema using the SQL from setup_test_db.py
+        schema_sql = """
+        -- User profiles table
+        CREATE TABLE IF NOT EXISTS user_profiles (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            email VARCHAR(255) UNIQUE NOT NULL,
+            username VARCHAR(100) UNIQUE,
+            bio TEXT,
+            avatar_url TEXT,
+            favorite_genres TEXT[],
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        -- User privacy settings
+        CREATE TABLE IF NOT EXISTS user_privacy_settings (
+            user_id UUID PRIMARY KEY REFERENCES user_profiles(id) ON DELETE CASCADE,
+            profile_visibility VARCHAR(20) DEFAULT 'public',
+            list_visibility VARCHAR(20) DEFAULT 'public',
+            activity_visibility VARCHAR(20) DEFAULT 'public',
+            stats_visibility VARCHAR(20) DEFAULT 'public',
+            following_visibility VARCHAR(20) DEFAULT 'public',
+            show_statistics BOOLEAN DEFAULT true,
+            show_following BOOLEAN DEFAULT true,
+            allow_friend_requests BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        -- User statistics
+        CREATE TABLE IF NOT EXISTS user_statistics (
+            user_id UUID PRIMARY KEY REFERENCES user_profiles(id) ON DELETE CASCADE,
+            total_anime INTEGER DEFAULT 0,
+            total_manga INTEGER DEFAULT 0,
+            anime_days_watched FLOAT DEFAULT 0,
+            manga_chapters_read INTEGER DEFAULT 0,
+            mean_score FLOAT DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        -- User reputation
+        CREATE TABLE IF NOT EXISTS user_reputation (
+            user_id UUID PRIMARY KEY REFERENCES user_profiles(id) ON DELETE CASCADE,
+            reputation_score INTEGER DEFAULT 0,
+            helpful_reviews INTEGER DEFAULT 0,
+            quality_lists INTEGER DEFAULT 0
+        );
+        
+        -- Items table
+        CREATE TABLE IF NOT EXISTS items (
+            uid VARCHAR(100) PRIMARY KEY,
+            title VARCHAR(500) NOT NULL,
+            media_type VARCHAR(20),
+            synopsis TEXT,
+            score FLOAT,
+            scored_by INTEGER,
+            rank INTEGER,
+            popularity INTEGER,
+            members INTEGER,
+            favorites INTEGER,
+            episodes INTEGER,
+            chapters INTEGER,
+            volumes INTEGER,
+            genres TEXT,
+            themes TEXT[],
+            demographics TEXT[],
+            studios TEXT[],
+            authors TEXT[],
+            serializations TEXT[],
+            aired VARCHAR(100),
+            published VARCHAR(100),
+            status VARCHAR(100),
+            source VARCHAR(100),
+            rating VARCHAR(50),
+            main_picture TEXT,
+            sfw BOOLEAN DEFAULT true,
+            start_date VARCHAR(100),
+            end_date VARCHAR(100),
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        -- User items (watchlist/readlist)
+        CREATE TABLE IF NOT EXISTS user_items (
+            user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+            item_uid VARCHAR(100) REFERENCES items(uid) ON DELETE CASCADE,
+            status VARCHAR(50),
+            score FLOAT,
+            progress INTEGER DEFAULT 0,
+            notes TEXT,
+            start_date DATE,
+            end_date DATE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (user_id, item_uid)
+        );
+        
+        -- Custom lists
+        CREATE TABLE IF NOT EXISTS custom_lists (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+            title VARCHAR(200) NOT NULL,
+            description TEXT,
+            is_public BOOLEAN DEFAULT true,
+            is_collaborative BOOLEAN DEFAULT false,
+            item_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        -- Custom list items
+        CREATE TABLE IF NOT EXISTS custom_list_items (
+            list_id UUID REFERENCES custom_lists(id) ON DELETE CASCADE,
+            item_uid VARCHAR(100) REFERENCES items(uid) ON DELETE CASCADE,
+            title VARCHAR(500),
+            media_type VARCHAR(20),
+            image_url TEXT,
+            added_by UUID REFERENCES user_profiles(id),
+            position INTEGER,
+            personal_rating FLOAT,
+            status VARCHAR(50),
+            notes TEXT,
+            tags TEXT[],
+            personal_data JSONB,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW(),
+            added_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (list_id, item_uid)
+        );
+        
+        -- Comments
+        CREATE TABLE IF NOT EXISTS comments (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+            parent_type VARCHAR(50),
+            parent_id VARCHAR(100),
+            content TEXT NOT NULL,
+            is_spoiler BOOLEAN DEFAULT false,
+            likes INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        -- Reviews
+        CREATE TABLE IF NOT EXISTS reviews (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+            item_uid VARCHAR(100) REFERENCES items(uid) ON DELETE CASCADE,
+            overall_rating INTEGER NOT NULL,
+            story_rating INTEGER,
+            art_rating INTEGER,
+            animation_rating INTEGER,
+            character_rating INTEGER,
+            enjoyment_rating INTEGER,
+            content TEXT,
+            is_spoiler BOOLEAN DEFAULT false,
+            helpful_count INTEGER DEFAULT 0,
+            total_votes INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        -- User follows
+        CREATE TABLE IF NOT EXISTS user_follows (
+            follower_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+            following_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (follower_id, following_id)
+        );
+        
+        -- Comment reports
+        CREATE TABLE IF NOT EXISTS comment_reports (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            reporter_id UUID REFERENCES user_profiles(id),
+            reported_content_type VARCHAR(50),
+            reported_content_id UUID,
+            reason VARCHAR(100),
+            description TEXT,
+            status VARCHAR(50) DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        -- Notifications
+        CREATE TABLE IF NOT EXISTS notifications (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+            type VARCHAR(50),
+            content TEXT,
+            is_read BOOLEAN DEFAULT false,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        -- User activity
+        CREATE TABLE IF NOT EXISTS user_activity (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+            activity_type VARCHAR(50),
+            details JSONB,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+        
+        -- Create indexes for better performance
+        CREATE INDEX IF NOT EXISTS idx_user_items_user_id ON user_items(user_id);
+        CREATE INDEX IF NOT EXISTS idx_user_items_item_uid ON user_items(item_uid);
+        CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_type, parent_id);
+        CREATE INDEX IF NOT EXISTS idx_reviews_item ON reviews(item_uid);
+        CREATE INDEX IF NOT EXISTS idx_reviews_user ON reviews(user_id);
+        """
+        
+        try:
             conn.execute(text(schema_sql))
             conn.commit()
+            print("Test database schema created successfully in conftest.py!")
+        except Exception as e:
+            print(f"Error creating schema: {e}")
+            raise
 
 
 # ======================== Cache Fixtures ========================
@@ -458,7 +671,7 @@ def sample_custom_lists(database_connection, test_user):
     """Create sample custom lists for testing."""
     lists = [
         {
-            'id': 'test-list-1',
+            'id': str(uuid.uuid4()),
             'user_id': test_user['id'],
             'title': 'Test Favorites',
             'description': 'My favorite anime and manga',
@@ -466,7 +679,7 @@ def sample_custom_lists(database_connection, test_user):
             'is_collaborative': False
         },
         {
-            'id': 'test-list-2',
+            'id': str(uuid.uuid4()),
             'user_id': test_user['id'],
             'title': 'Test Watchlist',
             'description': 'Plan to watch these',
@@ -474,7 +687,7 @@ def sample_custom_lists(database_connection, test_user):
             'is_collaborative': False
         },
         {
-            'id': 'test-list-3',
+            'id': str(uuid.uuid4()),
             'user_id': test_user['id'],
             'title': 'Test Collaborative',
             'description': 'Shared recommendations',
@@ -499,7 +712,7 @@ def sample_custom_lists(database_connection, test_user):
     # Cleanup
     list_ids = [list_data['id'] for list_data in lists]
     database_connection.execute(
-        text("DELETE FROM custom_lists WHERE id = ANY(:ids)"),
+        text("DELETE FROM custom_lists WHERE id = ANY(CAST(:ids AS uuid[]))"),
         {'ids': list_ids}
     )
 
@@ -507,9 +720,13 @@ def sample_custom_lists(database_connection, test_user):
 @pytest.fixture
 def sample_comments(database_connection, test_user, load_test_items):
     """Create sample comments for testing."""
+    comment_id_1 = str(uuid.uuid4())
+    comment_id_2 = str(uuid.uuid4())
+    comment_id_3 = str(uuid.uuid4())
+    
     comments = [
         {
-            'id': 'test-comment-1',
+            'id': comment_id_1,
             'user_id': test_user['id'],
             'parent_type': 'item',
             'parent_id': 'anime_1',
@@ -517,7 +734,7 @@ def sample_comments(database_connection, test_user, load_test_items):
             'is_spoiler': False
         },
         {
-            'id': 'test-comment-2',
+            'id': comment_id_2,
             'user_id': test_user['id'],
             'parent_type': 'item',
             'parent_id': 'manga_1',
@@ -525,10 +742,10 @@ def sample_comments(database_connection, test_user, load_test_items):
             'is_spoiler': True
         },
         {
-            'id': 'test-comment-3',
+            'id': comment_id_3,
             'user_id': test_user['id'],
             'parent_type': 'comment',
-            'parent_id': 'test-comment-1',
+            'parent_id': comment_id_1,  # Reference the actual UUID of the first comment
             'content': 'I agree! The fight scenes were incredible.',
             'is_spoiler': False
         }
@@ -550,7 +767,7 @@ def sample_comments(database_connection, test_user, load_test_items):
     # Cleanup
     comment_ids = [comment['id'] for comment in comments]
     database_connection.execute(
-        text("DELETE FROM comments WHERE id = ANY(:ids)"),
+        text("DELETE FROM comments WHERE id = ANY(CAST(:ids AS uuid[]))"),
         {'ids': comment_ids}
     )
 
@@ -560,7 +777,7 @@ def sample_reviews(database_connection, test_user, load_test_items):
     """Create sample reviews for testing."""
     reviews = [
         {
-            'id': 'test-review-1',
+            'id': str(uuid.uuid4()),
             'user_id': test_user['id'],
             'item_uid': 'anime_1',
             'overall_rating': 9,
@@ -574,7 +791,7 @@ def sample_reviews(database_connection, test_user, load_test_items):
             'total_votes': 8
         },
         {
-            'id': 'test-review-2',
+            'id': str(uuid.uuid4()),
             'user_id': test_user['id'],
             'item_uid': 'manga_1',
             'overall_rating': 8,
