@@ -1673,7 +1673,10 @@ class SupabaseClient:
             print(f"📨 Response text: {response.text}")
             
             if response.status_code in [200, 201, 204]:
-                return {'success': True, 'data': response.json() if response.content else {}}
+                # Handle 204 No Content response which has no body
+                if response.status_code == 204 or not response.content:
+                    return {'success': True, 'data': {}}
+                return {'success': True, 'data': response.json()}
             else:
                 print(f"❌ Supabase error: {response.status_code} - {response.text}")
                 # Check if error is about missing column and provide helpful info
@@ -4226,7 +4229,10 @@ class SupabaseAuthClient:
                 )
             
             if response.status_code in [200, 201, 204]:
-                return {'success': True, 'data': response.json() if response.content else {}}
+                # Handle 204 No Content response which has no body
+                if response.status_code == 204 or not response.content:
+                    return {'success': True, 'data': {}}
+                return {'success': True, 'data': response.json()}
             else:
                 print(f"Supabase error: {response.status_code} - {response.text}")
                 return None

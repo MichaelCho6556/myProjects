@@ -2972,7 +2972,7 @@ def update_user_item_status(item_uid: str) -> Union[Response, Tuple[Response, in
             status_data['completion_date'] = completion_date
         
         # Call the enhanced update method
-        result = auth_client.update_user_item_status_comprehensive(user_id, item_uid, status_data)
+        result = supabase_client.update_user_item_status_comprehensive(user_id, item_uid, status_data)
         
         if result and result.get('success'):
             # [SUCCESS] INVALIDATE ALL CACHES so next dashboard load will be fresh
