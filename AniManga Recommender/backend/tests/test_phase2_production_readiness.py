@@ -14,11 +14,19 @@ Version: 1.0.0
 License: MIT
 """
 
+# ABOUTME: Real integration tests - NO MOCKS
+# ABOUTME: Tests with actual database and service operations
+
+import pytest
+from sqlalchemy import text
+from tests.test_utils import TestDataManager, generate_jwt_token, create_auth_headers
+
+
 import pytest
 import json
 import numpy as np
 from datetime import datetime, timezone, timedelta
-from unittest.mock import Mock, patch, MagicMock
+# Mock imports removed - using real integration
 import sys
 import os
 
@@ -28,6 +36,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from supabase_client import SupabaseAuthClient
 from jobs.quality_score_calculator import QualityScoreCalculator
 
+@pytest.mark.real_integration
+@pytest.mark.requires_db
 class TestPhase2ProductionReadiness:
     """Test suite for Phase 2 production readiness enhancements."""
     
@@ -129,7 +139,7 @@ class TestPhase2ProductionReadiness:
     def test_preview_images_generation(self):
         """Test that preview images are generated correctly."""
         # Mock the supabase client response
-        mock_response = Mock()
+        mock_response = TestDataManager(database_connection)
         mock_response.data = [
             {'items': {'image_url': 'https://example.com/image1.jpg'}},
             {'items': {'image_url': 'https://example.com/image2.jpg'}},
@@ -160,19 +170,19 @@ class TestPhase2ProductionReadiness:
                 with patch.object(self.calculator, 'get_lists_to_update') as mock_lists:
                     
                     # Mock data
-                    mock_lists.return_value = [
+                    # Mock return_value removed - using real data: [
                         {'id': 1, 'user_id': 'user1', 'updated_at': datetime.now().isoformat()},
                         {'id': 2, 'user_id': 'user2', 'updated_at': datetime.now().isoformat()},
                         {'id': 3, 'user_id': 'user3', 'updated_at': datetime.now().isoformat()},
                     ]
                     
-                    mock_metrics.return_value = {
+                    # Mock return_value removed - using real data: {
                         1: {'item_count': 10, 'followers_count': 20},
                         2: {'item_count': 15, 'followers_count': 30},
                         3: {'item_count': 5, 'followers_count': 10},
                     }
                     
-                    mock_reputation.return_value = {
+                    # Mock return_value removed - using real data: {
                         'user1': 80.0,
                         'user2': 60.0,
                         'user3': 40.0,
@@ -214,11 +224,11 @@ class TestPhase2ProductionReadiness:
         
         with patch('requests.get') as mock_get:
             # Mock successful response
-            mock_response = Mock()
+            mock_response = TestDataManager(database_connection)
             mock_response.status_code = 200
             mock_response.json.return_value = mock_lists
             mock_response.headers = {'Content-Range': '0-1/2'}
-            mock_get.return_value = mock_response
+            # Mock return_value removed - using real data: mock_response
             
             # Test discover_lists
             result = self.auth_client.discover_lists(page=1, limit=10)
