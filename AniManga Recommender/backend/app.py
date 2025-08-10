@@ -152,7 +152,8 @@ ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins if origin.strip()]
 VERCEL_PATTERNS = [
     "https://*.vercel.app",
     "https://animanga-recommender.vercel.app",
-    "https://animanga-recommender-*.vercel.app"
+    "https://animanga-recommender-*.vercel.app",
+    "https://animanga-recommender-mr652mnq3-chomichael13524-9283s-projects.vercel.app"  # Specific deployment URL
 ]
 
 # Add Vercel patterns if not already present

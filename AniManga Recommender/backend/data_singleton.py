@@ -1,6 +1,7 @@
 """
 Thread-safe singleton pattern for data loading in Flask application.
 Ensures data is loaded only once across all worker processes/threads.
+Now includes Redis caching for persistent storage across container restarts.
 """
 
 import threading
@@ -12,6 +13,10 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 import hashlib
 import json
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Platform-specific imports for file locking
 try:
@@ -20,6 +25,14 @@ try:
 except ImportError:
     HAS_FCNTL = False
     # Windows will use a different locking mechanism
+
+# Try to import Redis cache
+try:
+    from utils.redis_cache import RedisCache, get_redis_cache
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    logger.info("Redis not available for data singleton caching")
 
 class DataSingleton:
     """
@@ -60,6 +73,20 @@ class DataSingleton:
             self._initialized = True
             # Ensure cache directory exists
             os.makedirs(self.CACHE_DIR, exist_ok=True)
+            
+            # Initialize Redis cache if available
+            self.redis_cache = None
+            if REDIS_AVAILABLE:
+                try:
+                    self.redis_cache = get_redis_cache()
+                    if self.redis_cache.connected:
+                        logger.info("Redis cache initialized for data singleton")
+                    else:
+                        logger.warning("Redis configured but not connected for data singleton")
+                        self.redis_cache = None
+                except Exception as e:
+                    logger.warning(f"Failed to initialize Redis for data singleton: {e}")
+                    self.redis_cache = None
     
     def _acquire_file_lock(self, timeout: int = 30) -> Optional[Any]:
         """
@@ -116,6 +143,117 @@ class DataSingleton:
                 lock_file.close()
             except:
                 pass
+    
+    def _save_to_redis(self) -> bool:
+        """
+        Save processed data to Redis cache for persistence across container restarts.
+        
+        Returns:
+            True if successfully saved to Redis, False otherwise
+        """
+        if not self.redis_cache or not self.redis_cache.connected:
+            return False
+        
+        try:
+            # Save each component separately for better memory management
+            success = True
+            
+            # Save DataFrame (as pickle)
+            if self.df_processed is not None:
+                success &= self.redis_cache.set(
+                    'tfidf_df_processed',
+                    self.df_processed,
+                    ttl_hours=168  # 7 days
+                )
+            
+            # Save TF-IDF vectorizer
+            if self.tfidf_vectorizer is not None:
+                success &= self.redis_cache.set(
+                    'tfidf_vectorizer',
+                    self.tfidf_vectorizer,
+                    ttl_hours=168
+                )
+            
+            # Save TF-IDF matrix (sparse matrix)
+            if self.tfidf_matrix is not None:
+                success &= self.redis_cache.set(
+                    'tfidf_matrix',
+                    self.tfidf_matrix,
+                    ttl_hours=168
+                )
+            
+            # Save UID to index mapping
+            if self.uid_to_idx is not None:
+                success &= self.redis_cache.set(
+                    'tfidf_uid_to_idx',
+                    self.uid_to_idx,
+                    ttl_hours=168
+                )
+            
+            # Save metadata
+            metadata = {
+                'timestamp': time.time(),
+                'row_count': len(self.df_processed) if self.df_processed is not None else 0,
+                'has_vectorizer': self.tfidf_vectorizer is not None,
+                'has_matrix': self.tfidf_matrix is not None
+            }
+            success &= self.redis_cache.set(
+                'tfidf_metadata',
+                metadata,
+                ttl_hours=168
+            )
+            
+            if success:
+                logger.info("[SUCCESS] Saved TF-IDF data to Redis cache")
+            else:
+                logger.warning("[WARNING] Failed to save some components to Redis")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"[ERROR] Failed to save to Redis: {e}")
+            return False
+    
+    def _load_from_redis(self) -> bool:
+        """
+        Load processed data from Redis cache.
+        
+        Returns:
+            True if successfully loaded from Redis, False otherwise
+        """
+        if not self.redis_cache or not self.redis_cache.connected:
+            return False
+        
+        try:
+            # Check if metadata exists
+            metadata = self.redis_cache.get('tfidf_metadata')
+            if not metadata:
+                return False
+            
+            # Load each component
+            df = self.redis_cache.get('tfidf_df_processed')
+            vectorizer = self.redis_cache.get('tfidf_vectorizer')
+            matrix = self.redis_cache.get('tfidf_matrix')
+            uid_idx = self.redis_cache.get('tfidf_uid_to_idx')
+            
+            # Validate all components loaded
+            if df is None or vectorizer is None or matrix is None:
+                logger.warning("[WARNING] Incomplete data in Redis cache")
+                return False
+            
+            # Set the data
+            self.df_processed = df
+            self.tfidf_vectorizer = vectorizer
+            self.tfidf_matrix = matrix
+            self.uid_to_idx = uid_idx if uid_idx is not None else pd.Series(dtype='int64')
+            
+            logger.info(f"[SUCCESS] Loaded TF-IDF data from Redis: {len(df)} items, "
+                       f"cached {time.time() - metadata['timestamp']:.1f} seconds ago")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"[WARNING] Failed to load from Redis: {e}")
+            return False
     
     def _is_cache_valid(self, max_age_hours: int = 24) -> bool:
         """
@@ -207,8 +345,7 @@ class DataSingleton:
         Load data using singleton pattern with caching and locking.
         
         This method ensures data is loaded only once across all workers.
-        It first checks cache, then uses file locking to coordinate loading
-        if cache is invalid or missing.
+        It first checks Redis cache, then file cache, then loads from source.
         
         Args:
             load_function: Function to call to load data from source (e.g., Supabase)
@@ -221,20 +358,36 @@ class DataSingleton:
         if self._data_loaded and self.df_processed is not None:
             return self.df_processed, self.tfidf_vectorizer, self.tfidf_matrix, self.uid_to_idx
         
-        # Try to acquire file lock
+        # Try Redis cache first (fastest for cloud deployments)
+        if self._load_from_redis():
+            logger.info("[SUCCESS] Loaded data from Redis cache")
+            self._data_loaded = True
+            return self.df_processed, self.tfidf_vectorizer, self.tfidf_matrix, self.uid_to_idx
+        
+        # Try to acquire file lock for file cache or source loading
         lock_file = self._acquire_file_lock(timeout=60)
         if lock_file is None:
             print("[WARNING] Could not acquire data loading lock after 60 seconds")
-            # Try to load from cache anyway
+            # Try to load from file cache anyway
             if self._load_from_cache():
                 self._data_loaded = True
+                # Also save to Redis for next time
+                self._save_to_redis()
                 return self.df_processed, self.tfidf_vectorizer, self.tfidf_matrix, self.uid_to_idx
             return None, None, None, None
         
         try:
-            # Double-check if another process already loaded the data
+            # Double-check Redis (another process might have just saved it)
+            if self._load_from_redis():
+                logger.info("[SUCCESS] Loaded data from Redis cache (after lock)")
+                self._data_loaded = True
+                return self.df_processed, self.tfidf_vectorizer, self.tfidf_matrix, self.uid_to_idx
+            
+            # Check file cache
             if self._is_cache_valid() and self._load_from_cache():
                 self._data_loaded = True
+                # Save to Redis for cloud persistence
+                self._save_to_redis()
                 return self.df_processed, self.tfidf_vectorizer, self.tfidf_matrix, self.uid_to_idx
             
             # Load data from source
@@ -249,8 +402,9 @@ class DataSingleton:
                     self.uid_to_idx = uid_idx
                     self._data_loaded = True
                     
-                    # Save to cache for other processes
-                    self._save_to_cache()
+                    # Save to both caches
+                    self._save_to_cache()  # File cache for local
+                    self._save_to_redis()  # Redis for cloud persistence
                     
                     return self.df_processed, self.tfidf_vectorizer, self.tfidf_matrix, self.uid_to_idx
             

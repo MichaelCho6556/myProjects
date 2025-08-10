@@ -1,19 +1,20 @@
-# ABOUTME: Hybrid cache implementation combining memory and database layers
-# ABOUTME: Provides transparent two-tier caching with automatic fallback and promotion
+# ABOUTME: Hybrid cache implementation combining memory, Redis, and database layers
+# ABOUTME: Provides transparent three-tier caching with automatic fallback and promotion
 """
 Hybrid Cache Implementation for AniManga Recommender
 
-This module provides a two-tier caching solution combining fast in-memory LRU cache
-with persistent database cache. Designed as a drop-in Redis replacement with
-improved performance for hot data and persistence for warm data.
+This module provides a three-tier caching solution combining fast in-memory LRU cache,
+persistent Redis cache, and database cache fallback. Designed for optimal performance
+with cloud deployment compatibility.
 
 Architecture:
     Layer 1: In-memory LRU cache (microsecond access)
-    Layer 2: Database cache (millisecond access)
-    Layer 3: Source data (compute/fetch)
+    Layer 2: Redis cache (millisecond access, persistent)
+    Layer 3: Database cache (millisecond access, fallback)
+    Layer 4: Source data (compute/fetch)
 
 Key Features:
-    - Transparent two-tier operation
+    - Transparent three-tier operation
     - Automatic promotion of hot data
     - Write-through consistency
     - Graceful degradation
@@ -31,6 +32,15 @@ import json
 
 from .memory_cache import MemoryLRUCache, ThreadLocalCache
 from .database_cache import DatabaseCache, DatabaseCacheBatch
+
+# Try to import Redis cache
+try:
+    from .redis_cache import RedisCache, get_redis_cache
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.info("Redis cache not available, using memory + database only")
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -51,17 +61,17 @@ CACHE_TTL_HOURS = {
 
 class HybridCache:
     """
-    Hybrid two-tier cache with memory and database layers.
+    Hybrid three-tier cache with memory, Redis, and database layers.
     
-    Provides Redis-compatible API with transparent two-tier caching.
-    Hot data stays in memory, warm data in database, with automatic
-    promotion and eviction between tiers.
+    Provides Redis-compatible API with transparent three-tier caching.
+    Hot data stays in memory, warm data in Redis, with database as fallback.
     """
     
     def __init__(self, 
                  memory_size: int = 1000,
                  memory_mb: int = 100,
-                 enable_thread_local: bool = True):
+                 enable_thread_local: bool = True,
+                 enable_redis: bool = True):
         """
         Initialize hybrid cache with configured tiers.
         
@@ -69,6 +79,7 @@ class HybridCache:
             memory_size: Max entries in memory cache
             memory_mb: Max memory usage in MB
             enable_thread_local: Enable thread-local caching
+            enable_redis: Enable Redis caching tier
         """
         # Initialize cache layers
         self.memory_cache = MemoryLRUCache(
@@ -76,6 +87,18 @@ class HybridCache:
             max_memory_mb=memory_mb,
             default_ttl_seconds=3600  # 1 hour default
         )
+        
+        # Initialize Redis cache if available and enabled
+        self.redis_cache = None
+        if enable_redis and REDIS_AVAILABLE:
+            try:
+                self.redis_cache = get_redis_cache()
+                if not self.redis_cache.connected:
+                    logger.warning("Redis configured but not connected")
+                    self.redis_cache = None
+            except Exception as e:
+                logger.warning(f"Failed to initialize Redis cache: {e}")
+                self.redis_cache = None
         
         self.database_cache = DatabaseCache()
         
@@ -86,13 +109,14 @@ class HybridCache:
             self.thread_cache = None
         
         # Configuration
-        self.write_through = True  # Write to both layers
+        self.write_through = True  # Write to all layers
         self.promotion_threshold = 3  # Hits before promotion
         self._lock = Lock()
         
         # Combined statistics
         self.stats = {
             'memory_hits': 0,
+            'redis_hits': 0,
             'database_hits': 0,
             'total_misses': 0,
             'promotions': 0,
@@ -100,16 +124,17 @@ class HybridCache:
         }
         
         # Connection status
-        self.connected = self.database_cache.connected
+        self.connected = self.database_cache.connected or (self.redis_cache and self.redis_cache.connected)
         
         logger.info(f"HybridCache initialized: memory_size={memory_size}, "
-                   f"memory_mb={memory_mb}, database_connected={self.connected}")
+                   f"memory_mb={memory_mb}, redis_connected={bool(self.redis_cache and self.redis_cache.connected)}, "
+                   f"database_connected={self.database_cache.connected}")
     
     def get(self, key: str) -> Optional[Any]:
         """
         Get value from cache with automatic tier fallback.
         
-        Tries: Thread-local → Memory → Database
+        Tries: Thread-local → Memory → Redis → Database
         
         Args:
             key: Cache key
@@ -130,14 +155,27 @@ class HybridCache:
             self.stats['memory_hits'] += 1
             return value
         
-        # Try database cache
+        # Try Redis cache
+        if self.redis_cache and self.redis_cache.connected:
+            value = self.redis_cache.get(key)
+            if value is not None:
+                self.stats['redis_hits'] += 1
+                
+                # Promote to memory cache for faster access
+                self.memory_cache.set(key, value)
+                
+                return value
+        
+        # Try database cache as fallback
         if self.database_cache.connected:
             value = self.database_cache.get(key)
             if value is not None:
                 self.stats['database_hits'] += 1
                 
-                # Promote to memory cache if hot
-                self._consider_promotion(key, value)
+                # Promote to Redis and memory if found
+                if self.redis_cache and self.redis_cache.connected:
+                    self.redis_cache.set(key, value)
+                self.memory_cache.set(key, value)
                 
                 return value
         
@@ -147,7 +185,7 @@ class HybridCache:
     
     def set(self, key: str, value: Any, ttl_hours: Optional[int] = None) -> bool:
         """
-        Set value in cache with write-through to both tiers.
+        Set value in cache with write-through to all tiers.
         
         Args:
             key: Cache key
@@ -167,14 +205,21 @@ class HybridCache:
         if self.thread_cache and memory_success:
             self.thread_cache.set(key, value, ttl_seconds)
         
-        # Write-through to database
-        database_success = True
+        # Write-through to Redis
+        redis_success = False
+        if self.write_through and self.redis_cache and self.redis_cache.connected:
+            redis_success = self.redis_cache.set(key, value, ttl_hours)
+            if redis_success:
+                self.stats['write_throughs'] += 1
+        
+        # Write-through to database as fallback
+        database_success = False
         if self.write_through and self.database_cache.connected:
             database_success = self.database_cache.set(key, value, ttl_hours)
             if database_success:
                 self.stats['write_throughs'] += 1
         
-        return memory_success or database_success
+        return memory_success or redis_success or database_success
     
     def setex(self, key: str, seconds: Union[int, timedelta], value: Any) -> bool:
         """

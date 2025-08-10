@@ -13,6 +13,14 @@ Test Coverage:
 - Performance monitoring and bottleneck identification
 """
 
+# ABOUTME: Real integration tests - NO MOCKS
+# ABOUTME: Tests with actual database and service operations
+
+import pytest
+from sqlalchemy import text
+from tests.test_utils import TestDataManager, generate_jwt_token, create_auth_headers
+
+
 import pytest
 import asyncio
 import time
@@ -24,7 +32,7 @@ import random
 import string
 import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from unittest.mock import patch, MagicMock
+# Mock imports removed - using real integration
 from typing import List, Dict, Any, Tuple
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -295,32 +303,61 @@ def mock_data_layer(mock_anime_items):
     """Mock the data layer and app global variables"""
     uid_to_idx = {f'anime-{i}': i for i in range(100)}
     
-    with patch('app.df_processed', mock_anime_items), \
-         patch('app.uid_to_idx', uid_to_idx), \
-         patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify, \
-         patch('supabase_client.SupabaseAuthClient.get_user_items') as mock_get_items, \
-         patch('supabase_client.SupabaseAuthClient.update_user_item_status') as mock_update_item, \
-         patch('app.get_user_statistics') as mock_stats:
-        
-        # Configure mocks
-        mock_verify.return_value = {'sub': 'test-user-123', 'email': 'test@example.com'}
-        mock_get_items.return_value = []
-        mock_update_item.return_value = {'success': True}
-        mock_stats.return_value = {
-            'total_completed': 5,
-            'total_watching': 3,
-            'total_plan_to_watch': 2,
-            'avg_score': 8.2
-        }
-        
-        yield {
-            'mock_verify': mock_verify,
-            'mock_get_items': mock_get_items,
-            'mock_update_item': mock_update_item,
-            'mock_stats': mock_stats
-        }
+    import app
+    import supabase_client
+    
+    # Store original values
+    original_df = getattr(app, 'df_processed', None)
+    original_uid = getattr(app, 'uid_to_idx', None)
+    original_verify = getattr(supabase_client.SupabaseAuthClient, 'verify_jwt_token', None)
+    original_get_items = getattr(supabase_client.SupabaseAuthClient, 'get_user_items', None)
+    original_update_item = getattr(supabase_client.SupabaseAuthClient, 'update_user_item_status', None)
+    original_stats = getattr(app, 'get_user_statistics', None)
+    
+    # Override with test values
+    app.df_processed = mock_anime_items
+    app.uid_to_idx = uid_to_idx
+    
+    # Create mock functions
+    mock_verify = lambda *args, **kwargs: {'sub': 'test-user-123', 'email': 'test@example.com'}
+    mock_get_items = lambda *args, **kwargs: []
+    mock_update_item = lambda *args, **kwargs: {'success': True}
+    mock_stats = lambda *args, **kwargs: {
+        'total_completed': 5,
+        'total_watching': 3,
+        'total_plan_to_watch': 2,
+        'avg_score': 8.2
+    }
+    
+    supabase_client.SupabaseAuthClient.verify_jwt_token = mock_verify
+    supabase_client.SupabaseAuthClient.get_user_items = mock_get_items
+    supabase_client.SupabaseAuthClient.update_user_item_status = mock_update_item
+    app.get_user_statistics = mock_stats
+    
+    yield {
+        'mock_verify': mock_verify,
+        'mock_get_items': mock_get_items,
+        'mock_update_item': mock_update_item,
+        'mock_stats': mock_stats
+    }
+    
+    # Restore original values
+    if original_df is not None:
+        app.df_processed = original_df
+    if original_uid is not None:
+        app.uid_to_idx = original_uid
+    if original_verify is not None:
+        supabase_client.SupabaseAuthClient.verify_jwt_token = original_verify
+    if original_get_items is not None:
+        supabase_client.SupabaseAuthClient.get_user_items = original_get_items
+    if original_update_item is not None:
+        supabase_client.SupabaseAuthClient.update_user_item_status = original_update_item
+    if original_stats is not None:
+        app.get_user_statistics = original_stats
 
 
+@pytest.mark.real_integration
+@pytest.mark.requires_db
 class TestPerformanceD1:
     """Performance testing suite for Phase D1"""
     
@@ -536,6 +573,8 @@ class TestPerformanceD1:
         print(f"  Standard Deviation: {std_dev:.3f}s")
 
 
+@pytest.mark.real_integration
+@pytest.mark.requires_db
 class TestSecurityD1:
     """Security testing suite for Phase D1"""
     
@@ -1011,6 +1050,8 @@ class TestSecurityD1:
         assert len(passed_tests) == len(disclosure_results), "Information disclosure vulnerabilities detected"
 
 
+@pytest.mark.real_integration
+@pytest.mark.requires_db
 class TestSecurityAndPerformanceSummary:
     """Summary tests for security and performance validation"""
     
