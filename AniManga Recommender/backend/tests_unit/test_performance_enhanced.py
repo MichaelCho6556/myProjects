@@ -8,6 +8,14 @@ Phase 4.2: Performance Testing and Optimization
 Tests backend performance metrics and identifies bottlenecks
 """
 
+# ABOUTME: Real integration tests - NO MOCKS
+# ABOUTME: Tests with actual database and service operations
+
+import pytest
+from sqlalchemy import text
+from tests.test_utils import TestDataManager, generate_jwt_token, create_auth_headers
+
+
 import pytest
 import time
 import asyncio
@@ -15,13 +23,12 @@ import threading
 import psutil
 import json
 import sqlite3
-from unittest.mock import patch, MagicMock, Mock
+# Real integration imports - no mocks
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import tempfile
 import os
 import gc
-import memory_profiler
 
 # Import Flask app and modules
 import sys
@@ -33,6 +40,8 @@ from utils.cache_helpers import get_cache, get_user_stats_from_cache, set_user_s
 from utils.contentAnalysis import analyze_content, should_auto_moderate
 from utils.batchOperations import BatchOperationsManager
 
+@pytest.mark.real_integration
+@pytest.mark.requires_db
 class TestPerformanceEnhanced:
     """Enhanced performance test suite for backend operations."""
     
@@ -339,10 +348,8 @@ class TestPerformanceEnhanced:
             })
         
         start_time = time.time()
-        # Mock the actual batch operation
-        with patch.object(manager, 'bulk_update_user_items') as mock_update:
-            mock_update.return_value = {'success': True, 'updated': len(batch_updates)}
-            result = manager.bulk_update_user_items(batch_updates)
+        # Perform real batch operation
+        result = manager.bulk_update_user_items(batch_updates)
         end_time = time.time()
         
         batch_time = (end_time - start_time) * 1000

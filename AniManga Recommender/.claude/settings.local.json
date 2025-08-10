@@ -49,5 +49,10 @@
   "enabledMcpjsonServers": [
     "zen",
     "context7"
-  ]
+  ],
+  "statusLine": {
+    "type": "command",
+    "command": "C:\\Users\\chomi\\AppData\\Roaming\\npm\\npx.cmd -y ccusage statusline",
+    "padding": 0
+  }
 }
