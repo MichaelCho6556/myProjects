@@ -41,7 +41,8 @@
       "Bash(./run_tests.bat single tests_unit/test_cross_component_integration.py)",
       "Bash(.run_tests.bat single tests_unit/test_cross_component_integration.py)",
       "Bash(cmd /c:*)",
-      "Bash(set TESTING=true)"
+      "Bash(set TESTING=true)",
+      "mcp__playwright__browser_navigate"
     ],
     "deny": []
   },

@@ -151,17 +151,9 @@ const LazyImage: React.FC<LazyImageProps> = ({
 
     // Start observing
     observerRef.current.observe(currentImgRef);
-    
-    // Fallback: Load images after 500ms if intersection observer doesn't trigger
-    const fallbackTimer = setTimeout(() => {
-      if (!isInView) {
-        setIsInView(true);
-      }
-    }, 500);
 
     // Cleanup function
     return () => {
-      clearTimeout(fallbackTimer);
       if (observerRef.current && currentImgRef) {
         observerRef.current.unobserve(currentImgRef);
       }
