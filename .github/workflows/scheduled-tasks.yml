@@ -1,0 +1,82 @@
+name: Scheduled Background Tasks
+
+on:
+  schedule:
+    # Keep backend warm - every 14 minutes
+    - cron: '*/14 * * * *'
+    # Platform statistics - every hour
+    - cron: '0 * * * *'
+    # Daily maintenance - 2 AM UTC
+    - cron: '0 2 * * *'
+    # Cache cleanup - every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  keep-warm:
+    runs-on: ubuntu-latest
+    name: Keep Backend Warm
+    steps:
+      - name: Ping Backend Health Check
+        run: |
+          echo "Pinging backend to keep it warm..."
+          curl -X GET ${{ secrets.API_URL }}/ \
+            -H "Accept: application/json" \
+            --fail \
+            --show-error \
+            --silent \
+            --max-time 60 \
+            || echo "Backend is waking up..."
+        continue-on-error: true
+
+  platform-stats:
+    runs-on: ubuntu-latest
+    name: Update Platform Statistics
+    if: github.event.schedule == '0 * * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Update Platform Statistics
+        run: |
+          cd "AniManga Recommender"
+          curl -X POST ${{ secrets.API_URL }}/api/compute/platform-stats \
+            -H "Authorization: Bearer ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --fail \
+            --show-error
+        continue-on-error: true
+
+  daily-tasks:
+    runs-on: ubuntu-latest
+    name: Daily Maintenance Tasks
+    if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Update All User Statistics
+        run: |
+          curl -X POST ${{ secrets.API_URL }}/api/compute/all-user-stats \
+            -H "Authorization: Bearer ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --fail \
+            --show-error
+        continue-on-error: true
+      
+      - name: Calculate Popular Lists
+        run: |
+          curl -X POST ${{ secrets.API_URL }}/api/compute/popular-lists \
+            -H "Authorization: Bearer ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --fail \
+            --show-error
+        continue-on-error: true
+
+  cache-cleanup:
+    runs-on: ubuntu-latest
+    name: Cache Cleanup
+    if: github.event.schedule == '0 */6 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Clean Expired Cache Entries
+        run: |
+          curl -X POST ${{ secrets.API_URL }}/api/admin/cache/cleanup \
+            -H "Authorization: Bearer ${{ secrets.API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --fail \
+            --show-error
+        continue-on-error: true
