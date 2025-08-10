@@ -86,14 +86,16 @@ class LocalStorageManager {
   private initializeMetadata(): void {
     try {
       const metadataKey = `${this.config.prefix}__metadata`;
-      const stored = localStorage.getItem(metadataKey);
+      const stored = window.localStorage.getItem(metadataKey);
       
       if (stored) {
         const parsed = JSON.parse(stored as string);
         this.metadata = new Map(Object.entries(parsed));
       }
     } catch (error) {
-      this.logError('Failed to initialize metadata', error);
+      // Silently fail on initialization to prevent circular errors
+      // The metadata will be rebuilt as items are accessed
+      this.metadata = new Map();
     }
   }
 
@@ -104,9 +106,12 @@ class LocalStorageManager {
     try {
       const metadataKey = `${this.config.prefix}__metadata`;
       const metadata: Record<string, StorageMetadata> = Object.fromEntries(this.metadata);
-      localStorage.setItem(metadataKey, JSON.stringify(metadata));
+      window.localStorage.setItem(metadataKey, JSON.stringify(metadata));
     } catch (error) {
-      this.logError('Failed to save metadata', error);
+      // Silently fail to prevent circular errors
+      if (this.config.enableLogging && process.env.NODE_ENV === 'development') {
+        console.warn('[LocalStorage] Failed to save metadata', error);
+      }
     }
   }
 
@@ -135,6 +140,10 @@ class LocalStorageManager {
    * Get prefixed key
    */
   private getPrefixedKey(key: string): string {
+    // Prevent double-prefixing - check if key already starts with prefix
+    if (key.startsWith(this.config.prefix)) {
+      return key;
+    }
     return `${this.config.prefix}${key}`;
   }
 
@@ -250,7 +259,7 @@ class LocalStorageManager {
       }
       
       // Store the item
-      localStorage.setItem(prefixedKey, serialized);
+      window.localStorage.setItem(prefixedKey, serialized);
       
       // Update metadata
       const metadata: StorageMetadata = {
@@ -286,7 +295,7 @@ class LocalStorageManager {
   getItem<T>(key: string): T | null {
     try {
       const prefixedKey = this.getPrefixedKey(key);
-      const data = localStorage.getItem(prefixedKey);
+      const data = window.localStorage.getItem(prefixedKey);
       
       if (!data) return null;
       
@@ -301,7 +310,10 @@ class LocalStorageManager {
       
       return this.deserialize(data as string, metadata);
     } catch (error) {
-      this.logError(`Failed to retrieve ${key}`, error);
+      // Only log errors in development to prevent console spam
+      if (this.config.enableLogging && process.env.NODE_ENV === 'development') {
+        console.warn(`[LocalStorage] Failed to retrieve ${key}`, error);
+      }
       return null;
     }
   }
@@ -312,7 +324,7 @@ class LocalStorageManager {
   removeItem(key: string): boolean {
     try {
       const prefixedKey = this.getPrefixedKey(key);
-      localStorage.removeItem(prefixedKey);
+      window.localStorage.removeItem(prefixedKey);
       this.metadata.delete(key);
       this.saveMetadata();
       
@@ -339,7 +351,7 @@ class LocalStorageManager {
       const keys = this.getAllKeys();
       keys.forEach(key => {
         const prefixedKey = this.getPrefixedKey(key);
-        localStorage.removeItem(prefixedKey);
+        window.localStorage.removeItem(prefixedKey);
       });
       
       this.metadata.clear();
@@ -433,7 +445,7 @@ class LocalStorageManager {
    */
   hasItem(key: string): boolean {
     const prefixedKey = this.getPrefixedKey(key);
-    return localStorage.getItem(prefixedKey) !== null;
+    return window.localStorage.getItem(prefixedKey) !== null;
   }
 
   /**

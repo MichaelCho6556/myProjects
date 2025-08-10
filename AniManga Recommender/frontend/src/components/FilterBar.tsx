@@ -317,6 +317,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
       isDisabled: filtersLoading || loading,
       classNamePrefix: "react-select",
       menuPlacement: "auto" as const,
+      menuPortalTarget: document.body, // Render dropdown in portal to prevent cutoff
       isSearchable: false,
       closeMenuOnScroll: false,
       openMenuOnClick: true,
@@ -337,6 +338,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
       isDisabled: filtersLoading || loading,
       classNamePrefix: "react-select",
       menuPlacement: "auto" as const,
+      menuPortalTarget: document.body, // Render dropdown in portal to prevent cutoff
       isSearchable: true,
       isMulti: true,
       closeMenuOnSelect: false,

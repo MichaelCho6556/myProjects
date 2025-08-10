@@ -261,21 +261,52 @@ export const invalidateRelatedQueries = async (
 
 /**
  * Create storage persister for React Query
- * Uses our custom localStorage utility for enhanced features
+ * Uses native localStorage to avoid double-prefixing issues
  */
 export const persister = createSyncStoragePersister({
   storage: {
     getItem: (key: string) => {
-      const data = localStorage.getItem<string>(key);
-      return data || null;
+      // Use native localStorage with manual prefixing to avoid recursion
+      const prefixedKey = `animanga_cache_${key}`;
+      try {
+        return window.localStorage.getItem(prefixedKey);
+      } catch (error) {
+        logger.error('Failed to get from localStorage', { key: prefixedKey, error });
+        return null;
+      }
     },
     setItem: (key: string, value: string) => {
-      localStorage.setItem(key, value, {
-        ttl: 7 * 24 * 60 * 60 * 1000 // 7 days TTL for cache
-      });
+      // Use native localStorage with manual prefixing to avoid recursion
+      const prefixedKey = `animanga_cache_${key}`;
+      try {
+        window.localStorage.setItem(prefixedKey, value);
+      } catch (error) {
+        logger.error('Failed to set in localStorage', { key: prefixedKey, error });
+        // If storage is full, try to clear old cache entries
+        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+          // Clear old cache entries
+          const cacheKeys = Object.keys(window.localStorage).filter(k => k.startsWith('animanga_cache_'));
+          if (cacheKeys.length > 0) {
+            // Remove the oldest cache entry
+            window.localStorage.removeItem(cacheKeys[0]);
+            // Try again
+            try {
+              window.localStorage.setItem(prefixedKey, value);
+            } catch (retryError) {
+              logger.error('Failed to set in localStorage after clearing', { key: prefixedKey, error: retryError });
+            }
+          }
+        }
+      }
     },
     removeItem: (key: string) => {
-      localStorage.removeItem(key);
+      // Use native localStorage with manual prefixing to avoid recursion
+      const prefixedKey = `animanga_cache_${key}`;
+      try {
+        window.localStorage.removeItem(prefixedKey);
+      } catch (error) {
+        logger.error('Failed to remove from localStorage', { key: prefixedKey, error });
+      }
     }
   },
   // Throttle cache writes to avoid performance issues

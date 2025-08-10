@@ -61,6 +61,12 @@ export const useDashboardQuery = () => {
     networkMode: isOnline ? 'online' : 'offlineFirst',
     // Show stale data while offline
     placeholderData: (previousData) => previousData,
+    // Don't refetch on focus if data is fresh
+    refetchOnWindowFocus: false,
+    // Refetch when reconnecting to network
+    refetchOnReconnect: true,
+    // Only refetch on mount if data is stale
+    refetchOnMount: false,
     meta: {
       // Custom metadata for offline handling
       offlineFallback: true,
@@ -224,6 +230,10 @@ export const useUpdateUserItemMutation = () => {
       // Snapshot previous values
       const previousItems = queryClient.getQueryData(createQueryKey.userItems());
       const previousDashboard = queryClient.getQueryData(createQueryKey.dashboard()) as DashboardData;
+      
+      // Debug logging
+      console.log('[DEBUG] Update mutation - Previous dashboard:', previousDashboard);
+      console.log('[DEBUG] Update mutation - Item UID:', itemUid, 'New data:', data);
 
       // Optimistically update the userItems cache
       queryClient.setQueryData(createQueryKey.userItems(), (old: any) => {
@@ -237,23 +247,37 @@ export const useUpdateUserItemMutation = () => {
       if (previousDashboard) {
         const updatedDashboard = { ...previousDashboard };
         
-        // Find the item in all lists and update/move it
-        const findAndRemoveItem = (list: UserItem[] | undefined): UserItem | null => {
-          if (!list) return null;
+        // Find the item in all lists and update/move it (using immutable operations)
+        const findAndRemoveItem = (list: UserItem[] | undefined): [UserItem | null, UserItem[]] => {
+          if (!list) return [null, []];
           const index = list.findIndex(item => item.item_uid === itemUid);
           if (index !== -1) {
-            const [item] = list.splice(index, 1);
-            return item;
+            const item = list[index];
+            // Create NEW array without mutating original
+            const newList = list.filter((_, i) => i !== index);
+            return [item, newList];
           }
-          return null;
+          return [null, list];
         };
 
-        // Remove item from all lists first
+        // Remove item from all lists first (immutably)
         let targetItem: UserItem | null = null;
-        targetItem = findAndRemoveItem(updatedDashboard.in_progress) || targetItem;
-        targetItem = findAndRemoveItem(updatedDashboard.plan_to_watch) || targetItem;
-        targetItem = findAndRemoveItem(updatedDashboard.on_hold) || targetItem;
-        targetItem = findAndRemoveItem(updatedDashboard.completed_recently) || targetItem;
+        
+        const [item1, newInProgress] = findAndRemoveItem(updatedDashboard.in_progress);
+        targetItem = item1 || targetItem;
+        updatedDashboard.in_progress = newInProgress;
+        
+        const [item2, newPlanToWatch] = findAndRemoveItem(updatedDashboard.plan_to_watch);
+        targetItem = item2 || targetItem;
+        updatedDashboard.plan_to_watch = newPlanToWatch;
+        
+        const [item3, newOnHold] = findAndRemoveItem(updatedDashboard.on_hold);
+        targetItem = item3 || targetItem;
+        updatedDashboard.on_hold = newOnHold;
+        
+        const [item4, newCompletedRecently] = findAndRemoveItem(updatedDashboard.completed_recently);
+        targetItem = item4 || targetItem;
+        updatedDashboard.completed_recently = newCompletedRecently;
 
         // If we found the item, update it and add to the appropriate list
         if (targetItem) {
@@ -280,6 +304,9 @@ export const useUpdateUserItemMutation = () => {
 
           // Update the dashboard cache
           queryClient.setQueryData(createQueryKey.dashboard(), updatedDashboard);
+          
+          // Debug logging
+          console.log('[DEBUG] Update mutation - Updated dashboard:', updatedDashboard);
         }
       }
 
@@ -295,12 +322,30 @@ export const useUpdateUserItemMutation = () => {
         queryClient.setQueryData(createQueryKey.dashboard(), context.previousDashboard);
       }
     },
-    onSuccess: () => {
-      // Immediately invalidate and refetch dashboard to ensure consistency
-      // This is faster than onSettled and ensures immediate updates
-      queryClient.invalidateQueries({ queryKey: createQueryKey.dashboard() });
-      queryClient.invalidateQueries({ queryKey: createQueryKey.userItems() });
-      queryClient.invalidateQueries({ queryKey: ['user', 'stats'] });
+    onSuccess: (data) => {
+      console.log('[DEBUG] Update mutation SUCCESS - Response:', data);
+      console.log('[DEBUG] Invalidating queries with keys:', {
+        dashboard: createQueryKey.dashboard(),
+        userItems: createQueryKey.userItems()
+      });
+      
+      // Force immediate refetch with 'all' instead of 'active'
+      queryClient.invalidateQueries({ 
+        queryKey: createQueryKey.dashboard(),
+        refetchType: 'all' // Changed from 'active' to force refetch
+      });
+      
+      // Force refetch user items too
+      queryClient.invalidateQueries({ 
+        queryKey: createQueryKey.userItems(),
+        refetchType: 'all' // Changed from 'active' to force refetch
+      });
+      
+      // Don't block on stats update
+      queryClient.invalidateQueries({ 
+        queryKey: ['user', 'stats'],
+        refetchType: 'none' // Don't force refetch, just mark as stale
+      });
     },
   });
 };
@@ -314,13 +359,88 @@ export const useRemoveUserItemMutation = () => {
 
   return useMutation({
     mutationFn: (itemUid: string) => removeUserItem(itemUid),
-    onSuccess: () => {
-      // Invalidate related queries
-      invalidateRelatedQueries(queryClient, [
-        ['user', 'items'],
-        ['dashboard'],
-        ['user', 'stats'],
-      ]);
+    onMutate: async (itemUid: string) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: createQueryKey.userItems() });
+      await queryClient.cancelQueries({ queryKey: createQueryKey.dashboard() });
+
+      // Snapshot previous values
+      const previousItems = queryClient.getQueryData(createQueryKey.userItems());
+      const previousDashboard = queryClient.getQueryData(createQueryKey.dashboard()) as DashboardData;
+      
+      // Debug logging
+      console.log('[DEBUG] Remove mutation - Previous dashboard:', previousDashboard);
+      console.log('[DEBUG] Remove mutation - Removing item UID:', itemUid);
+
+      // Optimistically remove from userItems cache
+      queryClient.setQueryData(createQueryKey.userItems(), (old: any) => {
+        if (!old) return old;
+        return old.filter((item: UserItem) => item.item_uid !== itemUid);
+      });
+
+      // Optimistically remove from dashboard cache
+      if (previousDashboard) {
+        const updatedDashboard = { ...previousDashboard };
+        
+        // Remove item from all lists (immutably)
+        if (updatedDashboard.in_progress) {
+          updatedDashboard.in_progress = updatedDashboard.in_progress.filter(
+            item => item.item_uid !== itemUid
+          );
+        }
+        if (updatedDashboard.plan_to_watch) {
+          updatedDashboard.plan_to_watch = updatedDashboard.plan_to_watch.filter(
+            item => item.item_uid !== itemUid
+          );
+        }
+        if (updatedDashboard.on_hold) {
+          updatedDashboard.on_hold = updatedDashboard.on_hold.filter(
+            item => item.item_uid !== itemUid
+          );
+        }
+        if (updatedDashboard.completed_recently) {
+          updatedDashboard.completed_recently = updatedDashboard.completed_recently.filter(
+            item => item.item_uid !== itemUid
+          );
+        }
+
+        // Update the dashboard cache
+        queryClient.setQueryData(createQueryKey.dashboard(), updatedDashboard);
+        
+        // Debug logging
+        console.log('[DEBUG] Remove mutation - Updated dashboard:', updatedDashboard);
+      }
+
+      // Return context with snapshots
+      return { previousItems, previousDashboard };
+    },
+    onError: (_err, _itemUid, context) => {
+      // Rollback on error
+      if (context?.previousItems) {
+        queryClient.setQueryData(createQueryKey.userItems(), context.previousItems);
+      }
+      if (context?.previousDashboard) {
+        queryClient.setQueryData(createQueryKey.dashboard(), context.previousDashboard);
+      }
+    },
+    onSuccess: (data) => {
+      console.log('[DEBUG] Remove mutation SUCCESS - Response:', data);
+      console.log('[DEBUG] Invalidating queries after remove');
+      
+      // Force immediate refetch with 'all' instead of 'active'
+      queryClient.invalidateQueries({ 
+        queryKey: ['user', 'items'],
+        refetchType: 'all' // Changed from 'active' to force refetch
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ['dashboard'],
+        refetchType: 'all' // Changed from 'active' to force refetch
+      });
+      // Don't force stats refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['user', 'stats'],
+        refetchType: 'none'
+      });
     },
   });
 };

@@ -89,8 +89,10 @@ export const useColdStart = (): ColdStartState => {
  */
 function checkCachedData(): boolean {
   try {
-    // Check for cached query data
-    const cachedQueries = localStorage.getItem<any>('tanstack-query-cache');
+    // Check for cached query data using the correct persister key
+    // The persister uses 'tanstack-query-persist-client' as the default key
+    // with our prefix it becomes 'animanga_cache_tanstack-query-persist-client'
+    const cachedQueries = window.localStorage.getItem('animanga_cache_tanstack-query-persist-client');
     if (!cachedQueries) return false;
     
     // Check if we have any items or recommendations cached
@@ -98,7 +100,13 @@ function checkCachedData(): boolean {
     const hasRecommendations = localStorage.getAllKeys()
       .some(key => key.startsWith('recommendations_'));
     
-    return hasItems || hasRecommendations || Object.keys(cachedQueries).length > 0;
+    // Parse the cached queries to check if it has content
+    try {
+      const parsed = JSON.parse(cachedQueries);
+      return hasItems || hasRecommendations || (parsed && Object.keys(parsed).length > 0);
+    } catch {
+      return hasItems || hasRecommendations;
+    }
   } catch {
     return false;
   }

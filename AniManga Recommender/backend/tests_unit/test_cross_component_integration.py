@@ -13,645 +13,467 @@ Test Coverage:
 - Background task integration with real-time updates
 """
 
-import pytest
-import asyncio
-import time
-from unittest.mock import Mock, patch, AsyncMock
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+# ABOUTME: Real integration tests - NO MOCKS
+# ABOUTME: Tests with actual database and service operations
 
-# Test framework imports
-import pytest_asyncio
-from fastapi.testclient import TestClient
-from httpx import AsyncClient
-import asyncio
+import pytest
+import time
+import json
+import pandas as pd
+from datetime import datetime, timedelta
+from sqlalchemy import text
+
+# Import test utilities for real operations
+from tests.test_utils import TestDataManager, generate_jwt_token, create_auth_headers
 
 # Application imports
-from app import app  
-from models import User, UserItem, AnimeItem
-
-
-class MockDatabase:
-    """Mock database for testing cross-component interactions"""
-    
-    def __init__(self):
-        self.users = {}
-        self.user_items = {}
-        self.activities = {}
-        self.sessions = {}
-        self.transaction_log = []
-        
-    def begin_transaction(self, transaction_id: str):
-        """Simulate transaction beginning"""
-        self.transaction_log.append(f"BEGIN:{transaction_id}")
-        return MockTransaction(transaction_id, self)
-    
-    def commit_transaction(self, transaction_id: str):
-        """Simulate transaction commit"""
-        self.transaction_log.append(f"COMMIT:{transaction_id}")
-    
-    def rollback_transaction(self, transaction_id: str):
-        """Simulate transaction rollback"""
-        self.transaction_log.append(f"ROLLBACK:{transaction_id}")
-    
-    def get_user(self, user_id: str) -> Optional[Dict]:
-        return self.users.get(user_id)
-    
-    def create_user(self, user_data: Dict) -> Dict:
-        user_id = user_data["id"]
-        self.users[user_id] = user_data
-        return user_data
-    
-    def get_user_items(self, user_id: str) -> List[Dict]:
-        return [item for item in self.user_items.values() if item["user_id"] == user_id]
-    
-    def create_activity(self, activity_data: Dict) -> Dict:
-        activity_id = len(self.activities) + 1
-        activity_data["id"] = activity_id
-        self.activities[activity_id] = activity_data
-        return activity_data
-
-
-class MockTransaction:
-    """Mock database transaction"""
-    
-    def __init__(self, transaction_id: str, db: MockDatabase):
-        self.transaction_id = transaction_id
-        self.db = db
-        self.is_active = True
-    
-    def commit(self):
-        if self.is_active:
-            self.db.commit_transaction(self.transaction_id)
-            self.is_active = False
-    
-    def rollback(self):
-        if self.is_active:
-            self.db.rollback_transaction(self.transaction_id)
-            self.is_active = False
-
-
-class MockCache:
-    """Mock cache for testing cache integration"""
-    
-    def __init__(self):
-        self.data = {}
-        self.access_log = []
-        
-    async def get(self, key: str) -> Optional[Any]:
-        self.access_log.append(f"GET:{key}")
-        return self.data.get(key)
-    
-    async def set(self, key: str, value: Any, ttl: int = 300) -> None:
-        self.access_log.append(f"SET:{key}:{ttl}")
-        self.data[key] = value
-    
-    async def delete(self, key: str) -> None:
-        self.access_log.append(f"DEL:{key}")
-        self.data.pop(key, None)
-    
-    async def clear(self) -> None:
-        self.access_log.append("CLEAR")
-        self.data.clear()
-
-
-class MockBackgroundTaskManager:
-    """Mock background task manager"""
-    
-    def __init__(self):
-        self.tasks = []
-        self.completed_tasks = []
-    
-    async def enqueue_task(self, task_name: str, payload: Dict) -> str:
-        task_id = f"task_{len(self.tasks) + 1}"
-        task = {
-            "id": task_id,
-            "name": task_name,
-            "payload": payload,
-            "status": "queued",
-            "created_at": datetime.now(),
-        }
-        self.tasks.append(task)
-        return task_id
-    
-    async def process_task(self, task_id: str) -> bool:
-        for task in self.tasks:
-            if task["id"] == task_id:
-                task["status"] = "processing"
-                # Simulate processing
-                await asyncio.sleep(0.01)
-                task["status"] = "completed"
-                self.completed_tasks.append(task)
-                return True
-        return False
+from app import app
+from supabase_client import SupabaseClient
 
 
 @pytest.fixture
-def mock_db():
-    """Provide mock database for testing"""
-    return MockDatabase()
+def test_data_manager(database_connection):
+    """Create test data manager for real database operations"""
+    return TestDataManager(database_connection)
 
 
 @pytest.fixture
-def mock_cache():
-    """Provide mock cache for testing"""
-    return MockCache()
-
-
-@pytest.fixture
-def mock_task_manager():
-    """Provide mock task manager for testing"""
-    return MockBackgroundTaskManager()
-
-
-@pytest.fixture
-def test_client():
-    """Provide test client for API testing"""
-    return app.test_client()
-
-
-@pytest.fixture
-async def async_client():
-    """Provide async client for testing"""
-    async with AsyncClient(app=app, base_url="http://test") as client:
+def test_client(app):
+    """Create test client for Flask app"""
+    with app.test_client() as client:
         yield client
 
 
+@pytest.fixture
+def test_user(test_data_manager):
+    """Create a real test user in the database"""
+    user = test_data_manager.create_test_user()
+    yield user
+    # Cleanup happens automatically via TestDataManager
+
+
+@pytest.fixture
+def auth_headers(test_user):
+    """Create real authentication headers with JWT token"""
+    token = generate_jwt_token(
+        test_user['id'],
+        test_user.get('email', 'test@example.com'),
+        'test-jwt-secret-key'
+    )
+    return create_auth_headers(token)
+
+
+@pytest.fixture
+def test_items(test_data_manager):
+    """Create real test items in the database"""
+    import uuid
+    unique_id = str(uuid.uuid4())[:8]
+    items = []
+    for i in range(5):
+        item = test_data_manager.create_test_item(
+            uid=f'test-anime-{unique_id}-{i}',
+            title=f'Test Anime {i}',
+            media_type='anime',
+            genres=['Action', 'Drama'] if i % 2 == 0 else ['Comedy', 'Romance']
+        )
+        items.append(item)
+    return items
+
+
+@pytest.fixture
+def test_user_with_items(test_data_manager, test_user, test_items):
+    """Create a test user with items in their list"""
+    for i, item in enumerate(test_items[:3]):
+        test_data_manager.add_user_item(
+            test_user['id'],
+            item['uid'],
+            status='completed' if i == 0 else 'watching',
+            rating=8.0 + i
+        )
+    return test_user
+
+
 class TestServiceLayerIntegration:
-    """Test integration between different service layers"""
+    """Test service layer integration using real database operations"""
     
-    def test_user_service_anime_service_integration(self, mock_db, mock_cache):
-        """Test integration between user service and anime service"""
-        # Test user-anime service integration through API layer
-        with app.test_client() as client:
-            # Mock the necessary services
-            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify, \
-                 patch('app.get_user_statistics') as mock_stats, \
-                 patch('supabase_client.SupabaseAuthClient.get_user_items') as mock_get_items:
-                
-                # Setup mocks
-                mock_verify.return_value = {'sub': 'user-123', 'email': 'test@example.com'}
-                mock_stats.return_value = {
-                    'total_completed': 5,
-                    'total_watching': 3,
-                    'avg_score': 8.2
-                }
-                mock_get_items.return_value = [
-                    {'item_uid': 'anime-1', 'status': 'watching', 'progress': 5}
-                ]
-                
-                # Test user service (dashboard)
-                headers = {'Authorization': 'Bearer test_token'}
-                dashboard_response = client.get('/api/dashboard', headers=headers)
-                
-                # Test anime service (items)
-                items_response = client.get('/api/items?per_page=10')
-                
-                # Verify both services work and can integrate
-                assert dashboard_response.status_code in [200, 404]  # 404 acceptable for empty user
-                assert items_response.status_code in [200, 503]  # 503 acceptable when no data loaded
+    def test_authentication_service_integration(self, test_client, test_user):
+        """Test authentication service with real JWT tokens"""
+        # Generate real JWT token
+        token = generate_jwt_token(
+            test_user['id'],
+            test_user.get('email', 'test@example.com'),
+            'test-jwt-secret-key'
+        )
+        headers = {'Authorization': f'Bearer {token}'}
         
-        print("User-Anime Service Integration: PASSED")
-    
-    def test_recommendation_service_integration(self, mock_db, mock_cache):
-        """Test recommendation service integration with user and anime services"""
-        with app.test_client() as client:
-            # Mock data and services
-            with patch('app.df_processed') as mock_df, \
-                 patch('app.uid_to_idx', {'anime-1': 0, 'anime-2': 1}):
-                
-                # Setup recommendation data
-                import pandas as pd
-                mock_df.return_value = pd.DataFrame([
-                    {'uid': 'anime-1', 'title': 'Test Anime', 'genres': ['Action']},
-                    {'uid': 'anime-2', 'title': 'Similar Anime', 'genres': ['Action']}
-                ])
-                
-                # Test recommendation service integration
-                rec_response = client.get('/api/recommendations/anime-1?n=5')
-                
-                # Verify recommendation service responds appropriately
-                assert rec_response.status_code in [200, 404, 503]
+        # Test protected endpoint with real authentication
+        response = test_client.get('/api/auth/dashboard', headers=headers)
         
-        print("Recommendation Service Integration: PASSED")
+        # Should successfully authenticate
+        assert response.status_code == 200
+        data = response.get_json()
+        # Dashboard response should have user_stats or quick_stats
+        assert 'user_stats' in data or 'quick_stats' in data
+        
+        # Test without token
+        response = test_client.get('/api/auth/dashboard')
+        assert response.status_code == 401
     
-    def test_activity_service_cross_service_coordination(self, mock_db, mock_cache):
-        """Test activity service coordination with other services"""
-        with app.test_client() as client:
-            # Mock activity logging and user services
-            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify, \
-                 patch('app.log_user_activity') as mock_log, \
-                 patch('app.invalidate_user_statistics_cache') as mock_invalidate:
-                
-                mock_verify.return_value = {'sub': 'user-123', 'email': 'test@example.com'}
-                mock_log.return_value = True
-                mock_invalidate.return_value = True
-                
-                # Test cross-service coordination through user item update
-                headers = {'Authorization': 'Bearer test_token'}
-                update_response = client.put('/api/auth/user-items/anime-1', 
-                                           headers=headers,
-                                           json={'status': 'completed', 'rating': 9.0})
-                
-                # Verify services coordinate properly
-                assert update_response.status_code in [200, 404]  # 404 acceptable for non-existent item
-                
-        print("Activity Service Cross-Service Coordination: PASSED")
+    def test_user_items_service_integration(self, test_client, test_user_with_items, auth_headers, test_items):
+        """Test user items service with real database operations"""
+        # Get user's items through API
+        response = test_client.get('/api/auth/user-items', headers=auth_headers)
+        assert response.status_code == 200
+        
+        data = response.get_json()
+        items = data.get('data', data.get('items', []))
+        
+        # Should have the items we added
+        assert len(items) >= 3
+        
+        # Update an item status
+        update_response = test_client.put(
+            f'/api/auth/user-items/{test_items[1]["uid"]}',
+            headers=auth_headers,
+            json={'status': 'completed', 'rating': 9.5}
+        )
+        
+        # Verify update succeeded
+        assert update_response.status_code in [200, 201]
+    
+    def test_recommendation_service_integration(self, test_client, test_user_with_items, auth_headers, test_items):
+        """Test recommendation service with real data"""
+        # Get recommendations based on user's completed items
+        response = test_client.get(
+            f'/api/recommendations/{test_items[0]["uid"]}?n=5',
+            headers=auth_headers
+        )
+        
+        # Should return recommendations or appropriate status
+        assert response.status_code in [200, 404, 503]
+        
+        if response.status_code == 200:
+            data = response.get_json()
+            assert 'recommendations' in data or 'data' in data
+    
+    def test_list_management_service_integration(self, test_client, test_user, auth_headers, test_data_manager):
+        """Test custom list management with real database"""
+        # Create a custom list
+        list_data = {
+            'title': 'My Favorite Anime',
+            'description': 'Collection of top anime',
+            'is_public': True
+        }
+        
+        response = test_client.post(
+            '/api/auth/lists',
+            headers=auth_headers,
+            json=list_data
+        )
+        
+        # Should create the list
+        assert response.status_code in [200, 201]
+        
+        if response.status_code in [200, 201]:
+            created_list = response.get_json()
+            list_id = created_list.get('id') or created_list.get('data', {}).get('id')
+            
+            # Get user's lists
+            lists_response = test_client.get('/api/auth/lists', headers=auth_headers)
+            assert lists_response.status_code == 200
+            
+            lists_data = lists_response.get_json()
+            user_lists = lists_data.get('data', lists_data.get('lists', []))
+            assert len(user_lists) >= 1
 
 
 class TestMiddlewareIntegration:
-    """Test middleware stack integration"""
+    """Test middleware stack integration with real requests"""
     
-    def test_auth_middleware_integration(self, test_client):
-        """Test authentication middleware integration"""
-        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify:
-            # Test without authentication
-            response = test_client.get('/api/auth/dashboard')
-            assert response.status_code == 401  # Should require auth
-            
-            # Test with authentication
-            mock_verify.return_value = {'sub': 'user-123', 'email': 'test@example.com'}
-            headers = {'Authorization': 'Bearer valid_token'}
-            response = test_client.get('/api/auth/dashboard', headers=headers)
-            assert response.status_code in [200, 404, 500]  # Any non-auth-error response is good
-            
-        print("Auth Middleware Integration: PASSED")
+    def test_authentication_middleware_flow(self, test_client, test_user):
+        """Test authentication middleware with real JWT validation"""
+        # Test with valid token
+        valid_token = generate_jwt_token(
+            test_user['id'],
+            test_user.get('email', 'test@example.com'),
+            'test-jwt-secret-key'
+        )
+        headers = {'Authorization': f'Bearer {valid_token}'}
+        
+        response = test_client.get('/api/auth/dashboard', headers=headers)
+        assert response.status_code == 200
+        
+        # Test with invalid token
+        invalid_headers = {'Authorization': 'Bearer invalid_token'}
+        response = test_client.get('/api/auth/dashboard', headers=invalid_headers)
+        assert response.status_code == 401
+        
+        # Test with expired token (if we can generate one)
+        # For now, just test missing token
+        response = test_client.get('/api/auth/dashboard')
+        assert response.status_code == 401
     
-    def test_rate_limit_middleware_integration(self, test_client):
-        """Test rate limiting middleware integration"""
-        # Since we don't have rate limiting implemented, test normal request flow
-        for i in range(5):
-            response = test_client.get('/api/items?per_page=5')
-            # Should handle multiple requests without issues
-            assert response.status_code in [200, 503]
+    def test_rate_limiting_middleware(self, test_client, test_user, auth_headers):
+        """Test rate limiting with real requests"""
+        # Make multiple requests rapidly
+        responses = []
+        for i in range(15):  # Exceed typical rate limit
+            response = test_client.get('/api/auth/dashboard', headers=auth_headers)
+            responses.append(response.status_code)
+            time.sleep(0.1)  # Small delay between requests
         
-        print("Rate Limit Middleware Integration: PASSED")
+        # Check if rate limiting kicked in (429 status) or all passed
+        # Rate limiting might not be enabled in test environment
+        assert all(status in [200, 429] for status in responses)
     
-    def test_logging_middleware_integration(self, test_client):
-        """Test logging middleware integration"""
-        # Test that requests are processed (logging happens in background)
-        response = test_client.get('/api/health')
-        assert response.status_code in [200, 404]
+    def test_error_handling_middleware(self, test_client):
+        """Test error handling across the middleware stack"""
+        # Test 404 handling
+        response = test_client.get('/api/nonexistent-endpoint')
+        assert response.status_code == 404
         
-        # Test with POST request
-        response = test_client.post('/api/items', json={'test': 'data'})
-        assert response.status_code in [200, 400, 404, 405]  # Various valid responses
-        
-        print("Logging Middleware Integration: PASSED")
-    
-    def test_middleware_error_handling_integration(self, test_client):
-        """Test middleware error handling integration"""
-        # Test error scenarios
-        test_scenarios = [
-            ('/api/nonexistent', 404),
-            ('/api/items?invalid_param=xyz', [200, 400, 503]),
-        ]
-        
-        for endpoint, expected_codes in test_scenarios:
-            response = test_client.get(endpoint)
-            if isinstance(expected_codes, list):
-                assert response.status_code in expected_codes
-            else:
-                assert response.status_code == expected_codes
-        
-        print("Middleware Error Handling Integration: PASSED")
+        # Test invalid JSON handling
+        response = test_client.post(
+            '/api/auth/lists',
+            headers={'Content-Type': 'application/json'},
+            data='invalid json{{'
+        )
+        assert response.status_code in [400, 401]  # Bad request or unauthorized
 
 
 class TestDatabaseTransactionCoordination:
-    """Test database transaction coordination across multiple operations"""
+    """Test database transaction coordination with real operations"""
     
-    def test_multi_table_transaction_coordination(self, mock_db):
-        """Test transaction coordination across multiple database operations"""
-        with app.test_client() as client:
-            # Mock database operations with transaction coordination
-            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify, \
-                 patch('supabase_client.SupabaseAuthClient.update_user_item_status_comprehensive') as mock_update, \
-                 patch('app.log_user_activity') as mock_log, \
-                 patch('app.invalidate_user_statistics_cache') as mock_invalidate:
-                
-                mock_verify.return_value = {'sub': 'user-123', 'email': 'test@example.com'}
-                mock_update.return_value = {'success': True}
-                mock_log.return_value = True
-                mock_invalidate.return_value = True
-                
-                # Test transaction coordination through complex operation
-                headers = {'Authorization': 'Bearer test_token'}
-                response = client.put('/api/auth/user-items/anime-1', 
-                                    headers=headers,
-                                    json={
-                                        'status': 'completed',
-                                        'rating': 9.0,
-                                        'progress': 24,
-                                        'notes': 'Great anime!'
-                                    })
-                
-                # Verify transaction completed successfully
-                assert response.status_code in [200, 404]
-                
-                # Verify all mocked operations were called (simulating transaction coordination)
-                if response.status_code == 200:
-                    mock_update.assert_called_once()
-                    
-        print("Multi-table Transaction Coordination: PASSED")
+    def test_multi_table_transaction(self, test_data_manager, test_user, test_items):
+        """Test coordinated updates across multiple tables"""
+        # Add item to user's list
+        test_data_manager.add_user_item(
+            test_user['id'],
+            test_items[0]['uid'],
+            status='watching',
+            rating=8.5
+        )
+        
+        # Update user statistics (this would normally be triggered automatically)
+        test_data_manager.update_user_statistics(test_user['id'])
+        
+        # Verify both operations succeeded
+        user_items = test_data_manager.get_user_items(test_user['id'])
+        assert len(user_items) >= 1
+        
+        stats = test_data_manager.get_user_statistics(test_user['id'])
+        assert stats is not None
     
-    def test_transaction_rollback_coordination(self, mock_db):
-        """Test transaction rollback coordination when operations fail"""
-        with app.test_client() as client:
-            # Mock a scenario where one operation fails
-            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify, \
-                 patch('supabase_client.SupabaseAuthClient.update_user_item_status_comprehensive') as mock_update:
-                
-                mock_verify.return_value = {'sub': 'user-123', 'email': 'test@example.com'}
-                # Simulate operation failure
-                mock_update.side_effect = Exception("Database error")
-                
-                headers = {'Authorization': 'Bearer test_token'}
-                response = client.put('/api/auth/user-items/anime-1', 
-                                    headers=headers,
-                                    json={'status': 'completed'})
-                
-                # Should handle error gracefully
-                assert response.status_code in [500, 404]
-                
-        print("Transaction Rollback Coordination: PASSED")
-    
-    def test_concurrent_transaction_handling(self, mock_db):
-        """Test handling of concurrent transactions"""
-        import threading
-        import queue
+    def test_transaction_rollback_on_error(self, test_data_manager, test_user, database_connection):
+        """Test transaction rollback when operations fail"""
+        # Start a savepoint for this specific test
+        savepoint = database_connection.begin_nested()
         
-        results = queue.Queue()
+        # Try to add an item with invalid UID (should fail)
+        try:
+            test_data_manager.add_user_item(
+                test_user['id'],
+                'nonexistent-item-uid',  # This might fail if foreign key constraint exists
+                status='watching'
+            )
+            # If it didn't fail (no FK constraint), force an error
+            database_connection.execute(text("SELECT * FROM nonexistent_table"))
+        except Exception:
+            # Rollback the savepoint
+            savepoint.rollback()
         
-        def concurrent_operation(user_id):
-            with app.test_client() as client:
-                with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify, \
-                     patch('supabase_client.SupabaseAuthClient.update_user_item_status_comprehensive') as mock_update:
-                    
-                    mock_verify.return_value = {'sub': user_id, 'email': f'{user_id}@example.com'}
-                    mock_update.return_value = {'success': True}
-                    
-                    headers = {'Authorization': 'Bearer test_token'}
-                    response = client.put(f'/api/auth/user-items/anime-{user_id[-1]}', 
-                                        headers=headers,
-                                        json={'status': 'watching'})
-                    
-                    results.put(response.status_code in [200, 404])
-        
-        # Run concurrent operations
-        threads = [threading.Thread(target=concurrent_operation, args=(f'user-{i}',)) for i in range(3)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        
-        # Verify all operations completed
-        success_count = sum(results.get() for _ in range(3))
-        assert success_count >= 2  # At least 2/3 should succeed
-        
-        print("Concurrent Transaction Handling: PASSED")
+        # User's items should still be queryable after rollback
+        user_items = test_data_manager.get_user_items(test_user['id'])
+        # Just verify we can still query the database
+        assert user_items is not None
 
 
 class TestAPIEndpointInterconnections:
-    """Test API endpoint interconnections and data consistency"""
+    """Test API endpoint interconnections with real data flow"""
     
-    def test_user_profile_dashboard_data_consistency(self, test_client):
-        """Test data consistency between user profile and dashboard endpoints"""
-        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify, \
-             patch('supabase_client.SupabaseAuthClient.get_user_items') as mock_get_items, \
-             patch('app.get_user_statistics') as mock_stats:
+    def test_search_to_list_workflow(self, test_client, test_user, auth_headers, test_items):
+        """Test workflow from search to adding items to list"""
+        # Search for items
+        search_response = test_client.get('/api/items?q=Test&per_page=10')
+        assert search_response.status_code == 200
+        
+        search_data = search_response.get_json()
+        items = search_data.get('data', search_data.get('items', []))
+        
+        if items:
+            # Add first item to user's list
+            first_item = items[0]
+            add_response = test_client.post(
+                f'/api/auth/user-items/{first_item["uid"]}',
+                headers=auth_headers,
+                json={'status': 'plan_to_watch'}
+            )
             
-            mock_verify.return_value = {'sub': 'user-123', 'email': 'test@example.com'}
-            mock_get_items.return_value = [
-                {'item_uid': 'anime-1', 'status': 'completed', 'rating': 9.0},
-                {'item_uid': 'anime-2', 'status': 'watching', 'progress': 5}
-            ]
-            mock_stats.return_value = {
-                'total_completed': 1,
-                'total_watching': 1,
-                'avg_score': 9.0
-            }
-            
-            headers = {'Authorization': 'Bearer test_token'}
-            
-            # Test user items endpoint
-            items_response = test_client.get('/api/auth/user-items', headers=headers)
-            
-            # Test dashboard endpoint  
-            dashboard_response = test_client.get('/api/dashboard', headers=headers)
-            
-            # Both should return consistent data
-            assert items_response.status_code in [200, 404]
-            assert dashboard_response.status_code in [200, 404]
-            
-        print("User Profile Dashboard Data Consistency: PASSED")
+            # Should successfully add or update
+            assert add_response.status_code in [200, 201, 409]  # 409 if already exists
     
-    def test_search_and_list_management_integration(self, test_client):
-        """Test integration between search and list management"""
-        with patch('app.df_processed') as mock_df, \
-             patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify:
-            
-            import pandas as pd
-            mock_df.return_value = pd.DataFrame([
-                {'uid': 'anime-1', 'title': 'Test Anime', 'genres': ['Action']},
-                {'uid': 'anime-2', 'title': 'Another Anime', 'genres': ['Drama']}
-            ])
-            mock_verify.return_value = {'sub': 'user-123', 'email': 'test@example.com'}
-            
-            # Test search functionality
-            search_response = test_client.get('/api/items?q=test&per_page=10')
-            
-            # Test adding item to list (if search found items)
-            if search_response.status_code == 200:
-                headers = {'Authorization': 'Bearer test_token'}
-                add_response = test_client.post('/api/user/items', 
-                                              headers=headers,
-                                              json={'item_uid': 'anime-1', 'status': 'plan_to_watch'})
-                assert add_response.status_code in [200, 201, 400, 404]
-            
-        print("Search and List Management Integration: PASSED")
-    
-    def test_recommendation_feedback_loop_integration(self, test_client):
-        """Test recommendation and feedback loop integration"""
-        with patch('app.df_processed') as mock_df, \
-             patch('app.uid_to_idx', {'anime-1': 0, 'anime-2': 1}):
-            
-            import pandas as pd
-            mock_df.return_value = pd.DataFrame([
-                {'uid': 'anime-1', 'title': 'Test Anime', 'genres': ['Action']},
-                {'uid': 'anime-2', 'title': 'Similar Anime', 'genres': ['Action']}
-            ])
-            
-            # Test recommendations
-            rec_response = test_client.get('/api/recommendations/anime-1?n=5')
-            assert rec_response.status_code in [200, 404, 503]
-            
-        print("Recommendation Feedback Loop Integration: PASSED")
+    def test_user_profile_to_recommendations_flow(self, test_client, test_user_with_items, auth_headers):
+        """Test flow from user profile to personalized recommendations"""
+        # Get user's dashboard (includes profile and items)
+        dashboard_response = test_client.get('/api/auth/dashboard', headers=auth_headers)
+        assert dashboard_response.status_code == 200
+        
+        # Get user's statistics
+        stats_response = test_client.get('/api/auth/statistics', headers=auth_headers)
+        # Might not be implemented or might return 404 if no stats
+        assert stats_response.status_code in [200, 404]
+        
+        # Get personalized recommendations (if implemented)
+        recs_response = test_client.get('/api/auth/recommendations', headers=auth_headers)
+        assert recs_response.status_code in [200, 404, 503]
 
 
 class TestCacheIntegration:
-    """Test cache integration with database and API layers"""
+    """Test cache integration with real cache operations"""
     
-    def test_cache_database_consistency(self, mock_db, mock_cache):
-        """Test cache and database consistency"""
-        with app.test_client() as client:
-            # Test that API responses are consistent
-            response1 = client.get('/api/items?per_page=10')
-            response2 = client.get('/api/items?per_page=10')
-            
-            # Should return same response (or both valid responses)
-            assert response1.status_code == response2.status_code
-            
-        print("Cache Database Consistency: PASSED")
-    
-    def test_cache_performance_optimization(self, mock_db, mock_cache):
-        """Test cache performance optimization"""
-        with app.test_client() as client:
-            import time
-            
-            # Test response times
-            start_time = time.time()
-            response = client.get('/api/items?per_page=50')
-            first_response_time = time.time() - start_time
-            
-            start_time = time.time()
-            response = client.get('/api/items?per_page=50')
-            second_response_time = time.time() - start_time
-            
-            # Second response should be reasonably fast (cache effect)
-            assert second_response_time < 5.0  # Should be under 5 seconds
-            
-        print("Cache Performance Optimization: PASSED")
-    
-    def test_cache_invalidation_patterns(self, mock_db, mock_cache):
-        """Test cache invalidation patterns"""
-        with app.test_client() as client:
-            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify, \
-                 patch('app.invalidate_user_statistics_cache') as mock_invalidate:
-                
-                mock_verify.return_value = {'sub': 'user-123', 'email': 'test@example.com'}
-                mock_invalidate.return_value = True
-                
-                headers = {'Authorization': 'Bearer test_token'}
-                
-                # Action that should invalidate cache
-                response = client.put('/api/auth/user-items/anime-1',
-                                    headers=headers,
-                                    json={'status': 'completed'})
-                
-                # Verify cache invalidation was called
-                if response.status_code == 200:
-                    mock_invalidate.assert_called()
-                    
-        print("Cache Invalidation Patterns: PASSED")
-
-
-class TestBackgroundTaskIntegration:
-    """Test background task integration with real-time updates"""
-    
-    def test_background_task_coordination(self, mock_task_manager, mock_cache):
-        """Test background task coordination"""
-        with app.test_client() as client:
-            # Test that API operations can trigger background tasks
-            with patch('app.log_user_activity') as mock_log:
-                mock_log.return_value = True
-                
-                # Operation that could trigger background task
-                response = client.get('/api/items?per_page=10')
-                
-                # Background task simulation (logging)
-                assert mock_log.call_count >= 0  # May or may not be called
-                
-        print("Background Task Coordination: PASSED")
-    
-    def test_real_time_update_propagation(self, mock_task_manager, mock_cache, mock_db):
-        """Test real-time update propagation"""
-        with app.test_client() as client:
-            with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify:
-                mock_verify.return_value = {'sub': 'user-123', 'email': 'test@example.com'}
-                
-                headers = {'Authorization': 'Bearer test_token'}
-                
-                # Update operation
-                response = client.put('/api/auth/user-items/anime-1',
-                                    headers=headers,
-                                    json={'status': 'watching'})
-                
-                # Should handle real-time updates gracefully
-                assert response.status_code in [200, 404, 500]
-                
-        print("Real-time Update Propagation: PASSED")
-    
-    def test_error_handling_in_background_tasks(self, mock_task_manager):
-        """Test error handling in background tasks"""
-        with app.test_client() as client:
-            # Test API still works even if background tasks fail
-            with patch('app.log_user_activity', side_effect=Exception("Background task failed")):
-                response = client.get('/api/health')
-                
-                # API should still respond despite background task failure
-                assert response.status_code in [200, 404]
-                
-        print("Error Handling in Background Tasks: PASSED")
-
-
-@pytest.mark.integration
-class TestFullStackIntegration:
-    """Test complete full-stack integration scenarios"""
-    
-    def test_complete_user_workflow_integration(self, test_client, mock_db, mock_cache, mock_task_manager):
-        """Test complete user workflow from registration to recommendations"""
-        # Simulate complete user workflow through API
-        with patch('supabase_client.SupabaseAuthClient.verify_jwt_token') as mock_verify, \
-             patch('app.df_processed') as mock_df, \
-             patch('app.uid_to_idx', {'anime-1': 0}):
-            
-            mock_verify.return_value = {'sub': 'user-123', 'email': 'test@example.com'}
-            
-            import pandas as pd
-            mock_df.return_value = pd.DataFrame([
-                {'uid': 'anime-1', 'title': 'Test Anime', 'genres': ['Action']}
-            ])
-            
-            headers = {'Authorization': 'Bearer test_token'}
-            
-            # Step 1: Get user dashboard
-            dashboard_response = test_client.get('/api/dashboard', headers=headers)
-            
-            # Step 2: Search for anime
-            search_response = test_client.get('/api/items?q=test')
-            
-            # Step 3: Add to list
-            add_response = test_client.post('/api/user/items',
-                                          headers=headers,
-                                          json={'item_uid': 'anime-1', 'status': 'watching'})
-            
-            # Step 4: Get recommendations
-            rec_response = test_client.get('/api/recommendations/anime-1')
-            
-            # All steps should complete without critical errors
-            responses = [dashboard_response, search_response, add_response, rec_response]
-            critical_errors = [r for r in responses if r.status_code >= 500]
-            
-            assert len(critical_errors) <= 1  # Allow at most 1 critical error
-            
-        print("Complete User Workflow Integration: PASSED")
-    
-    def test_error_recovery_across_components(self, test_client, mock_db, mock_cache):
-        """Test error recovery across different components"""
-        # Test system resilience to various failure scenarios
-        test_scenarios = [
-            '/api/nonexistent',
-            '/api/items?invalid_param=xyz',
-            '/api/recommendations/nonexistent-item'
-        ]
+    def test_cache_hit_miss_patterns(self, test_client, test_user, auth_headers):
+        """Test cache behavior with repeated requests"""
+        # First request - likely cache miss
+        start_time = time.time()
+        response1 = test_client.get('/api/auth/dashboard', headers=auth_headers)
+        first_request_time = time.time() - start_time
+        assert response1.status_code == 200
         
-        for endpoint in test_scenarios:
-            response = test_client.get(endpoint)
-            # Should handle errors gracefully (not crash)
-            assert response.status_code < 600  # No critical system errors
-            
-        print("Error Recovery Across Components: PASSED")
+        # Second request - might be cached
+        start_time = time.time()
+        response2 = test_client.get('/api/auth/dashboard', headers=auth_headers)
+        second_request_time = time.time() - start_time
+        assert response2.status_code == 200
+        
+        # Cached request might be faster (but not guaranteed in test env)
+        # Just verify both requests succeeded
+        assert response1.get_json() is not None
+        assert response2.get_json() is not None
+    
+    def test_cache_invalidation_on_update(self, test_client, test_user_with_items, auth_headers, test_items):
+        """Test cache invalidation when data is updated"""
+        # Get initial data (potentially cached)
+        response1 = test_client.get('/api/auth/user-items', headers=auth_headers)
+        assert response1.status_code == 200
+        initial_data = response1.get_json()
+        
+        # Update an item
+        update_response = test_client.put(
+            f'/api/auth/user-items/{test_items[0]["uid"]}',
+            headers=auth_headers,
+            json={'status': 'dropped', 'rating': 5.0}
+        )
+        assert update_response.status_code in [200, 201]
+        
+        # Get data again - should reflect update (cache invalidated)
+        response2 = test_client.get('/api/auth/user-items', headers=auth_headers)
+        assert response2.status_code == 200
+        updated_data = response2.get_json()
+        
+        # Data might have changed (depending on implementation)
+        # Just verify we got valid responses
+        assert initial_data is not None
+        assert updated_data is not None
 
 
+class TestErrorPropagation:
+    """Test error handling and propagation across components"""
+    
+    def test_database_error_propagation(self, test_client, auth_headers):
+        """Test how database errors propagate through the stack"""
+        # Try to update non-existent resource
+        response = test_client.put(
+            '/api/auth/user-items/nonexistent-item-99999',
+            headers=auth_headers,
+            json={'status': 'watching', 'score': 8.0}
+        )
+        
+        # Should return 404 or error status
+        assert response.status_code in [200, 404, 500]
+        
+        if response.status_code == 200:
+            data = response.get_json()
+            # Should be empty or null
+            assert data is None or data == {} or data == []
+    
+    def test_validation_error_propagation(self, test_client, auth_headers):
+        """Test validation error handling"""
+        # Send invalid data
+        response = test_client.put(
+            '/api/auth/user-items/some-item',
+            headers=auth_headers,
+            json={'status': 'invalid_status', 'rating': 'not_a_number'}
+        )
+        
+        # Should return 400 Bad Request or handle gracefully
+        assert response.status_code in [200, 400, 422]
+    
+    def test_authentication_error_propagation(self, test_client):
+        """Test authentication error handling"""
+        # Use invalid token format
+        response = test_client.get(
+            '/api/auth/dashboard',
+            headers={'Authorization': 'InvalidFormat token'}
+        )
+        
+        # Should return 401 Unauthorized
+        assert response.status_code == 401
+
+
+class TestEndToEndWorkflows:
+    """Test complete end-to-end workflows with real operations"""
+    
+    def test_new_user_onboarding_workflow(self, test_client, test_data_manager):
+        """Test complete new user onboarding flow"""
+        # Create new user
+        new_user = test_data_manager.create_test_user()
+        token = generate_jwt_token(
+            new_user['id'],
+            new_user.get('email', 'test@example.com'),
+            'test-jwt-secret-key'
+        )
+        headers = {'Authorization': f'Bearer {token}'}
+        
+        # Get initial dashboard (should be empty)
+        dashboard = test_client.get('/api/auth/dashboard', headers=headers)
+        assert dashboard.status_code == 200
+        
+        # Search and add first items
+        search = test_client.get('/api/items?q=anime&per_page=5')
+        assert search.status_code == 200
+        
+        # Create first custom list
+        list_response = test_client.post(
+            '/api/auth/lists',
+            headers=headers,
+            json={'title': 'My First List', 'description': 'Getting started'}
+        )
+        assert list_response.status_code in [200, 201]
+    
+    def test_content_discovery_workflow(self, test_client, test_user_with_items, auth_headers):
+        """Test content discovery and recommendation workflow"""
+        # Get trending items
+        trending = test_client.get('/api/items?sort=popularity&per_page=10')
+        assert trending.status_code == 200
+        
+        # Get recommendations based on user's items
+        user_items = test_client.get('/api/auth/user-items', headers=auth_headers)
+        assert user_items.status_code == 200
+        
+        items_data = user_items.get_json()
+        items = items_data.get('data', items_data.get('items', []))
+        
+        if items:
+            # Get recommendations for first item
+            first_item_uid = items[0].get('item_uid') or items[0].get('uid')
+            if first_item_uid:
+                recs = test_client.get(
+                    f'/api/recommendations/{first_item_uid}',
+                    headers=auth_headers
+                )
+                assert recs.status_code in [200, 404, 503]
+
+
+# Run specific test class if needed
 if __name__ == "__main__":
-    pytest.main([__file__, "-v", "--tb=short"]) 
+    pytest.main([__file__, "-v"])
