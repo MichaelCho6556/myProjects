@@ -3,14 +3,19 @@
 Pre-compute recommendations for all items and store in cache.
 This script runs offline (locally or via GitHub Actions) to generate
 recommendations without memory constraints.
+
+Optimized version with Redis caching to avoid reloading all data every run.
 """
 
 import os
 import sys
 import json
 import time
-from datetime import datetime
-from typing import Dict, List, Any, Tuple
+import hashlib
+import pickle
+import zlib
+from datetime import datetime, timedelta
+from typing import Dict, List, Any, Tuple, Optional
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -22,6 +27,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from supabase_client import SupabaseClient
 
+# Try to import Redis cache
+try:
+    from utils.redis_cache import get_redis_cache
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    print("Redis not available, will compute without caching")
+
 # Load environment variables (optional - for local development)
 # In GitHub Actions, environment variables are set directly
 if os.path.exists('.env'):
@@ -32,10 +45,108 @@ class RecommendationComputer:
     
     def __init__(self):
         self.client = SupabaseClient()
+        self.redis = get_redis_cache() if REDIS_AVAILABLE else None
         self.df = None
         self.tfidf_matrix = None
         self.vectorizer = None
         self.uid_to_idx = None
+        
+        # Cache keys for Redis
+        self.TFIDF_MATRIX_KEY = "tfidf:matrix:v2"
+        self.TFIDF_VECTORIZER_KEY = "tfidf:vectorizer:v2"
+        self.UID_MAPPING_KEY = "tfidf:uid_mapping:v2"
+        self.DATA_HASH_KEY = "tfidf:data_hash:v2"
+    
+    def get_data_hash(self) -> str:
+        """Get a hash of the current database to detect changes."""
+        print("Checking database for changes...")
+        
+        # Get count and latest update time
+        response = self.client.table('items').select('id', count='exact').execute()
+        item_count = response.count if hasattr(response, 'count') else len(response.data)
+        
+        # Get latest modification time
+        response = self.client.table('items').select('updated_at').order('updated_at', desc=True).limit(1).execute()
+        latest_update = response.data[0]['updated_at'] if response.data else ''
+        
+        # Create hash
+        hash_input = f"{item_count}:{latest_update}"
+        return hashlib.md5(hash_input.encode()).hexdigest()
+    
+    def load_from_cache(self) -> bool:
+        """Try to load TF-IDF data from Redis cache."""
+        if not self.redis or not self.redis.connected:
+            print("Redis not available, cannot use cache")
+            return False
+            
+        try:
+            # Check if data has changed
+            current_hash = self.get_data_hash()
+            cached_hash = self.redis.get(self.DATA_HASH_KEY)
+            
+            if cached_hash != current_hash:
+                print(f"Data has changed (hash: {current_hash} vs {cached_hash}), cache invalid")
+                return False
+                
+            print("Loading TF-IDF data from Redis cache...")
+            
+            # Load cached data
+            tfidf_data = self.redis.get(self.TFIDF_MATRIX_KEY)
+            vectorizer_data = self.redis.get(self.TFIDF_VECTORIZER_KEY)
+            uid_mapping_data = self.redis.get(self.UID_MAPPING_KEY)
+            
+            if not all([tfidf_data, vectorizer_data, uid_mapping_data]):
+                print("Cache incomplete, need to recompute")
+                return False
+                
+            # Deserialize
+            self.tfidf_matrix = pickle.loads(zlib.decompress(tfidf_data))
+            self.vectorizer = pickle.loads(vectorizer_data)
+            self.uid_to_idx = json.loads(uid_mapping_data)
+            
+            # Load minimal DataFrame for lookups
+            print("Loading item metadata...")
+            response = self.client.table('items').select('uid,title,media_type,score,genres,image_url').execute()
+            self.df = pd.DataFrame(response.data)
+            self.df.set_index('uid', inplace=True)
+            
+            print(f"Successfully loaded cached TF-IDF data for {len(self.uid_to_idx)} items")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to load from cache: {e}")
+            return False
+    
+    def save_to_cache(self):
+        """Save TF-IDF data to Redis cache."""
+        if not self.redis or not self.redis.connected:
+            print("Redis not available, cannot save cache")
+            return
+            
+        try:
+            print("Saving TF-IDF data to Redis cache...")
+            
+            # Get current data hash
+            data_hash = self.get_data_hash()
+            
+            # Compress and save TF-IDF matrix
+            tfidf_compressed = zlib.compress(pickle.dumps(self.tfidf_matrix))
+            self.redis.set(self.TFIDF_MATRIX_KEY, tfidf_compressed, ttl_hours=168)  # 7 days
+            
+            # Save vectorizer
+            self.redis.set(self.TFIDF_VECTORIZER_KEY, pickle.dumps(self.vectorizer), ttl_hours=168)
+            
+            # Save UID mapping as JSON
+            uid_mapping_dict = self.uid_to_idx.to_dict() if hasattr(self.uid_to_idx, 'to_dict') else dict(self.uid_to_idx)
+            self.redis.set(self.UID_MAPPING_KEY, json.dumps(uid_mapping_dict), ttl_hours=168)
+            
+            # Save data hash
+            self.redis.set(self.DATA_HASH_KEY, data_hash, ttl_hours=168)
+            
+            print(f"Cached TF-IDF data ({len(tfidf_compressed)} bytes compressed)")
+            
+        except Exception as e:
+            print(f"Failed to save to cache: {e}")
         
     def load_data(self) -> bool:
         """Load all items from database."""
@@ -127,6 +238,9 @@ class RecommendationComputer:
         
         print(f"TF-IDF matrix shape: {self.tfidf_matrix.shape}")
         
+        # Save to Redis cache for next time
+        self.save_to_cache()
+        
     def get_recommendations(self, item_uid: str, top_n: int = 20) -> List[Dict]:
         """Get recommendations for a single item."""
         if item_uid not in self.uid_to_idx:
@@ -193,11 +307,9 @@ class RecommendationComputer:
     def store_recommendations_batch(self, batch_data: List[Dict]):
         """Store a batch of recommendations in the cache table."""
         try:
-            # Use upsert to update existing records
-            # Specify on_conflict to properly handle duplicates
+            # Upsert will handle duplicates automatically based on primary key
             response = self.client.table('recommendations_cache').upsert(
-                batch_data,
-                on_conflict='item_uid'
+                batch_data
             ).execute()
             
             if response.data:
@@ -235,10 +347,9 @@ class RecommendationComputer:
         }
         
         try:
-            # Upsert the single row
+            # Upsert the single row (will update if id=1 exists)
             response = self.client.table('distinct_values_cache').upsert(
-                distinct_values,
-                on_conflict='id'
+                distinct_values
             ).execute()
             
             if response.data:
@@ -254,16 +365,22 @@ class RecommendationComputer:
         print("RECOMMENDATION PRE-COMPUTATION SCRIPT")
         print("=" * 60)
         
-        # Load data
-        if not self.load_data():
-            print("Failed to load data. Exiting.")
-            return 1
+        # Try to load from cache first
+        if self.load_from_cache():
+            print("Using cached TF-IDF data - skipping expensive data load!")
+        else:
+            print("Cache miss or unavailable - loading full data...")
             
-        # Prepare features
-        self.prepare_features()
-        
-        # Compute TF-IDF
-        self.compute_tfidf()
+            # Load data
+            if not self.load_data():
+                print("Failed to load data. Exiting.")
+                return 1
+                
+            # Prepare features
+            self.prepare_features()
+            
+            # Compute TF-IDF (this will save to cache)
+            self.compute_tfidf()
         
         # Compute and store recommendations
         self.compute_all_recommendations()
