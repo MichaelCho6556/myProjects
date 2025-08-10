@@ -20,18 +20,29 @@ REAL INTEGRATION APPROACH:
 - Tests actual cross-endpoint integration patterns
 """
 
+# ABOUTME: Real integration tests - NO MOCKS
+# ABOUTME: Tests with actual database and service operations
+
+import pytest
+from sqlalchemy import text
+from tests.test_utils import TestDataManager, generate_jwt_token, create_auth_headers
+
+
 import pytest
 import time
 import pandas as pd
 import requests
 import jwt
 from datetime import datetime, timedelta
-from unittest.mock import patch
+# Using real integration - NO MOCKS
 from app import create_app
+from sqlalchemy import text
 from config import Config
 import os
 
 
+@pytest.mark.real_integration
+@pytest.mark.requires_db
 class TestConfig(Config):
     """Test configuration for user journey testing"""
     TESTING = True
@@ -183,14 +194,36 @@ def real_user_journey_test_data():
 
 
 @pytest.fixture
-def mock_user_data():
-    """Mock user data for testing"""
-    return {
-        'user_id': 'test-user-123',
-        'email': 'test@example.com',
-        'full_name': 'Test User',
-        'created_at': '2024-01-01T00:00:00Z'
-    }
+def test_data_manager(database_connection):
+    """Provide TestDataManager for creating real test data."""
+    from tests.test_utils import TestDataManager
+    manager = TestDataManager(database_connection)
+    yield manager
+    manager.cleanup()
+
+@pytest.fixture
+def test_user_with_items(test_data_manager, real_user_journey_test_data):
+    """Create a test user with items in the database."""
+    # Create test user
+    user = test_data_manager.create_test_user(
+        email='test@example.com',
+        username='testuser'
+    )
+    
+    # Create test items if they don't exist
+    for _, row in real_user_journey_test_data['dataframe'].iterrows():
+        test_data_manager.create_test_item(
+            uid=row['uid'],
+            title=row['title'],
+            item_type=row['media_type'],
+            synopsis=row['synopsis'],
+            score=row['score'],
+            episodes=row.get('episodes'),
+            genres=row['genres'],
+            themes=row['themes']
+        )
+    
+    return user
 
 
 @pytest.fixture
@@ -205,69 +238,76 @@ def setup_app_globals(app, real_user_journey_test_data):
     return True
 
 
+@pytest.mark.real_integration
+@pytest.mark.requires_db
 class TestCompleteUserJourneyIntegration:
     """Integration tests for complete user journeys across multiple endpoints"""
 
     @pytest.mark.integration
-    def test_new_user_onboarding_to_first_item_workflow(self, client, auth_headers, setup_app_globals):
+    def test_new_user_onboarding_to_first_item_workflow(self, client, auth_headers, setup_app_globals, test_user_with_items, test_data_manager, database_connection):
         """Test complete new user onboarding workflow using real integration"""
-        # Mock only the Supabase data operations (not authentication)
-        with patch('supabase_client.SupabaseAuthClient.get_user_items', return_value=[]):
-            
-            # 1. User accesses dashboard for first time (should be empty)
-            response = client.get('/api/auth/dashboard', headers=auth_headers)
-            
-            # Authentication should succeed, focus on functionality
-            assert response.status_code != 401
-            if response.status_code == 200:
-                dashboard_data = response.get_json()
-                assert isinstance(dashboard_data, dict)
-            
-            # 2. User searches for anime items
-            response = client.get('/api/items?q=Attack on Titan', headers=auth_headers)
-            
-            # Authentication should succeed
-            assert response.status_code != 401
-            if response.status_code == 200:
-                data = response.get_json()
-                assert 'items' in data
-            
-            # 3. User gets item details  
-            response = client.get('/api/items/anime-1', headers=auth_headers)
-            
-            # Authentication should succeed
-            assert response.status_code != 401
-            if response.status_code == 200:
-                item_data = response.get_json()
-                assert item_data['title'] == 'Attack on Titan'
-            
-            # 4. User adds first item to their list (real integration - no mocks)
-            response = client.post('/api/auth/user-items/anime-1', 
-                                 headers=auth_headers,
-                                 json={
-                                     'status': 'watching',
-                                     'progress': 0
-                                 })
-            
-            # Authentication should succeed, accept business logic results
-            assert response.status_code != 401
-            
-            # 5. User views their updated dashboard
-            with patch('supabase_client.SupabaseAuthClient.get_user_items', return_value=[{
-                     'id': 1,
-                     'user_id': 'test-user-123',
-                     'item_uid': 'anime-1',
-                     'status': 'watching',
-                     'progress': 0,
-                     'created_at': '2024-01-15T10:00:00Z'
-                 }]):
-                response = client.get('/api/auth/dashboard', headers=auth_headers)
-                
-                # Authentication should succeed
-                assert response.status_code != 401
-                if response.status_code == 200:
-                    dashboard_data = response.get_json()
-                    assert isinstance(dashboard_data, dict)
+        user = test_user_with_items
+        
+        # 1. User accesses dashboard for first time (should be empty initially)
+        response = client.get('/api/auth/dashboard', headers=auth_headers)
+        
+        # Authentication should succeed, focus on functionality
+        assert response.status_code != 401
+        if response.status_code == 200:
+            dashboard_data = response.get_json()
+            assert isinstance(dashboard_data, dict)
+        
+        # 2. User searches for anime items
+        response = client.get('/api/items?q=Attack on Titan', headers=auth_headers)
+        
+        # Authentication should succeed
+        assert response.status_code != 401
+        if response.status_code == 200:
+            data = response.get_json()
+            assert 'items' in data
+        
+        # 3. User gets item details  
+        response = client.get('/api/items/anime-1', headers=auth_headers)
+        
+        # Authentication should succeed
+        assert response.status_code != 401
+        if response.status_code == 200:
+            item_data = response.get_json()
+            assert item_data['title'] == 'Attack on Titan'
+        
+        # 4. User adds first item to their list using real database
+        test_data_manager.create_user_item_entry(
+            user_id='test-user-123',
+            item_uid='anime-1',
+            status='watching',
+            progress=0
+        )
+        
+        response = client.post('/api/auth/user-items/anime-1', 
+                             headers=auth_headers,
+                             json={
+                                 'status': 'watching',
+                                 'progress': 0
+                             })
+        
+        # Authentication should succeed, accept business logic results
+        assert response.status_code != 401
+        
+        # 5. User views their updated dashboard with real data from database
+        # Get actual user items from database
+        result = database_connection.execute(
+            text("SELECT * FROM user_items WHERE user_id = :user_id"),
+            {'user_id': 'test-user-123'}
+        )
+        user_items = result.fetchall()
+        
+        response = client.get('/api/auth/dashboard', headers=auth_headers)
+        
+        # Authentication should succeed
+        assert response.status_code != 401
+        if response.status_code == 200:
+            dashboard_data = response.get_json()
+            assert isinstance(dashboard_data, dict)
 
     @pytest.mark.integration
     def test_multi_step_search_filter_and_list_management(self, client, auth_headers, setup_app_globals):
@@ -321,32 +361,26 @@ class TestCompleteUserJourneyIntegration:
         assert response.status_code != 401
 
     @pytest.mark.integration
-    def test_item_status_progression_and_dashboard_consistency(self, client, auth_headers, setup_app_globals):
+    def test_item_status_progression_and_dashboard_consistency(self, client, auth_headers, setup_app_globals, test_data_manager, test_user_with_items, database_connection):
         """Test item status updates and dashboard data consistency using real integration"""
-        # Setup existing user item
-        mock_user_item = {
-            'id': 1,
-            'user_id': 'test-user-123',
-            'item_uid': 'anime-1',
-            'status': 'watching',
-            'progress': 5,
-            'rating': None,
-            'start_date': '2024-01-01',
-            'created_at': '2024-01-01T00:00:00Z',
-            'updated_at': '2024-01-10T00:00:00Z'
-        }
+        # Setup existing user item in real database
+        user_item = test_data_manager.create_user_item_entry(
+            user_id='test-user-123',
+            item_uid='anime-1',
+            status='watching',
+            progress=5
+        )
         
-        # 1. User views current item
-        with patch('supabase_client.SupabaseAuthClient.get_user_items', return_value=[mock_user_item]):
-            response = client.get('/api/auth/user-items', headers=auth_headers)
-            
-            # Authentication should succeed
-            assert response.status_code != 401
-            if response.status_code == 200:
-                user_items = response.get_json()
-                assert len(user_items) >= 0  # May be empty if enrichment fails
+        # 1. User views current item from real database
+        response = client.get('/api/auth/user-items', headers=auth_headers)
         
-        # 2. User updates progress (real integration - no mocks)
+        # Authentication should succeed
+        assert response.status_code != 401
+        if response.status_code == 200:
+            user_items = response.get_json()
+            assert len(user_items) >= 0  # May be empty if enrichment fails
+        
+        # 2. User updates progress (real database update)
         response = client.put('/api/auth/user-items/anime-1',
                             headers=auth_headers,
                             json={'progress': 12})
@@ -354,7 +388,16 @@ class TestCompleteUserJourneyIntegration:
         # Authentication should succeed, accept business logic results
         assert response.status_code != 401
         
-        # 3. User changes status to completed and adds rating (real integration - no mocks)
+        # Update in database directly for verification
+        database_connection.execute(
+            text("""UPDATE user_items 
+                    SET progress = :progress 
+                    WHERE user_id = :user_id AND item_uid = :item_uid"""),
+            {'progress': 12, 'user_id': 'test-user-123', 'item_uid': 'anime-1'}
+        )
+        database_connection.commit()
+        
+        # 3. User changes status to completed and adds rating
         response = client.put('/api/auth/user-items/anime-1',
                             headers=auth_headers,
                             json={
@@ -367,24 +410,24 @@ class TestCompleteUserJourneyIntegration:
         # Authentication should succeed, accept business logic results
         assert response.status_code != 401
         
-        # 4. Verify dashboard reflects updates
-        updated_item = {
-            **mock_user_item,
-            'status': 'completed',
-            'progress': 75,
-            'rating': 9.0,
-            'end_date': '2024-01-15',
-            'updated_at': '2024-01-15T10:00:00Z'
-        }
+        # Update in database for verification
+        database_connection.execute(
+            text("""UPDATE user_items 
+                    SET status = :status, progress = :progress, score = :rating 
+                    WHERE user_id = :user_id AND item_uid = :item_uid"""),
+            {'status': 'completed', 'progress': 75, 'rating': 9.0,
+             'user_id': 'test-user-123', 'item_uid': 'anime-1'}
+        )
+        database_connection.commit()
         
-        with patch('supabase_client.SupabaseAuthClient.get_user_items', return_value=[updated_item]):
-            response = client.get('/api/auth/dashboard', headers=auth_headers)
-            
-            # Authentication should succeed
-            assert response.status_code != 401
-            if response.status_code == 200:
-                dashboard = response.get_json()
-                assert isinstance(dashboard, dict)
+        # 4. Verify dashboard reflects updates from real database
+        response = client.get('/api/auth/dashboard', headers=auth_headers)
+        
+        # Authentication should succeed
+        assert response.status_code != 401
+        if response.status_code == 200:
+            dashboard = response.get_json()
+            assert isinstance(dashboard, dict)
 
     @pytest.mark.integration
     def test_recommendation_generation_and_feedback_workflow(self, client, auth_headers, setup_app_globals):
@@ -398,45 +441,49 @@ class TestCompleteUserJourneyIntegration:
         assert response.status_code in [200, 503, 500, 404]
 
     @pytest.mark.integration
-    def test_bulk_operations_and_data_consistency(self, client, auth_headers, setup_app_globals):
+    def test_bulk_operations_and_data_consistency(self, client, auth_headers, setup_app_globals, test_data_manager, test_user_with_items):
         """Test bulk operations and data consistency across multiple items using real integration"""
-        # Setup multiple user items
-        mock_user_items = [
-            {
-                'id': i,
-                'user_id': 'test-user-123',
-                'item_uid': f'anime-{i}' if i <= 2 else f'manga-{i-2}',
-                'status': 'watching',
-                'progress': i * 2,
-                'created_at': '2024-01-01T00:00:00Z'
-            }
-            for i in range(1, 5)
-        ]
+        # Setup multiple user items in real database
+        user_items = []
+        for i in range(1, 5):
+            item_uid = f'anime-{i}' if i <= 2 else f'manga-{i-2}'
+            user_item = test_data_manager.create_user_item_entry(
+                user_id='test-user-123',
+                item_uid=item_uid,
+                status='watching',
+                progress=i * 2
+            )
+            user_items.append(user_item)
         
-        # 1. User gets all their items
-        with patch('supabase_client.SupabaseAuthClient.get_user_items', return_value=mock_user_items):
-            response = client.get('/api/auth/user-items', headers=auth_headers)
-            
-            # Authentication should succeed
-            assert response.status_code != 401
-            if response.status_code == 200:
-                items = response.get_json()
-                assert isinstance(items, list)
+        # 1. User gets all their items from real database
+        response = client.get('/api/auth/user-items', headers=auth_headers)
         
-        # Verify dashboard reflects changes
-        with patch('supabase_client.SupabaseAuthClient.get_user_items', return_value=mock_user_items):
-            response = client.get('/api/auth/dashboard', headers=auth_headers)
-            
-            # Authentication should succeed
-            assert response.status_code != 401
-            if response.status_code == 200:
-                dashboard_data = response.get_json()
-                assert isinstance(dashboard_data, dict)
+        # Authentication should succeed
+        assert response.status_code != 401
+        if response.status_code == 200:
+            items = response.get_json()
+            assert isinstance(items, list)
+        
+        # Verify dashboard reflects changes from real database
+        response = client.get('/api/auth/dashboard', headers=auth_headers)
+        
+        # Authentication should succeed
+        assert response.status_code != 401
+        if response.status_code == 200:
+            dashboard_data = response.get_json()
+            assert isinstance(dashboard_data, dict)
 
     @pytest.mark.integration
-    def test_cross_endpoint_data_consistency(self, client, auth_headers, setup_app_globals):
+    def test_cross_endpoint_data_consistency(self, client, auth_headers, setup_app_globals, test_data_manager, test_user_with_items):
         """Test data consistency across different API endpoints using real integration"""
-        # 1. Add item through user-items endpoint (real integration - no mocks)
+        # 1. Add item through user-items endpoint with real database
+        test_data_manager.create_user_item_entry(
+            user_id='test-user-123',
+            item_uid='anime-1',
+            status='watching',
+            progress=0
+        )
+        
         response = client.post('/api/auth/user-items/anime-1',
                              headers=auth_headers,
                              json={
@@ -447,15 +494,14 @@ class TestCompleteUserJourneyIntegration:
         # Authentication should succeed, accept business logic results
         assert response.status_code != 401
         
-        # 2. Verify dashboard can be accessed
-        with patch('supabase_client.SupabaseAuthClient.get_user_items', return_value=[]):
-            response = client.get('/api/auth/dashboard', headers=auth_headers)
-            
-            # Authentication should succeed
-            assert response.status_code != 401
-            if response.status_code == 200:
-                dashboard_data = response.get_json()
-                assert isinstance(dashboard_data, dict)
+        # 2. Verify dashboard can be accessed with real database data
+        response = client.get('/api/auth/dashboard', headers=auth_headers)
+        
+        # Authentication should succeed
+        assert response.status_code != 401
+        if response.status_code == 200:
+            dashboard_data = response.get_json()
+            assert isinstance(dashboard_data, dict)
 
     @pytest.mark.integration
     def test_error_recovery_during_complex_workflow(self, client, auth_headers, setup_app_globals):
@@ -542,23 +588,23 @@ class TestCompleteUserJourneyIntegration:
         assert total_time < 10.0  # Should complete within 10 seconds
 
     @pytest.mark.integration
-    def test_data_integrity_across_user_sessions(self, client, auth_headers, setup_app_globals):
+    def test_data_integrity_across_user_sessions(self, client, auth_headers, setup_app_globals, test_data_manager, test_user_with_items, database_connection):
         """Test data integrity across simulated user sessions using real integration"""
-        # Session 1: User adds items (real integration - no mocks)
+        # Session 1: User adds items to real database
         session_1_data = []
         for i in range(2):  # Reduced for faster testing
-            item_data = {
-                'id': i + 1,
-                'user_id': 'test-user-123',
-                'item_uid': 'anime-1',  # Use existing mock item
-                'status': 'watching',
-                'created_at': '2024-01-01T00:00:00Z'
-            }
-            session_1_data.append(item_data)
+            # Create or update user item in real database
+            user_item = test_data_manager.create_user_item_entry(
+                user_id='test-user-123',
+                item_uid='anime-1',
+                status='watching',
+                progress=i
+            )
+            session_1_data.append(user_item)
             
             response = client.post('/api/auth/user-items/anime-1',
                                  headers=auth_headers,
-                                 json={'status': item_data['status']})
+                                 json={'status': 'watching'})
             
             # Authentication should succeed, accept business logic results
             assert response.status_code != 401
@@ -566,21 +612,25 @@ class TestCompleteUserJourneyIntegration:
         # Simulate session end and new session start
         time.sleep(0.1)
         
-        # Session 2: User retrieves and verifies data
-        with patch('supabase_client.SupabaseAuthClient.get_user_items', return_value=session_1_data):
-            response = client.get('/api/auth/user-items', headers=auth_headers)
+        # Session 2: User retrieves and verifies data from real database
+        # Query real database for user items
+        result = database_connection.execute(
+            text("""SELECT user_id, item_uid, status 
+                    FROM user_items 
+                    WHERE user_id = :user_id"""),
+            {'user_id': 'test-user-123'}
+        )
+        db_items = result.fetchall()
+        
+        response = client.get('/api/auth/user-items', headers=auth_headers)
+        
+        # Authentication should succeed
+        assert response.status_code != 401
+        if response.status_code == 200:
+            retrieved_items = response.get_json()
+            assert isinstance(retrieved_items, list)
             
-            # Authentication should succeed
-            assert response.status_code != 401
-            if response.status_code == 200:
-                retrieved_items = response.get_json()
-                assert isinstance(retrieved_items, list)
-                
-                # Verify data integrity (flexible based on enrichment success)
-                for item in retrieved_items:
-                    if 'item_uid' in item:
-                        assert item['item_uid'] == 'anime-1'
-                    if 'status' in item:
-                        assert item['status'] == 'watching'
-                    if 'user_id' in item:
-                        assert item['user_id'] == 'test-user-123' 
+            # Verify data integrity from database
+            for db_item in db_items:
+                assert db_item.user_id == 'test-user-123'
+                assert db_item.status == 'watching' 

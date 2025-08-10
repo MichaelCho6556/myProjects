@@ -124,8 +124,10 @@ class SupabaseClient:
             self.base_url = "http://test-database"
             return
             
-        if not self.base_url or not self.api_key:
-            raise ValueError("SUPABASE_URL and SUPABASE_KEY environment variables must be set")
+        # Check if we have the minimum required configuration
+        # Service key can be used instead of regular API key
+        if not self.base_url or (not self.api_key and not self.service_key):
+            raise ValueError("SUPABASE_URL and either SUPABASE_KEY or SUPABASE_SERVICE_KEY must be set")
         
         # Use service key for backend operations (more permissions)
         self.headers = {
