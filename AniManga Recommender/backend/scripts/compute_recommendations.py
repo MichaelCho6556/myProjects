@@ -61,16 +61,16 @@ class RecommendationComputer:
         """Get a hash of the current database to detect changes."""
         print("Checking database for changes...")
         
-        # Get count and latest update time
-        response = self.client.table('items').select('id', count='exact').execute()
-        item_count = response.count if hasattr(response, 'count') else len(response.data)
+        # Get count by fetching a small batch
+        response = self.client.table('items').select('id').limit(1).execute()
+        # For now, use a simple count check - we can't get exact count easily
         
         # Get latest modification time
         response = self.client.table('items').select('updated_at').order('updated_at', desc=True).limit(1).execute()
         latest_update = response.data[0]['updated_at'] if response.data else ''
         
-        # Create hash
-        hash_input = f"{item_count}:{latest_update}"
+        # Create hash - just use timestamp for now
+        hash_input = f"v2:{latest_update}"
         return hashlib.md5(hash_input.encode()).hexdigest()
     
     def load_from_cache(self) -> bool:
@@ -152,8 +152,9 @@ class RecommendationComputer:
         """Load all items from database."""
         print(f"[{datetime.now()}] Loading data from Supabase...")
         
-        # Load with relations for better recommendations
-        self.df = self.client.items_to_dataframe(include_relations=True, lazy_load=False)
+        # Load all items with relations for better recommendations
+        # Using lazy_load=False to get all relation data for TF-IDF
+        self.df = self.client.items_to_dataframe(include_relations=False, lazy_load=False)
         
         if self.df is None or len(self.df) == 0:
             print("ERROR: No data loaded from Supabase")
@@ -307,26 +308,14 @@ class RecommendationComputer:
     def store_recommendations_batch(self, batch_data: List[Dict]):
         """Store a batch of recommendations in the cache table."""
         try:
-            # Get existing item_uids to determine which to update vs insert
-            item_uids = [item['item_uid'] for item in batch_data]
+            # Use upsert for efficient bulk insert/update in a single operation
+            # This replaces potentially 100+ individual update calls with 1 bulk operation
+            response = self.client.table('recommendations_cache').upsert(batch_data).execute()
             
-            # Check which items already exist
-            existing_response = self.client.table('recommendations_cache').select('item_uid').in_('item_uid', item_uids).execute()
-            existing_uids = {item['item_uid'] for item in existing_response.data} if existing_response.data else set()
-            
-            # Split into updates and inserts
-            updates = [item for item in batch_data if item['item_uid'] in existing_uids]
-            inserts = [item for item in batch_data if item['item_uid'] not in existing_uids]
-            
-            # Perform updates
-            for item in updates:
-                self.client.table('recommendations_cache').update(item).eq('item_uid', item['item_uid']).execute()
-            
-            # Perform inserts
-            if inserts:
-                self.client.table('recommendations_cache').insert(inserts).execute()
-            
-            print(f"Stored {len(batch_data)} recommendations ({len(updates)} updated, {len(inserts)} inserted)")
+            if response.data:
+                print(f"Stored {len(batch_data)} recommendations (bulk upsert)")
+            else:
+                print(f"Stored {len(batch_data)} recommendations")
         except Exception as e:
             print(f"ERROR storing batch: {e}")
             

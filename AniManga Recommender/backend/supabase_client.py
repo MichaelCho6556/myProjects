@@ -3438,6 +3438,24 @@ class SupabaseTableBuilder:
         self._filters[field] = f'ilike.{pattern}'
         return self
     
+    def count(self, option: str = 'exact') -> 'SupabaseTableBuilder':
+        """
+        Request count of rows matching the query.
+        
+        Args:
+            option: Count option - 'exact', 'planned', or 'estimated'
+                - exact: Exact count (slower for large tables)
+                - planned: Planned count from query planner
+                - estimated: Estimated count (faster, less accurate)
+        
+        Returns:
+            Self for method chaining
+        """
+        if option not in ['exact', 'planned', 'estimated']:
+            raise ValueError(f"Invalid count option: {option}. Must be 'exact', 'planned', or 'estimated'")
+        self._count_option = option
+        return self
+    
     def contains(self, field: str, values: list) -> 'SupabaseTableBuilder':
         """Add array contains filter."""
         # Format as JSON array for PostgREST
