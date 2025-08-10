@@ -22,8 +22,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from supabase_client import SupabaseClient
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (optional - for local development)
+# In GitHub Actions, environment variables are set directly
+if os.path.exists('.env'):
+    load_dotenv()
 
 class RecommendationComputer:
     """Compute and cache recommendations for all items."""
