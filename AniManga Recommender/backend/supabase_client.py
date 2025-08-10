@@ -3581,13 +3581,16 @@ class SupabaseTableBuilder:
     def _execute_upsert(self) -> SupabaseResponse:
         """Execute UPSERT operation."""
         # For upsert, we need to add the proper preference header
-        headers = {'Prefer': 'resolution=merge-duplicates'}
+        # resolution=merge-duplicates tells Supabase to update on conflict
+        # return=representation returns the upserted data
+        headers = {'Prefer': 'resolution=merge-duplicates,return=representation'}
         
         # Use POST with upsert preference
         response = self.client._make_request(
             'POST',
             self.table_name,
-            data=self._upsert_data
+            data=self._upsert_data,
+            headers=headers  # Pass the headers to enable upsert behavior
         )
         
         if response.status_code in [200, 201]:
