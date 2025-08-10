@@ -48,7 +48,10 @@ except ImportError:
 from functools import wraps
 from flask import request, jsonify, g
 
-load_dotenv()
+# Load environment variables from .env file if it exists (for local development)
+# In production/GitHub Actions, these are set as environment variables directly
+if os.path.exists('.env'):
+    load_dotenv()
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -122,7 +125,7 @@ class SupabaseClient:
             return
             
         if not self.base_url or not self.api_key:
-            raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in .env")
+            raise ValueError("SUPABASE_URL and SUPABASE_KEY environment variables must be set")
         
         # Use service key for backend operations (more permissions)
         self.headers = {
