@@ -307,13 +307,26 @@ class RecommendationComputer:
     def store_recommendations_batch(self, batch_data: List[Dict]):
         """Store a batch of recommendations in the cache table."""
         try:
-            # Upsert will handle duplicates automatically based on primary key
-            response = self.client.table('recommendations_cache').upsert(
-                batch_data
-            ).execute()
+            # Get existing item_uids to determine which to update vs insert
+            item_uids = [item['item_uid'] for item in batch_data]
             
-            if response.data:
-                print(f"Stored {len(batch_data)} recommendations")
+            # Check which items already exist
+            existing_response = self.client.table('recommendations_cache').select('item_uid').in_('item_uid', item_uids).execute()
+            existing_uids = {item['item_uid'] for item in existing_response.data} if existing_response.data else set()
+            
+            # Split into updates and inserts
+            updates = [item for item in batch_data if item['item_uid'] in existing_uids]
+            inserts = [item for item in batch_data if item['item_uid'] not in existing_uids]
+            
+            # Perform updates
+            for item in updates:
+                self.client.table('recommendations_cache').update(item).eq('item_uid', item['item_uid']).execute()
+            
+            # Perform inserts
+            if inserts:
+                self.client.table('recommendations_cache').insert(inserts).execute()
+            
+            print(f"Stored {len(batch_data)} recommendations ({len(updates)} updated, {len(inserts)} inserted)")
         except Exception as e:
             print(f"ERROR storing batch: {e}")
             
@@ -347,10 +360,15 @@ class RecommendationComputer:
         }
         
         try:
-            # Upsert the single row (will update if id=1 exists)
-            response = self.client.table('distinct_values_cache').upsert(
-                distinct_values
-            ).execute()
+            # Check if row exists
+            existing = self.client.table('distinct_values_cache').select('id').eq('id', 1).execute()
+            
+            if existing.data:
+                # Update existing row
+                response = self.client.table('distinct_values_cache').update(distinct_values).eq('id', 1).execute()
+            else:
+                # Insert new row
+                response = self.client.table('distinct_values_cache').insert(distinct_values).execute()
             
             if response.data:
                 print("Distinct values cached successfully")
