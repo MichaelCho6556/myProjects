@@ -106,6 +106,16 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
   // Mutations
   const updateUserItemMutation = useUpdateUserItemMutation();
   
+  // Debug logging to track data updates
+  useEffect(() => {
+    console.log('[DEBUG] DashboardPage - Data updated:', {
+      dashboardData,
+      isLoading,
+      isFetching,
+      hasData: !!dashboardData
+    });
+  }, [dashboardData, isLoading, isFetching]);
+  
   const [sectionLoading, setSectionLoading] = useState({
     recommendations: false,
     itemLists: false,
@@ -193,28 +203,8 @@ const DashboardPage: React.FC<DashboardPageProps> = () => {
     await debouncedSectionRefresh("activityFeed", 500);
   }, [debouncedSectionRefresh]);
 
-  // Set up cross-tab synchronization for real-time updates
-  useEffect(() => {
-    /**
-     * Handles storage events for cross-tab data synchronization.
-     *
-     * Listens for localStorage changes indicating that another tab
-     * has updated user data, triggering a dashboard refresh.
-     *
-     * @param e - Storage event from localStorage changes
-     */
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "animanga_list_updated") {
-        refreshDashboard();
-      }
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-    };
-  }, []);
+  // React Query handles cache synchronization automatically
+  // No need for manual localStorage event handling
 
   // Cleanup timers on unmount
   useEffect(() => {

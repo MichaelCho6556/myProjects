@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { UserItem } from "../../types";
-import { useAuthenticatedApi } from "../../hooks/useAuthenticatedApi";
+import { useRemoveUserItemMutation } from "../../hooks/useApiCache";
 import { sanitizeUrl } from "../../utils/urlSecurity";
 import { logger } from "../../utils/logger";
 
@@ -24,7 +24,7 @@ const ItemLists: React.FC<ItemListsProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<string>("watching");
   const [deletingItems, setDeletingItems] = useState<Set<string>>(new Set());
-  const { removeUserItem } = useAuthenticatedApi();
+  const removeUserItemMutation = useRemoveUserItemMutation();
 
   const statusOptions = [
     { value: "watching", label: "Watching" },
@@ -47,9 +47,10 @@ const ItemLists: React.FC<ItemListsProps> = ({
     setDeletingItems((prev) => new Set(prev).add(itemUid));
 
     try {
-      await removeUserItem(itemUid);
+      // Use React Query mutation instead of raw API call
+      await removeUserItemMutation.mutateAsync(itemUid);
 
-      // Notify parent component to refresh data
+      // Notify parent component if needed for additional actions
       if (onItemDeleted) {
         onItemDeleted();
       }

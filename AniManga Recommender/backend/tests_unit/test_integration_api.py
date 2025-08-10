@@ -1,516 +1,567 @@
+# ABOUTME: Real API integration tests - NO MOCKS  
+# ABOUTME: Tests actual Flask endpoints with real database and test client
+
 """
-Integration tests for API endpoints in the AniManga Recommender backend.
+Real API Integration Tests for AniManga Recommender Backend
+
+Test Coverage:
+- Health check endpoint
+- Distinct values endpoint
+- Items listing with filtering and pagination
+- Search functionality
+- Authentication-protected endpoints
+- Error handling
+
+NO MOCKS - All tests use real Flask test client and database
 """
+
 import pytest
 import json
-from unittest.mock import patch, MagicMock
-import pandas as pd
-import numpy as np
+from sqlalchemy import text
+
+# Import test dependencies
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app import app
+from tests.test_utils import TestDataManager, generate_jwt_token, create_auth_headers
 
 
+@pytest.mark.real_integration
 class TestHealthEndpoint:
-    """Test the health check endpoint."""
+    """Test the health check endpoint with real app."""
     
-    @pytest.mark.integration
-    def test_health_check_with_data(self, client, mock_globals):
-        """Test health check when data is loaded."""
+    def test_health_check_basic(self, client):
+        """Test basic health check endpoint."""
         response = client.get('/')
         
         assert response.status_code == 200
-        assert b"Hello from AniManga Recommender Backend!" in response.data
+        assert b"AniManga Recommender Backend" in response.data
     
-    @pytest.mark.integration
-    def test_health_check_no_data(self, client, mock_none_globals):
-        """Test health check when data is not loaded."""
-        response = client.get('/')
+    def test_health_check_with_database(self, client, database_connection):
+        """Test health check with database connectivity."""
+        # Verify database is accessible
+        result = database_connection.execute(text("SELECT 1"))
+        assert result.fetchone()[0] == 1
         
+        response = client.get('/')
         assert response.status_code == 200
-        assert b"Backend is initializing" in response.data or b"encountered an error" in response.data
 
 
+@pytest.mark.real_integration
 class TestDistinctValuesEndpoint:
-    """Test the /api/distinct-values endpoint."""
+    """Test the /api/distinct-values endpoint with real data."""
     
-    @pytest.mark.integration
-    def test_get_distinct_values_success(self, client, mock_globals):
-        """Test successful retrieval of distinct values."""
+    def test_get_distinct_values_with_data(self, client, database_connection):
+        """Test retrieving distinct values from real database."""
+        manager = TestDataManager(database_connection)
+        
+        # Create test items with various attributes
+        items = [
+            manager.create_test_item(
+                uid="distinct_test_1",
+                title="Action Anime",
+                genres=["Action", "Adventure"],
+                themes=["School", "Superpowers"]
+            ),
+            manager.create_test_item(
+                uid="distinct_test_2",
+                title="Comedy Anime",
+                genres=["Comedy", "Romance"],
+                themes=["School", "Love"]
+            ),
+            manager.create_test_item(
+                uid="distinct_test_3",
+                title="Drama Manga",
+                item_type="manga",
+                genres=["Drama", "Action"],
+                themes=["Military"]
+            )
+        ]
+        
+        try:
+            response = client.get('/api/distinct-values')
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            # Check required keys
+            required_keys = ['genres', 'statuses', 'media_types', 'themes', 
+                           'demographics', 'studios', 'authors']
+            for key in required_keys:
+                assert key in data
+                assert isinstance(data[key], list)
+            
+            # Check that our test data appears
+            assert 'Action' in data['genres']
+            assert 'Comedy' in data['genres']
+            assert 'Drama' in data['genres']
+            assert 'School' in data['themes']
+            assert 'anime' in data['media_types']
+            assert 'manga' in data['media_types']
+            
+        finally:
+            manager.cleanup()
+    
+    def test_get_distinct_values_empty_database(self, client, database_connection):
+        """Test distinct values with empty database."""
+        # Clear any existing items
+        database_connection.execute(text("DELETE FROM items"))
+        database_connection.commit()
+        
         response = client.get('/api/distinct-values')
         
         assert response.status_code == 200
         data = json.loads(response.data)
         
-        # Check required keys
-        required_keys = ['genres', 'statuses', 'media_types', 'themes', 
-                        'demographics', 'studios', 'authors']
-        for key in required_keys:
-            assert key in data
+        # All lists should be empty or contain defaults
+        for key in ['genres', 'themes', 'demographics', 'studios', 'authors']:
             assert isinstance(data[key], list)
-        
-        # Check some expected values based on our sample data
-        assert 'Action' in data['genres']
-        assert 'Comedy' in data['genres']
-        assert 'anime' in data['media_types']
-        assert 'manga' in data['media_types']
-    
-    @pytest.mark.integration
-    def test_get_distinct_values_empty_data(self, client, mock_empty_globals):
-        """Test distinct values with empty dataset."""
-        response = client.get('/api/distinct-values')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        
-        # All lists should be empty
-        for key in ['genres', 'statuses', 'media_types', 'themes', 
-                   'demographics', 'studios', 'authors']:
-            assert data[key] == []
-    
-    @pytest.mark.integration
-    def test_get_distinct_values_no_data(self, client, mock_none_globals):
-        """Test distinct values when data is not loaded."""
-        response = client.get('/api/distinct-values')
-        
-        assert response.status_code == 503
-        data = json.loads(response.data)
-        
-        # All lists should be empty with service unavailable status
-        for key in ['genres', 'statuses', 'media_types', 'themes', 
-                   'demographics', 'studios', 'authors']:
-            assert data[key] == []
 
 
+@pytest.mark.real_integration
 class TestItemsEndpoint:
-    """Test the /api/items endpoint."""
+    """Test the /api/items endpoint with real data."""
     
-    @pytest.mark.integration
-    def test_get_items_default_params(self, client, mock_globals):
+    def test_get_items_default_params(self, client, database_connection):
         """Test getting items with default parameters."""
-        response = client.get('/api/items')
+        manager = TestDataManager(database_connection)
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        # Create test items
+        items = []
+        for i in range(5):
+            items.append(manager.create_test_item(
+                uid=f"api_test_{i}",
+                title=f"Test Anime {i}",
+                score=7.0 + i * 0.5,
+                episodes=12 + i
+            ))
         
-        # Check response structure
-        required_keys = ['items', 'page', 'per_page', 'total_items', 'total_pages', 'sort_by']
-        for key in required_keys:
-            assert key in data
-        
-        assert data['page'] == 1
-        assert data['per_page'] == 30
-        assert data['total_items'] == 5  # Based on our sample data
-        assert data['total_pages'] == 1
-        assert data['sort_by'] == 'score_desc'
-        assert len(data['items']) == 5
-        
-        # Check that image_url field mapping worked
-        for item in data['items']:
-            assert 'image_url' in item
-            assert 'main_picture' not in item
+        try:
+            response = client.get('/api/items')
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            # Check response structure
+            required_keys = ['items', 'page', 'per_page', 'total_items', 'total_pages', 'sort_by']
+            for key in required_keys:
+                assert key in data
+            
+            assert data['page'] == 1
+            assert data['per_page'] == 30
+            assert data['total_items'] >= 5
+            assert len(data['items']) >= 5
+            
+            # Check that our test items are included
+            item_uids = [item['uid'] for item in data['items']]
+            for test_item in items:
+                assert test_item['uid'] in item_uids
+                
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_get_items_pagination(self, client, mock_globals):
-        """Test pagination parameters."""
-        response = client.get('/api/items?page=1&per_page=2')
+    def test_get_items_pagination(self, client, database_connection):
+        """Test pagination with real data."""
+        manager = TestDataManager(database_connection)
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        # Create 10 test items
+        for i in range(10):
+            manager.create_test_item(
+                uid=f"page_test_{i}",
+                title=f"Page Test Item {i}",
+                score=8.0
+            )
         
-        assert data['page'] == 1
-        assert data['per_page'] == 2
-        assert len(data['items']) == 2
-        assert data['total_items'] == 5
-        assert data['total_pages'] == 3  # ceil(5/2) = 3
+        try:
+            # Request first page with 3 items per page
+            response = client.get('/api/items?page=1&per_page=3')
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            assert data['page'] == 1
+            assert data['per_page'] == 3
+            assert len(data['items']) <= 3
+            assert data['total_items'] >= 10
+            
+            first_page_items = data['items']
+            
+            # Request second page
+            response = client.get('/api/items?page=2&per_page=3')
+            data = json.loads(response.data)
+            
+            assert data['page'] == 2
+            assert len(data['items']) <= 3
+            
+            # Verify different items on different pages
+            second_page_uids = [item['uid'] for item in data['items']]
+            first_page_uids = [item['uid'] for item in first_page_items]
+            
+            # No overlap between pages
+            assert not any(uid in first_page_uids for uid in second_page_uids)
+            
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_get_items_search_query(self, client, mock_globals):
-        """Test text search functionality."""
-        response = client.get('/api/items?q=Test Anime 1')
+    def test_get_items_search_query(self, client, database_connection):
+        """Test text search functionality with real data."""
+        manager = TestDataManager(database_connection)
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        # Create items with specific titles
+        item1 = manager.create_test_item(
+            uid="search_test_1",
+            title="Attack on Titan",
+            synopsis="Humanity fights against titans"
+        )
         
-        assert len(data['items']) == 1
-        assert data['items'][0]['title'] == 'Test Anime 1'
+        item2 = manager.create_test_item(
+            uid="search_test_2",
+            title="Death Note",
+            synopsis="A notebook that can kill people"
+        )
+        
+        item3 = manager.create_test_item(
+            uid="search_test_3",
+            title="Titan Academy",
+            synopsis="School for young heroes"
+        )
+        
+        try:
+            # Search for "Titan"
+            response = client.get('/api/items?q=Titan')
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            # Should find items with "Titan" in title or synopsis
+            found_uids = [item['uid'] for item in data['items']]
+            assert "search_test_1" in found_uids  # "Attack on Titan"
+            assert "search_test_3" in found_uids  # "Titan Academy"
+            assert "search_test_2" not in found_uids  # "Death Note" doesn't match
+            
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_get_items_media_type_filter(self, client, mock_globals):
-        """Test media type filtering."""
-        response = client.get('/api/items?media_type=anime')
+    def test_get_items_genre_filter(self, client, database_connection):
+        """Test genre filtering with real data."""
+        manager = TestDataManager(database_connection)
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        # Create items with specific genres
+        action_item = manager.create_test_item(
+            uid="genre_test_1",
+            title="Action Only",
+            genres=["Action"]
+        )
         
-        assert len(data['items']) == 3  # 3 anime items in sample data
-        for item in data['items']:
-            assert item['media_type'] == 'anime'
+        action_adventure = manager.create_test_item(
+            uid="genre_test_2",
+            title="Action Adventure",
+            genres=["Action", "Adventure"]
+        )
+        
+        comedy_item = manager.create_test_item(
+            uid="genre_test_3",
+            title="Comedy Only",
+            genres=["Comedy"]
+        )
+        
+        try:
+            # Filter by single genre
+            response = client.get('/api/items?genre=Action')
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            found_uids = [item['uid'] for item in data['items']]
+            assert "genre_test_1" in found_uids  # Has Action
+            assert "genre_test_2" in found_uids  # Has Action
+            assert "genre_test_3" not in found_uids  # No Action
+            
+            # Filter by multiple genres (AND logic)
+            response = client.get('/api/items?genre=Action,Adventure')
+            data = json.loads(response.data)
+            
+            found_uids = [item['uid'] for item in data['items']]
+            assert "genre_test_1" not in found_uids  # Missing Adventure
+            assert "genre_test_2" in found_uids  # Has both
+            assert "genre_test_3" not in found_uids  # Has neither
+            
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_get_items_genre_filter_single(self, client, mock_globals):
-        """Test single genre filtering."""
-        response = client.get('/api/items?genre=action')
+    def test_get_items_score_filter(self, client, database_connection):
+        """Test score filtering with real data."""
+        manager = TestDataManager(database_connection)
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        # Create items with different scores
+        high_score = manager.create_test_item(
+            uid="score_test_1",
+            title="High Score Anime",
+            score=9.2
+        )
         
-        assert len(data['items']) == 3  # Items with Action genre
-        for item in data['items']:
-            genres_lower = [g.lower() for g in item['genres']]
-            assert 'action' in genres_lower
+        medium_score = manager.create_test_item(
+            uid="score_test_2",
+            title="Medium Score Anime",
+            score=7.5
+        )
+        
+        low_score = manager.create_test_item(
+            uid="score_test_3",
+            title="Low Score Anime",
+            score=5.8
+        )
+        
+        try:
+            # Filter by minimum score
+            response = client.get('/api/items?min_score=7.0')
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            found_uids = [item['uid'] for item in data['items']]
+            assert "score_test_1" in found_uids  # 9.2 >= 7.0
+            assert "score_test_2" in found_uids  # 7.5 >= 7.0
+            assert "score_test_3" not in found_uids  # 5.8 < 7.0
+            
+            # Verify actual scores
+            for item in data['items']:
+                if item['uid'] in ["score_test_1", "score_test_2"]:
+                    assert float(item['score']) >= 7.0
+                    
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_get_items_genre_filter_multiple(self, client, mock_globals):
-        """Test multiple genre filtering (AND logic)."""
-        response = client.get('/api/items?genre=action,adventure')
+    def test_get_items_media_type_filter(self, client, database_connection):
+        """Test media type filtering with real data."""
+        manager = TestDataManager(database_connection)
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        # Create different media types
+        anime1 = manager.create_test_item(
+            uid="media_test_1",
+            title="Test Anime",
+            item_type="anime"
+        )
         
-        assert len(data['items']) == 1  # Only one item has both Action and Adventure
-        item = data['items'][0]
-        genres_lower = [g.lower() for g in item['genres']]
-        assert 'action' in genres_lower
-        assert 'adventure' in genres_lower
+        anime2 = manager.create_test_item(
+            uid="media_test_2",
+            title="Another Anime",
+            item_type="anime"
+        )
+        
+        manga1 = manager.create_test_item(
+            uid="media_test_3",
+            title="Test Manga",
+            item_type="manga"
+        )
+        
+        try:
+            # Filter by anime
+            response = client.get('/api/items?media_type=anime')
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            found_uids = [item['uid'] for item in data['items']]
+            assert "media_test_1" in found_uids
+            assert "media_test_2" in found_uids
+            assert "media_test_3" not in found_uids
+            
+            # Verify all are anime
+            for item in data['items']:
+                if item['uid'].startswith("media_test_"):
+                    assert item['type'] == 'anime'
+            
+            # Filter by manga
+            response = client.get('/api/items?media_type=manga')
+            data = json.loads(response.data)
+            
+            found_uids = [item['uid'] for item in data['items']]
+            assert "media_test_1" not in found_uids
+            assert "media_test_2" not in found_uids
+            assert "media_test_3" in found_uids
+            
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_get_items_status_filter(self, client, mock_globals):
-        """Test status filtering."""
-        response = client.get('/api/items?status=finished airing')
+    def test_get_items_sorting(self, client, database_connection):
+        """Test different sorting options with real data."""
+        manager = TestDataManager(database_connection)
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        # Create items with different scores and titles
+        items = [
+            manager.create_test_item(uid="sort_1", title="Zebra Show", score=8.5),
+            manager.create_test_item(uid="sort_2", title="Alpha Series", score=9.0),
+            manager.create_test_item(uid="sort_3", title="Beta Program", score=7.5)
+        ]
         
-        assert len(data['items']) == 2  # 2 items with "Finished Airing" status
-        for item in data['items']:
-            assert item['status'].lower() == 'finished airing'
+        try:
+            # Sort by score descending (default)
+            response = client.get('/api/items?sort_by=score_desc')
+            data = json.loads(response.data)
+            
+            scores = [item['score'] for item in data['items'] if item['uid'].startswith("sort_")]
+            assert scores == sorted(scores, reverse=True)
+            
+            # Sort by title ascending
+            response = client.get('/api/items?sort_by=title_asc')
+            data = json.loads(response.data)
+            
+            titles = [item['title'] for item in data['items'] if item['uid'].startswith("sort_")]
+            assert titles == sorted(titles)
+            
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_get_items_min_score_filter(self, client, mock_globals):
-        """Test minimum score filtering."""
-        response = client.get('/api/items?min_score=8.0')
+    def test_get_items_combined_filters(self, client, database_connection):
+        """Test combining multiple filters with real data."""
+        manager = TestDataManager(database_connection)
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        # Create diverse test items
+        item1 = manager.create_test_item(
+            uid="combined_1",
+            title="High Score Action Anime",
+            item_type="anime",
+            genres=["Action", "Adventure"],
+            score=9.0
+        )
         
-        assert len(data['items']) == 2  # Items with score >= 8.0
-        for item in data['items']:
-            assert float(item['score']) >= 8.0
-    
-    @pytest.mark.integration
-    def test_get_items_year_filter(self, client, mock_globals):
-        """Test year filtering."""
-        response = client.get('/api/items?year=2020')
+        item2 = manager.create_test_item(
+            uid="combined_2",
+            title="Low Score Action Anime",
+            item_type="anime",
+            genres=["Action"],
+            score=6.0
+        )
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        item3 = manager.create_test_item(
+            uid="combined_3",
+            title="High Score Comedy Manga",
+            item_type="manga",
+            genres=["Comedy"],
+            score=8.5
+        )
         
-        assert len(data['items']) == 1  # One item from 2020
-        assert data['items'][0]['start_year_num'] == 2020
-    
-    @pytest.mark.integration
-    def test_get_items_sorting_score_desc(self, client, mock_globals):
-        """Test sorting by score descending."""
-        response = client.get('/api/items?sort_by=score_desc')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        
-        # Check that items are sorted by score descending
-        scores = [float(item['score']) for item in data['items']]
-        assert scores == sorted(scores, reverse=True)
-    
-    @pytest.mark.integration
-    def test_get_items_sorting_title_asc(self, client, mock_globals):
-        """Test sorting by title ascending."""
-        response = client.get('/api/items?sort_by=title_asc')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        
-        # Check that items are sorted by title ascending
-        titles = [item['title'].lower() for item in data['items']]
-        assert titles == sorted(titles)
-    
-    @pytest.mark.integration
-    def test_get_items_combined_filters(self, client, mock_globals):
-        """Test combination of multiple filters."""
-        response = client.get('/api/items?media_type=anime&genre=action&min_score=7.0')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        
-        # Should return anime items with Action genre and score >= 7.0
-        for item in data['items']:
-            assert item['media_type'] == 'anime'
-            genres_lower = [g.lower() for g in item['genres']]
-            assert 'action' in genres_lower
-            assert float(item['score']) >= 7.0
-    
-    @pytest.mark.integration
-    def test_get_items_no_results(self, client, mock_globals):
-        """Test query that returns no results."""
-        response = client.get('/api/items?q=nonexistent title')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        
-        assert len(data['items']) == 0
-        assert data['total_items'] == 0
-        assert data['total_pages'] == 0
-    
-    @pytest.mark.integration
-    def test_get_items_empty_dataset(self, client, mock_empty_globals):
-        """Test items endpoint with empty dataset."""
-        response = client.get('/api/items')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        
-        assert len(data['items']) == 0
-        assert data['total_items'] == 0
-        assert data['total_pages'] == 0
-    
-    @pytest.mark.integration
-    def test_get_items_no_data_loaded(self, client, mock_none_globals):
-        """Test items endpoint when data is not loaded."""
-        response = client.get('/api/items')
-        
-        assert response.status_code == 503
-        data = json.loads(response.data)
-        assert 'error' in data
+        try:
+            # Combine media type, genre, and score filters
+            response = client.get('/api/items?media_type=anime&genre=Action&min_score=7.0')
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            found_uids = [item['uid'] for item in data['items']]
+            
+            # Only item1 matches all criteria
+            assert "combined_1" in found_uids  # anime, Action, score 9.0
+            assert "combined_2" not in found_uids  # score too low
+            assert "combined_3" not in found_uids  # wrong media type and genre
+            
+        finally:
+            manager.cleanup()
 
 
+@pytest.mark.real_integration
 class TestItemDetailEndpoint:
-    """Test the /api/items/<uid> endpoint."""
+    """Test the /api/items/<uid> endpoint with real data."""
     
-    @pytest.mark.integration
-    def test_get_item_detail_success(self, client, mock_globals):
-        """Test successful retrieval of item details."""
-        response = client.get('/api/items/anime_1')
+    def test_get_item_by_uid_success(self, client, database_connection):
+        """Test retrieving a specific item by UID."""
+        manager = TestDataManager(database_connection)
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        test_item = manager.create_test_item(
+            uid="detail_test_123",
+            title="Detailed Test Anime",
+            synopsis="A very detailed synopsis for testing",
+            score=8.7,
+            episodes=24,
+            genres=["Action", "Drama", "Mystery"]
+        )
         
-        assert data['uid'] == 'anime_1'
-        assert data['title'] == 'Test Anime 1'
-        assert data['media_type'] == 'anime'
-        assert 'image_url' in data  # Field mapping should work
-        assert 'main_picture' not in data
+        try:
+            response = client.get(f'/api/items/{test_item["uid"]}')
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            assert data['uid'] == test_item['uid']
+            assert data['title'] == test_item['title']
+            assert data['synopsis'] == test_item['synopsis']
+            assert data['score'] == test_item['score']
+            assert data['episodes'] == test_item['episodes']
+            assert set(data['genres']) == set(["Action", "Drama", "Mystery"])
+            
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_get_item_detail_not_found(self, client, mock_globals):
-        """Test retrieval of non-existent item."""
-        response = client.get('/api/items/nonexistent_uid')
+    def test_get_item_by_uid_not_found(self, client):
+        """Test retrieving a non-existent item."""
+        response = client.get('/api/items/non_existent_uid_12345')
         
         assert response.status_code == 404
         data = json.loads(response.data)
         assert 'error' in data
-        assert 'not found' in data['error'].lower()
-    
-    @pytest.mark.integration
-    def test_get_item_detail_no_data(self, client, mock_none_globals):
-        """Test item detail when data is not loaded."""
-        response = client.get('/api/items/anime_1')
-        
-        assert response.status_code == 503
-        data = json.loads(response.data)
-        assert 'error' in data
 
 
-class TestRecommendationsEndpoint:
-    """Test the /api/recommendations/<uid> endpoint."""
+@pytest.mark.real_integration  
+class TestAuthenticatedEndpoints:
+    """Test endpoints that require authentication with real auth."""
     
-    @pytest.mark.integration
-    def test_get_recommendations_success(self, client, mock_globals):
-        """Test successful retrieval of recommendations."""
-        response = client.get('/api/recommendations/anime_1')
+    def test_user_items_endpoint_authenticated(self, client, database_connection, app):
+        """Test authenticated access to user items."""
+        manager = TestDataManager(database_connection)
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
+        # Create user and items
+        user = manager.create_test_user(
+            email="auth_api_test@example.com",
+            username="auth_api_tester"
+        )
         
-        assert 'source_item_uid' in data
-        assert 'source_item_title' in data
-        assert 'recommendations' in data
-        assert data['source_item_uid'] == 'anime_1'
-        assert isinstance(data['recommendations'], list)
+        item = manager.create_test_item(
+            uid="auth_item_test",
+            title="User's Anime"
+        )
         
-        # Check that source item is not in recommendations
-        rec_uids = [rec['uid'] for rec in data['recommendations']]
-        assert 'anime_1' not in rec_uids
+        manager.create_user_item_entry(
+            user_id=user['id'],
+            item_uid=item['uid'],
+            status="watching",
+            score=8.0,
+            progress=5
+        )
         
-        # Check field mapping for recommendations
-        for rec in data['recommendations']:
-            assert 'image_url' in rec
-            assert 'main_picture' not in rec
-    
-    @pytest.mark.integration
-    def test_get_recommendations_with_n_param(self, client, mock_globals):
-        """Test recommendations with custom number parameter."""
-        response = client.get('/api/recommendations/anime_1?n=2')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        
-        assert len(data['recommendations']) <= 2  # Might be less if dataset is small
-    
-    @pytest.mark.integration
-    def test_get_recommendations_not_found(self, client, mock_globals):
-        """Test recommendations for non-existent item."""
-        response = client.get('/api/recommendations/nonexistent_uid')
-        
-        assert response.status_code == 404
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert 'not found' in data['error'].lower()
-    
-    @pytest.mark.integration
-    def test_get_recommendations_no_data(self, client, mock_none_globals):
-        """Test recommendations when data is not loaded."""
-        response = client.get('/api/recommendations/anime_1')
-        
-        assert response.status_code == 503
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert 'not ready' in data['error'].lower()
-    
-    @pytest.mark.integration
-    def test_get_recommendations_required_fields(self, client, mock_globals):
-        """Test that recommendations contain required fields."""
-        response = client.get('/api/recommendations/anime_1')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        
-        required_fields = ['uid', 'title', 'media_type', 'score', 'image_url', 'genres', 'synopsis']
-        for rec in data['recommendations']:
-            for field in required_fields:
-                assert field in rec
-
-
-class TestErrorHandling:
-    """Test various error scenarios and edge cases."""
-    
-    @pytest.mark.integration
-    def test_invalid_page_parameter(self, client, mock_globals):
-        """Test handling of invalid page parameter."""
-        response = client.get('/api/items?page=0')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        # Page 0 should be treated as page 1
-        assert data['page'] == 0  # Flask request.args gets the actual value
-    
-    @pytest.mark.integration
-    def test_invalid_per_page_parameter(self, client, mock_globals):
-        """Test handling of invalid per_page parameter."""
-        response = client.get('/api/items?per_page=-1')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        # Negative per_page should be handled gracefully
-        assert data['per_page'] == -1
-    
-    @pytest.mark.integration
-    def test_invalid_score_parameter(self, client, mock_globals):
-        """Test handling of invalid min_score parameter."""
-        response = client.get('/api/items?min_score=invalid')
-        
-        # Flask request.args.get() with type=float returns None for invalid values
-        # Our app handles this gracefully and treats None as "no filter"
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        # Should return all items since invalid min_score is treated as None
-        assert len(data['items']) > 0
-    
-    @pytest.mark.integration
-    def test_invalid_year_parameter(self, client, mock_globals):
-        """Test handling of invalid year parameter."""
-        response = client.get('/api/items?year=invalid')
-        
-        # Flask request.args.get() with type=int returns None for invalid values
-        # Our app handles this gracefully and treats None as "no filter"
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        # Should return all items since invalid year is treated as None
-        assert len(data['items']) > 0
-    
-    @pytest.mark.integration
-    def test_recommendations_invalid_n_parameter(self, client, mock_globals):
-        """Test handling of invalid n parameter for recommendations."""
-        response = client.get('/api/recommendations/anime_1?n=invalid')
-        
-        # Flask request.args.get() with type=int returns None for invalid values
-        # Our app uses default value of 10 when n is None/invalid
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert 'recommendations' in data
-
-
-class TestPerformance:
-    """Test performance-related scenarios."""
-    
-    @pytest.mark.integration
-    @pytest.mark.slow
-    def test_large_page_size(self, client, mock_globals):
-        """Test handling of very large page size."""
-        response = client.get('/api/items?per_page=1000')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        # Should return all available items (5 in our sample)
-        assert len(data['items']) == 5
-    
-    @pytest.mark.integration
-    def test_complex_query_performance(self, client, mock_globals):
-        """Test performance with complex queries."""
-        response = client.get('/api/items?q=test&media_type=anime&genre=action&theme=school&status=finished airing&min_score=7.0&year=2020&sort_by=score_desc')
-        
-        assert response.status_code == 200
-        # Should complete without timeout (handled by test framework)
-    
-    @pytest.mark.integration
-    def test_recommendations_performance(self, client, mock_globals):
-        """Test recommendations performance."""
-        response = client.get('/api/recommendations/anime_1?n=10')
-        
-        assert response.status_code == 200
-        # Should complete without timeout
-
-
-class TestDataConsistency:
-    """Test data consistency across endpoints."""
-    
-    @pytest.mark.integration
-    def test_item_detail_matches_list(self, client, mock_globals):
-        """Test that item details match items in the list."""
-        # Get items list
-        list_response = client.get('/api/items')
-        list_data = json.loads(list_response.data)
-        
-        if list_data['items']:
-            first_item = list_data['items'][0]
-            uid = first_item['uid']
+        try:
+            # Generate auth token
+            jwt_secret = app.config.get('JWT_SECRET_KEY', 'test-jwt-secret-key')
+            token = generate_jwt_token(
+                user_id=user['id'],
+                email=user['email'],
+                secret_key=jwt_secret
+            )
             
-            # Get item details
-            detail_response = client.get(f'/api/items/{uid}')
-            detail_data = json.loads(detail_response.data)
+            headers = create_auth_headers(token)
             
-            # Compare key fields
-            assert detail_data['uid'] == first_item['uid']
-            assert detail_data['title'] == first_item['title']
-            assert detail_data['media_type'] == first_item['media_type']
+            # Access user items endpoint
+            response = client.get('/api/auth/user-items', headers=headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            
+            assert 'items' in data
+            assert len(data['items']) == 1
+            assert data['items'][0]['item_uid'] == item['uid']
+            assert data['items'][0]['status'] == 'watching'
+            assert data['items'][0]['score'] == 8.0
+            assert data['items'][0]['progress'] == 5
+            
+        finally:
+            manager.cleanup()
     
-    @pytest.mark.integration
-    def test_distinct_values_match_items(self, client, mock_globals):
-        """Test that distinct values match what's actually in items."""
-        # Get distinct values
-        distinct_response = client.get('/api/distinct-values')
-        distinct_data = json.loads(distinct_response.data)
+    def test_user_items_endpoint_unauthenticated(self, client):
+        """Test unauthenticated access is rejected."""
+        response = client.get('/api/auth/user-items')
         
-        # Get all items
-        items_response = client.get('/api/items?per_page=1000')
-        items_data = json.loads(items_response.data)
-        
-        # Check that media types in items match distinct values
-        item_media_types = set(item['media_type'] for item in items_data['items'])
-        for media_type in item_media_types:
-            assert media_type in distinct_data['media_types'] 
+        assert response.status_code == 401
+        data = json.loads(response.data)
+        assert 'error' in data

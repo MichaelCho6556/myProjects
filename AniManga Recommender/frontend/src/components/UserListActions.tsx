@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi";
+import { useUpdateUserItemMutation, useRemoveUserItemMutation } from "../hooks/useApiCache";
 import { AnimeItem } from "../types";
 import { logger } from "../utils/logger";
 import "./UserListActions.css";
@@ -19,7 +20,9 @@ interface UserItemData {
 
 const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate }) => {
   const { user } = useAuth();
-  const { getUserItems, updateUserItemStatus, removeUserItem } = useAuthenticatedApi();
+  const { getUserItems } = useAuthenticatedApi();
+  const updateUserItemMutation = useUpdateUserItemMutation();
+  const removeUserItemMutation = useRemoveUserItemMutation();
 
   const [userItem, setUserItem] = useState<UserItemData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,7 +107,6 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
     if (!user) return;
 
     try {
-      setLoading(true);
       setError(null);
 
       let finalProgress = progress;
@@ -131,27 +133,18 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
         updateData.completion_date = new Date().toISOString();
       }
 
+      // Use React Query mutation instead of raw API call
+      await updateUserItemMutation.mutateAsync({
+        itemUid: item.uid,
+        data: updateData
+      });
 
-      const result = await updateUserItemStatus(item.uid, updateData);
+      await loadUserItem();
+      setIsEditing(false);
 
-      if (result && (result.success === true || result.data)) {
-        await loadUserItem();
-        setIsEditing(false);
-
-        // 🆕 TRIGGER DASHBOARD REFRESH
-        localStorage.setItem("animanga_list_updated", Date.now().toString());
-        window.dispatchEvent(
-          new StorageEvent("storage", {
-            key: "animanga_list_updated",
-            newValue: Date.now().toString(),
-          })
-        );
-
-        if (onStatusUpdate) {
-          onStatusUpdate();
-        }
-      } else {
-        throw new Error("Update failed - no success confirmation received");
+      // Callback for any additional parent actions
+      if (onStatusUpdate) {
+        onStatusUpdate();
       }
     } catch (err: any) {
       logger.error("Status update error", {
@@ -163,8 +156,6 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
         newStatus: selectedStatus
       });
       setError(err.message || "Failed to update status");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -235,8 +226,9 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
     }
 
     try {
-      setLoading(true);
-      await removeUserItem(item.uid);
+      // Use React Query mutation instead of raw API call
+      await removeUserItemMutation.mutateAsync(item.uid);
+      
       setUserItem(null);
       setSelectedStatus("plan_to_watch");
       setProgress(0);
@@ -249,8 +241,6 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
       }
     } catch (err: any) {
       setError(err.message || "Failed to remove from list");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -265,7 +255,10 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
     );
   }
 
-  if (loading && !userItem) {
+  // Use mutation states for loading indicator
+  const isMutating = updateUserItemMutation.isPending || removeUserItemMutation.isPending;
+  
+  if ((loading || isMutating) && !userItem) {
     return (
       <div className="user-list-actions">
         <div className="loading-state">
@@ -311,10 +304,10 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
           </div>
 
           <div className="action-buttons">
-            <button onClick={() => setIsEditing(true)} className="btn-edit" disabled={loading}>
+            <button onClick={() => setIsEditing(true)} className="btn-edit" disabled={loading || isMutating}>
               Edit
             </button>
-            <button onClick={handleRemoveFromList} className="btn-remove" disabled={loading}>
+            <button onClick={handleRemoveFromList} className="btn-remove" disabled={loading || isMutating}>
               Remove
             </button>
           </div>
@@ -328,7 +321,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
               id="status-select"
               value={selectedStatus}
               onChange={(e) => handleStatusChange(e.target.value)}
-              disabled={loading}
+              disabled={loading || isMutating}
             >
               {statusOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -350,7 +343,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
                 onChange={(e) =>
                   setProgress(Math.max(0, Math.min(maxProgress, parseInt(e.target.value) || 0)))
                 }
-                disabled={loading}
+                disabled={loading || isMutating}
               />
               <span className="progress-max">/ {maxProgress}</span>
             </div>
@@ -365,7 +358,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
               onChange={handleRatingChange}
               onBlur={handleRatingBlur}
               placeholder="e.g., 9.2, 8.7, 7.5"
-              disabled={loading}
+              disabled={loading || isMutating}
               className="rating-decimal-input"
               inputMode="decimal"
               pattern="[0-9]*\.?[0-9]*"
@@ -383,18 +376,18 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Your thoughts about this..."
               rows={3}
-              disabled={loading}
+              disabled={loading || isMutating}
               maxLength={500}
             />
           </div>
 
           <div className="form-actions">
-            <button onClick={handleStatusUpdate} className="btn-save" disabled={loading}>
-              {loading ? "Saving..." : userItem ? "Update" : "Add to List"}
+            <button onClick={handleStatusUpdate} className="btn-save" disabled={loading || isMutating}>
+              {isMutating ? "Saving..." : userItem ? "Update" : "Add to List"}
             </button>
 
             {userItem && (
-              <button onClick={() => setIsEditing(false)} className="btn-cancel" disabled={loading}>
+              <button onClick={() => setIsEditing(false)} className="btn-cancel" disabled={loading || isMutating}>
                 Cancel
               </button>
             )}

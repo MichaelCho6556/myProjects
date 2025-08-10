@@ -499,7 +499,7 @@ button.btn-primary:disabled,
 /* ✅ PROFESSIONAL: Subtle loading indicators */
 .filter-bar.loading {
   position: relative;
-  overflow: hidden;
+  /* Removed overflow: hidden to prevent dropdown cutoff */
 }
 
 .filter-bar.loading::before {
@@ -1420,8 +1420,10 @@ input:focus-visible {
 }
 
 .filter-bar-container {
-  overflow: hidden;
+  overflow: visible; /* Changed from hidden to visible to allow dropdowns */
   transition: max-height 0.3s ease, opacity 0.3s ease;
+  position: relative;
+  z-index: 100; /* Ensure filter bar has proper stacking context */
 }
 
 .filter-bar-container.visible {
@@ -1432,6 +1434,7 @@ input:focus-visible {
 .filter-bar-container.hidden {
   max-height: 0;
   opacity: 0;
+  overflow: hidden; /* Only hide overflow when container is hidden */
 }
 
 /* ✅ UPDATED: Filter elements standardized to 40px height */
