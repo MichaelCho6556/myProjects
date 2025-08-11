@@ -3338,6 +3338,7 @@ class SupabaseTableBuilder:
         self._order = None
         self._range = None
         self._count_option = None  # Can be 'exact', 'planned', or 'estimated'
+        self._limit = None  # Limit number of rows returned
     
     def select(self, columns: str = '*') -> 'SupabaseTableBuilder':
         """Specify columns to select."""
@@ -3456,6 +3457,19 @@ class SupabaseTableBuilder:
         self._count_option = option
         return self
     
+    def limit(self, count: int) -> 'SupabaseTableBuilder':
+        """
+        Limit the number of rows returned.
+        
+        Args:
+            count: Maximum number of rows to return
+        
+        Returns:
+            Self for method chaining
+        """
+        self._limit = count
+        return self
+    
     def contains(self, field: str, values: list) -> 'SupabaseTableBuilder':
         """Add array contains filter."""
         # Format as JSON array for PostgREST
@@ -3514,8 +3528,10 @@ class SupabaseTableBuilder:
         if self._order:
             params['order'] = self._order
             
-        # Add single limit if specified
-        if self._single:
+        # Add limit if specified
+        if self._limit is not None:
+            params['limit'] = str(self._limit)
+        elif self._single:
             params['limit'] = '1'
         
         # Prepare headers
