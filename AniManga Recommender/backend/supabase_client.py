@@ -1320,7 +1320,7 @@ class SupabaseClient:
         
         # Pre-load ALL relation mappings once (major performance boost)
         if SupabaseClient._relations_cache is None:
-            print("🔗 Loading all relation mappings (first time only)...")
+            print("[INFO] Loading all relation mappings (first time only)...")
             all_relations = {
                 'item_genres': self._get_all_relations('item_genres'),
                 'item_themes': self._get_all_relations('item_themes'),
@@ -1332,7 +1332,7 @@ class SupabaseClient:
             total_relations = sum(len(relations) for relations in all_relations.values())
             print(f"Cached {total_relations} total relations")
         else:
-            print("📦 Using cached relation mappings")
+            print("[CACHE] Using cached relation mappings")
             all_relations = SupabaseClient._relations_cache
             total_relations = sum(len(relations) for relations in all_relations.values())
         
@@ -1371,7 +1371,7 @@ class SupabaseClient:
         offset = 0
         batch_size = 1000  # Supabase maximum per request
         
-        print(f"   📋 Loading {table_name} relations...")
+        print(f"   [->] Loading {table_name} relations...")
         
         while True:
             try:
@@ -1387,7 +1387,7 @@ class SupabaseClient:
                     break
                     
                 all_relations.extend(batch)
-                print(f"   📦 {table_name}: Loaded {len(batch)} relations (total: {len(all_relations)})")
+                print(f"   [BATCH] {table_name}: Loaded {len(batch)} relations (total: {len(all_relations)})")
                 offset += len(batch)  # Use actual batch length instead of batch_size
                 
                 # Continue if we got a full batch (there might be more)

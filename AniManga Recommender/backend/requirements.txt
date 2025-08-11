@@ -44,6 +44,9 @@ six==1.17.0
 cachetools==5.3.2
 redis==5.0.1
 
+# Approximate Nearest Neighbors for scalable recommendations
+annoy==1.17.3
+
 # System utilities
 colorama==0.4.6
 
