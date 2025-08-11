@@ -272,20 +272,55 @@ class RecommendationComputer:
                 
         return recommendations[:top_n]
         
-    def compute_all_recommendations(self, batch_size: int = 100):
+    def compute_all_recommendations(self, batch_size: int = 500):
         """Compute recommendations for all items and save to cache."""
         print(f"[{datetime.now()}] Computing recommendations for {len(self.df)} items...")
         
         total_items = len(self.df)
+        
+        # Pre-compute all similarities ONCE (massive optimization)
+        print(f"[{datetime.now()}] Pre-computing similarity matrix (this may take a few minutes)...")
+        start_time = time.time()
+        
+        # Compute all-vs-all similarities in one operation
+        similarity_matrix = cosine_similarity(self.tfidf_matrix)
+        
+        compute_time = time.time() - start_time
+        print(f"[{datetime.now()}] Similarity matrix computed in {compute_time:.2f} seconds")
+        print(f"[{datetime.now()}] Processing recommendations in batches...")
+        
         processed = 0
+        batch_start_time = time.time()
         
         for batch_start in range(0, total_items, batch_size):
             batch_end = min(batch_start + batch_size, total_items)
             batch_items = self.df.iloc[batch_start:batch_end]
             
             batch_data = []
-            for _, item in batch_items.iterrows():
-                recommendations = self.get_recommendations(item['uid'])
+            for idx, (_, item) in enumerate(batch_items.iterrows()):
+                item_idx = batch_start + idx
+                
+                # Get pre-computed similarities for this item
+                similarities = similarity_matrix[item_idx]
+                
+                # Get top N similar items (excluding itself)
+                top_n = 20
+                similar_indices = similarities.argsort()[-top_n-1:-1][::-1]
+                
+                recommendations = []
+                for sim_idx in similar_indices:
+                    if sim_idx != item_idx:  # Skip the item itself
+                        rec_item = self.df.iloc[sim_idx]
+                        recommendations.append({
+                            'uid': rec_item['uid'],
+                            'title': rec_item['title'],
+                            'media_type': rec_item.get('media_type', 'unknown'),
+                            'score': float(rec_item.get('score', 0)),
+                            'similarity': float(similarities[sim_idx]),
+                            'genres': rec_item.get('genres', []),
+                            'image_url': rec_item.get('image_url', '')
+                        })
+                recommendations = recommendations[:top_n]
                 
                 if recommendations:
                     batch_data.append({
@@ -303,7 +338,16 @@ class RecommendationComputer:
                 self.store_recommendations_batch(batch_data)
                 
             processed += len(batch_items)
-            print(f"Processed {processed}/{total_items} items ({processed*100//total_items}%)")
+            
+            # Calculate and display progress with time estimates
+            elapsed = time.time() - batch_start_time
+            rate = processed / elapsed if elapsed > 0 else 0
+            remaining = total_items - processed
+            eta_seconds = remaining / rate if rate > 0 else 0
+            eta_minutes = eta_seconds / 60
+            
+            print(f"Processed {processed}/{total_items} items ({processed*100//total_items}%) - "
+                  f"Rate: {rate:.1f} items/sec - ETA: {eta_minutes:.1f} min")
             
     def store_recommendations_batch(self, batch_data: List[Dict]):
         """Store a batch of recommendations in the cache table."""
@@ -396,8 +440,13 @@ class RecommendationComputer:
         self.compute_distinct_values()
         
         elapsed_time = time.time() - start_time
+        elapsed_minutes = elapsed_time / 60
+        
         print("=" * 60)
-        print(f"COMPLETED in {elapsed_time:.2f} seconds")
+        print(f"COMPLETED SUCCESSFULLY")
+        print(f"Total time: {elapsed_minutes:.1f} minutes ({elapsed_time:.1f} seconds)")
+        print(f"Items processed: {len(self.df)}")
+        print(f"Average rate: {len(self.df)/elapsed_time:.1f} items/second")
         print("=" * 60)
         
         return 0
