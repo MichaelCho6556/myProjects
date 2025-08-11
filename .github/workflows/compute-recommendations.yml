@@ -1,50 +1,49 @@
-name: Compute Recommendations
+  name: Generate TF-IDF Artifacts
 
-on:
-  schedule:
-    # Run daily at 2 AM UTC
-    - cron: '0 2 * * *'
-  workflow_dispatch:  # Allow manual triggering
+  on:
+    schedule:
+      # Run weekly on Sunday at 2 AM UTC
+      - cron: '0 2 * * 0'
+    workflow_dispatch:  # Allow manual triggering
 
-jobs:
-  compute:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        
-    - name: Cache pip packages
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('AniManga Recommender/backend/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-          
-    - name: Install dependencies
-      run: |
-        cd "AniManga Recommender/backend"
-        pip install -r requirements.txt
-        
-    - name: Run recommendation computation
-      env:
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        REDIS_URL: ${{ secrets.REDIS_URL }}
-        PYTHONPATH: ${{ github.workspace }}/AniManga Recommender/backend
-      run: |
-        cd "AniManga Recommender/backend"
-        python scripts/compute_recommendations.py
-        
-    - name: Notify on failure
-      if: failure()
-      run: |
-        echo "Recommendation computation failed!"
-        # You could add Slack/Discord notification here
+  jobs:
+    generate-artifacts:
+      runs-on: ubuntu-latest
+      timeout-minutes: 15
+
+      steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Generate TF-IDF artifacts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          PYTHONPATH: ${{ github.workspace }}/backend
+        run: |
+          cd backend
+          python scripts/compute_tfidf_artifacts.py
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "TF-IDF artifact generation failed!"
