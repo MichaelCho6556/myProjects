@@ -55,6 +55,7 @@ from utils.contentAnalysis import analyze_content, should_auto_moderate, should_
 # Track application start time for uptime monitoring
 app_start_time = time.time()
 from utils.batchOperations import BatchOperationsManager
+from recommendation_engine import OnDemandRecommendationEngine
 from utils.cache_helpers import (
     get_user_stats_from_cache,
     set_user_stats_in_cache,
@@ -675,6 +676,7 @@ tfidf_matrix_global: Optional[Any] = None
 uid_to_idx: Optional[pd.Series] = None
 supabase_client: Optional[SupabaseClient] = None
 auth_client: Optional[SupabaseAuthClient] = None
+recommendation_engine: Optional[OnDemandRecommendationEngine] = None
 
 # Initialize clients
 try:
@@ -683,9 +685,28 @@ try:
         supabase_client = get_supabase_client()
     if 'auth_client' not in globals() or auth_client is None:
         auth_client = get_auth_client()
+    
+    # Initialize recommendation engine with Redis support if available
+    if 'recommendation_engine' not in globals() or recommendation_engine is None:
+        try:
+            from utils.redis_cache import get_redis_cache
+            redis_cache = get_redis_cache()
+        except:
+            redis_cache = None
+        
+        if supabase_client:
+            recommendation_engine = OnDemandRecommendationEngine(supabase_client, redis_cache)
+            # Initialize will load TF-IDF artifacts
+            if recommendation_engine.initialize():
+                app.logger.info("Recommendation engine initialized successfully")
+            else:
+                app.logger.warning("Recommendation engine initialized but TF-IDF artifacts not loaded")
+        else:
+            recommendation_engine = None
 except Exception as e:
     supabase_client = None
     auth_client = None
+    recommendation_engine = None
 
 # Simple in-memory cache for media types
 _media_type_cache: Dict[str, Any] = {}
@@ -2202,9 +2223,9 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
     """
     Generate content-based related items for a specific anime or manga item.
     
-    This endpoint uses pre-computed recommendations from cache to avoid memory
-    overhead. Recommendations are computed offline and stored in database.
-    The related items engine provides content-similar suggestions for discovery.
+    This endpoint now uses on-demand computation with TF-IDF similarity to provide
+    real-time recommendations. It computes recommendations when requested and caches
+    results for performance, eliminating memory-intensive pre-computation.
     
     Args:
         item_uid (str): Unique identifier of the source item for related items
@@ -2220,7 +2241,7 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
             
     Related Items Algorithm:
         1. Retrieves TF-IDF vector for source item
-        2. Calculates cosine similarity with all other items
+        2. Calculates cosine similarity with all other items (on-demand)
         3. Ranks items by similarity score (excluding source item)
         4. Returns top N most similar items with essential metadata
         
@@ -2251,17 +2272,15 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
         }
         
     Performance Notes:
-        - Uses pre-computed TF-IDF matrix for fast similarity calculation
-        - Related items generation typically completes in <100ms
-        - Results are deterministic based on content similarity
+        - Uses on-demand computation with cached TF-IDF matrix
+        - First request computes in ~100-200ms, cached results return instantly
+        - Results cached for 24 hours in Redis/database
         
     Note:
-        Requires loaded dataset and TF-IDF matrix. Field names are mapped
-        for frontend compatibility. Image URLs fallback to main_picture if needed.
-        API endpoint and response field names maintained for backward compatibility.
+        Requires loaded TF-IDF artifacts. Field names are mapped for frontend
+        compatibility. Falls back to genre-based recommendations if engine unavailable.
     """
-    # Try to get cached recommendations from database
-    global supabase_client
+    global supabase_client, recommendation_engine
     if supabase_client is None:
         supabase_client = get_supabase_client()
     
@@ -2269,7 +2288,36 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
         num_related = request.args.get('n', 10, type=int)
         num_related = min(num_related, 50)  # Cap at 50 for performance
         
-        # Query the cached recommendations
+        # Try on-demand recommendation engine first
+        if recommendation_engine and recommendation_engine.tfidf_matrix is not None:
+            recommendations = recommendation_engine.get_recommendations(item_uid, num_related)
+            
+            if recommendations:
+                # Get source item title
+                item_response = supabase_client.table('items').select('title').eq('uid', item_uid).execute()
+                source_title = item_response.data[0]['title'] if item_response.data else 'Unknown'
+                
+                # Map fields for frontend compatibility
+                mapped_recommendations = []
+                for rec in recommendations:
+                    mapped_rec = {
+                        'uid': rec.get('uid'),
+                        'title': rec.get('title'),
+                        'mediaType': rec.get('media_type', rec.get('mediaType')),
+                        'score': rec.get('score'),
+                        'genres': rec.get('genres', []),
+                        'synopsis': rec.get('synopsis'),
+                        'imageUrl': rec.get('image_url', rec.get('imageUrl', ''))
+                    }
+                    mapped_recommendations.append(mapped_rec)
+                
+                return jsonify({
+                    "source_item_uid": item_uid,
+                    "source_item_title": source_title,
+                    "recommendations": mapped_recommendations
+                })
+        
+        # Fallback to cached recommendations from database
         response = supabase_client.table('recommendations_cache').select('*').eq('item_uid', item_uid).execute()
         
         if response.data and len(response.data) > 0:
