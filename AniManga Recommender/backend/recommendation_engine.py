@@ -46,7 +46,6 @@ class OnDemandRecommendationEngine:
         self.tfidf_matrix = None
         self.vectorizer = None
         self.uid_to_idx = None
-        self.df_items = None
         
         # Cache keys
         self.TFIDF_MATRIX_KEY = "tfidf:matrix:v2"
@@ -115,8 +114,8 @@ class OnDemandRecommendationEngine:
                     self.vectorizer = data['vectorizer']
                     self.uid_to_idx = pd.Series(data['uid_mapping'])
                     
-                    # Load item metadata
-                    return self._load_item_metadata()
+                    # TF-IDF artifacts loaded successfully
+                    return True
                     
                 except Exception as e:
                     logger.error(f"Failed to load from {filepath}: {e}")
@@ -153,8 +152,8 @@ class OnDemandRecommendationEngine:
             uid_mapping = json.loads(uid_mapping_data)
             self.uid_to_idx = pd.Series(uid_mapping)
             
-            # Load item metadata
-            return self._load_item_metadata()
+            # TF-IDF artifacts loaded successfully
+            return True
             
         except Exception as e:
             logger.error(f"Failed to load from Redis: {e}")
@@ -191,33 +190,11 @@ class OnDemandRecommendationEngine:
             else:
                 return False
             
-            # Load item metadata
-            return self._load_item_metadata()
-            
-        except Exception as e:
-            logger.error(f"Failed to load from database: {e}")
-            return False
-    
-    def _load_item_metadata(self) -> bool:
-        """Load item metadata for recommendations."""
-        try:
-            # Use the client's built-in pagination method to get ALL items
-            logger.info("Loading all items metadata...")
-            all_items = self.client.get_all_items_paginated(page_size=1000)
-            
-            if not all_items:
-                logger.error("No items found in database")
-                return False
-            
-            # Convert to DataFrame for fast lookups
-            self.df_items = pd.DataFrame(all_items)
-            self.df_items.set_index('uid', inplace=True)
-            
-            logger.info(f"Loaded metadata for {len(self.df_items)} items")
+            # TF-IDF artifacts loaded successfully
             return True
             
         except Exception as e:
-            logger.error(f"Failed to load item metadata: {e}")
+            logger.error(f"Failed to load from database: {e}")
             return False
     
     def get_recommendations(self, item_uid: str, num_recommendations: int = None) -> Optional[List[Dict]]:
@@ -273,8 +250,8 @@ class OnDemandRecommendationEngine:
             # Get top N+1 indices (including the item itself)
             top_indices = similarities.argsort()[-num_recommendations-1:][::-1]
             
-            # Build recommendations list
-            recommendations = []
+            # Collect UIDs of recommended items (excluding source item)
+            recommended_uids = []
             for idx in top_indices:
                 # Skip the item itself
                 if idx == item_idx:
@@ -282,27 +259,56 @@ class OnDemandRecommendationEngine:
                 
                 # Get item UID from index
                 rec_uid = self.uid_to_idx[self.uid_to_idx == idx].index[0]
+                recommended_uids.append((rec_uid, float(similarities[idx])))
                 
-                # Get item metadata
-                if rec_uid in self.df_items.index:
-                    item_data = self.df_items.loc[rec_uid]
-                    
-                    rec_dict = {
-                        'uid': rec_uid,
-                        'title': item_data.get('title', 'Unknown'),
-                        'media_type': item_data.get('media_type', 'unknown'),
-                        'score': float(item_data.get('score', 0)),
-                        'similarity': float(similarities[idx]),
-                        'synopsis': item_data.get('synopsis', ''),
-                        'image_url': item_data.get('image_url', '')
-                    }
-                    recommendations.append(rec_dict)
-                
-                if len(recommendations) >= num_recommendations:
+                if len(recommended_uids) >= num_recommendations:
                     break
+            
+            # Fetch item metadata from database for only the recommended items
+            if recommended_uids:
+                uids_to_fetch = [uid for uid, _ in recommended_uids]
+                
+                # Query database for these specific items
+                # Note: database has media_type_id, not media_type
+                response = self.client.table('items').select(
+                    'uid,title,media_type_id,score,synopsis,image_url,id'
+                ).in_('uid', uids_to_fetch).execute()
+                
+                # Create a lookup dictionary
+                items_dict = {item['uid']: item for item in response.data}
+                
+                # Build recommendations list with similarity scores
+                recommendations = []
+                media_type_map = {1: 'anime', 2: 'manga'}
+                
+                for uid, similarity in recommended_uids:
+                    if uid in items_dict:
+                        item_data = items_dict[uid]
+                        
+                        # Map media_type_id to media_type string
+                        media_type_id = item_data.get('media_type_id')
+                        media_type = media_type_map.get(media_type_id, 'unknown')
+                        
+                        rec_dict = {
+                            'uid': uid,
+                            'title': item_data.get('title', 'Unknown'),
+                            'media_type': media_type,
+                            'score': float(item_data.get('score', 0) if item_data.get('score') is not None else 0),
+                            'similarity': similarity,
+                            'synopsis': item_data.get('synopsis', ''),
+                            'image_url': item_data.get('image_url', '')
+                        }
+                        logger.debug(f"Added recommendation: {uid} with similarity: {similarity}, type: {media_type}")
+                        recommendations.append(rec_dict)
+            else:
+                recommendations = []
             
             computation_time = time.time() - start_time
             logger.info(f"Computed {len(recommendations)} recommendations for {item_uid} in {computation_time:.3f}s")
+            
+            # Log the first recommendation to verify similarity is included
+            if recommendations:
+                logger.info(f"First recommendation: {recommendations[0].get('title')} with similarity: {recommendations[0].get('similarity')}")
             
             # Cache the results
             if self.redis and recommendations:

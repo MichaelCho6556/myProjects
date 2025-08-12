@@ -2290,6 +2290,7 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
         
         # Try on-demand recommendation engine first
         if recommendation_engine and recommendation_engine.tfidf_matrix is not None:
+            logger.info(f"Computing recommendations for {item_uid} using recommendation engine")
             recommendations = recommendation_engine.get_recommendations(item_uid, num_related)
             
             if recommendations:
@@ -2303,11 +2304,12 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
                     mapped_rec = {
                         'uid': rec.get('uid'),
                         'title': rec.get('title'),
-                        'mediaType': rec.get('media_type', rec.get('mediaType')),
+                        'media_type': rec.get('media_type', rec.get('mediaType')),
                         'score': rec.get('score'),
+                        'similarity': rec.get('similarity'),  # Include similarity score
                         'genres': rec.get('genres', []),
                         'synopsis': rec.get('synopsis'),
-                        'imageUrl': rec.get('image_url', rec.get('imageUrl', ''))
+                        'image_url': rec.get('image_url', rec.get('imageUrl', ''))
                     }
                     mapped_recommendations.append(mapped_rec)
                 
@@ -2318,6 +2320,7 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
                 })
         
         # Fallback to cached recommendations from database
+        logger.info(f"Falling back to database cache for {item_uid}")
         response = supabase_client.table('recommendations_cache').select('*').eq('item_uid', item_uid).execute()
         
         if response.data and len(response.data) > 0:
@@ -2334,11 +2337,12 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
                 mapped_rec = {
                     'uid': rec.get('uid'),
                     'title': rec.get('title'),
-                    'mediaType': rec.get('media_type', rec.get('mediaType')),
+                    'media_type': rec.get('media_type', rec.get('mediaType')),
                     'score': rec.get('score'),
+                    'similarity': rec.get('similarity'),  # Include similarity score
                     'genres': rec.get('genres', []),
                     'synopsis': rec.get('synopsis'),
-                    'imageUrl': rec.get('image_url', rec.get('imageUrl', ''))
+                    'image_url': rec.get('image_url', rec.get('imageUrl', ''))
                 }
                 mapped_recommendations.append(mapped_rec)
             
@@ -2387,11 +2391,11 @@ def get_recommendations(item_uid: str) -> Union[Response, Tuple[Response, int]]:
                     mapped_rec = {
                         'uid': item.get('uid'),
                         'title': item.get('title'),
-                        'mediaType': item.get('media_type'),
+                        'media_type': item.get('media_type'),
                         'score': item.get('score'),
                         'genres': item.get('genres', []),
                         'synopsis': item.get('synopsis'),
-                        'imageUrl': item.get('image_url', '')
+                        'image_url': item.get('image_url', '')
                     }
                     mapped_recommendations.append(mapped_rec)
                 
