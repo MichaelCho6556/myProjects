@@ -59,6 +59,7 @@ export interface AnimeItem {
   url?: string;
   related?: Record<string, string[]>;
   external_links?: Array<{ name: string; url: string }>;
+  similarity?: number;  // Similarity score for recommended items (0-1)
 }
 
 export interface UserActivity {

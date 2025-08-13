@@ -2009,8 +2009,8 @@ def get_distinct_values() -> Union[Response, Tuple[Response, int]]:
         if response.data and len(response.data) > 0:
             cached_data = response.data[0]
             
-            # Parse JSON fields
-            return jsonify({
+            # Parse JSON fields and check if any are empty
+            result = {
                 "genres": json.loads(cached_data.get('genres', '[]')),
                 "themes": json.loads(cached_data.get('themes', '[]')),
                 "demographics": json.loads(cached_data.get('demographics', '[]')),
@@ -2018,17 +2018,118 @@ def get_distinct_values() -> Union[Response, Tuple[Response, int]]:
                 "authors": json.loads(cached_data.get('authors', '[]')),
                 "statuses": json.loads(cached_data.get('statuses', '[]')),
                 "media_types": json.loads(cached_data.get('media_types', '[]'))
-            })
+            }
+            
+            # Check if cache is properly populated (at least genres should have data)
+            if result['genres'] and result['themes'] and result['demographics']:
+                return jsonify(result)
+            else:
+                app.logger.warning("Cache exists but is incomplete, attempting fallback")
         else:
-            # Fallback: return empty arrays if cache not populated
-            app.logger.warning("Distinct values cache not populated")
-            return jsonify({
-                "genres": [], "themes": [], "demographics": [],
-                "studios": [], "authors": [], "statuses": [], "media_types": []
-            })
+            app.logger.warning("Distinct values cache not populated, attempting fallback")
+        
+        # FALLBACK: Query relation tables directly if cache is empty or incomplete
+        # This ensures the API works even if cache population hasn't run yet
+        app.logger.info("Using fallback: querying relation tables directly")
+        
+        fallback_result = {
+            "genres": [],
+            "themes": [],
+            "demographics": [],
+            "studios": [],
+            "authors": [],
+            "statuses": [],
+            "media_types": []
+        }
+        
+        # Helper function to fetch all values from a table with pagination
+        def fetch_all_values(table_name: str, field_name: str = 'name', limit: int = 1000) -> List[str]:
+            """Fetch distinct values from a table with pagination."""
+            values = []
+            offset = 0
+            
+            try:
+                while offset < 30000:  # Safety limit to prevent infinite loops
+                    query = supabase_client.table(table_name).select(field_name)
+                    query = query.range(offset, offset + limit - 1)
+                    response = query.execute()
+                    
+                    if not response.data:
+                        break
+                    
+                    for item in response.data:
+                        value = item.get(field_name)
+                        if value and str(value).strip():
+                            values.append(str(value).strip())
+                    
+                    if len(response.data) < limit:
+                        break
+                    
+                    offset += limit
+                
+                return sorted(list(set(values)))
+            except Exception as e:
+                app.logger.error(f"Error fetching from {table_name}: {e}")
+                return []
+        
+        # Fetch from each table
+        try:
+            fallback_result['genres'] = fetch_all_values('genres', 'name')
+            fallback_result['themes'] = fetch_all_values('themes', 'name')
+            fallback_result['demographics'] = fetch_all_values('demographics', 'name')
+            fallback_result['studios'] = fetch_all_values('studios', 'name', limit=500)  # Smaller batch for large table
+            fallback_result['authors'] = fetch_all_values('authors', 'name', limit=500)  # Smaller batch for large table
+            
+            # For media types (small table)
+            media_response = supabase_client.table('media_types').select('name').execute()
+            if media_response.data:
+                fallback_result['media_types'] = sorted([mt['name'] for mt in media_response.data if mt.get('name')])
+            
+            # For statuses, we need to query items table (this is expensive but necessary)
+            # Limit to first 5000 items to get representative statuses
+            status_response = supabase_client.table('items').select('status').range(0, 4999).execute()
+            if status_response.data:
+                statuses = set()
+                for item in status_response.data:
+                    if item.get('status'):
+                        statuses.add(item['status'])
+                fallback_result['statuses'] = sorted(list(statuses))
+            
+            # If we got data, attempt to update the cache for next time
+            if any(fallback_result[key] for key in ['genres', 'themes', 'demographics']):
+                try:
+                    cache_entry = {
+                        'id': 1,
+                        'genres': json.dumps(fallback_result['genres']),
+                        'themes': json.dumps(fallback_result['themes']),
+                        'demographics': json.dumps(fallback_result['demographics']),
+                        'studios': json.dumps(fallback_result['studios']),
+                        'authors': json.dumps(fallback_result['authors']),
+                        'statuses': json.dumps(fallback_result['statuses']),
+                        'media_types': json.dumps(fallback_result['media_types']),
+                        'updated_at': datetime.utcnow().isoformat()
+                    }
+                    
+                    # Try to update cache
+                    existing = supabase_client.table('distinct_values_cache').select('id').eq('id', 1).execute()
+                    if existing.data:
+                        supabase_client.table('distinct_values_cache').update(cache_entry).eq('id', 1).execute()
+                    else:
+                        supabase_client.table('distinct_values_cache').insert(cache_entry).execute()
+                    
+                    app.logger.info("Cache updated from fallback query")
+                except Exception as cache_error:
+                    app.logger.error(f"Failed to update cache: {cache_error}")
+            
+            return jsonify(fallback_result)
+            
+        except Exception as fallback_error:
+            app.logger.error(f"Fallback query failed: {fallback_error}")
+            return jsonify(fallback_result)
+        
     except Exception as e:
         app.logger.error(f"Error fetching distinct values: {e}")
-        # Fallback to empty response
+        # Final fallback to empty response
         return jsonify({
             "genres": [], "themes": [], "demographics": [],
             "studios": [], "authors": [], "statuses": [], "media_types": []

@@ -263,9 +263,19 @@ const ItemDetailPage: React.FC = () => {
           relatedResponse.recommendations &&
           Array.isArray(relatedResponse.recommendations)
         ) {
-          setRelated(relatedResponse.recommendations); // Store as 'related' items for frontend
+          // Ensure similarity scores are preserved from the API response
+          const recommendationsWithSimilarity = relatedResponse.recommendations.map((rec: any) => ({
+            ...rec,
+            similarity: rec.similarity || 0  // Ensure similarity field exists
+          }));
+          setRelated(recommendationsWithSimilarity);
         } else if (relatedResponse && Array.isArray(relatedResponse)) {
-          setRelated(relatedResponse); // Handle alternative response format
+          // Handle alternative response format
+          const recommendationsWithSimilarity = relatedResponse.map((rec: any) => ({
+            ...rec,
+            similarity: rec.similarity || 0  // Ensure similarity field exists
+          }));
+          setRelated(recommendationsWithSimilarity);
         } else {
           console.warn("Unexpected related items response format:", relatedResponse);
           setRelated([]);
@@ -748,18 +758,36 @@ const ItemDetailPage: React.FC = () => {
         )}
 
         {/* Related Items Section */}
-        {related.length > 0 && (
+        {related.length > 0 ? (
           <div className="related-section">
             <h3>
               Related{" "}
               {item?.media_type === "anime" ? "Anime" : item?.media_type === "manga" ? "Manga" : "Items"}
             </h3>
+            {/* Show warning if all recommendations have low similarity */}
+            {related.every(item => item.similarity && item.similarity < 0.35) && (
+              <div className="low-similarity-warning">
+                <p>Note: This item has unique characteristics that make finding similar content challenging. The suggestions below share some common elements but may differ significantly in style or theme.</p>
+              </div>
+            )}
             <div className="related-list item-list">
               {related.map((relatedItem) => (
                 <ItemCard key={relatedItem.uid} item={relatedItem} />
               ))}
             </div>
           </div>
+        ) : (
+          item && !loading && (
+            <div className="related-section">
+              <h3>
+                Related{" "}
+                {item?.media_type === "anime" ? "Anime" : item?.media_type === "manga" ? "Manga" : "Items"}
+              </h3>
+              <div className="no-recommendations-message">
+                <p>No strong recommendations found for this unique item. Try exploring items with similar genres or themes using the filter options.</p>
+              </div>
+            </div>
+          )
         )}
       </div>
     </main>

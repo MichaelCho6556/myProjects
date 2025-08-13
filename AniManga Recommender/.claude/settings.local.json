@@ -42,18 +42,19 @@
       "Bash(.run_tests.bat single tests_unit/test_cross_component_integration.py)",
       "Bash(cmd /c:*)",
       "Bash(set TESTING=true)",
-      "mcp__playwright__browser_navigate"
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_press_key",
+      "Bash(venv/Scripts/python.exe scripts/test_memory_optimization.py:*)"
     ],
     "deny": []
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "zen",
-    "context7"
+    "context7",
+    "playwright"
   ],
-  "statusLine": {
-    "type": "command",
-    "command": "C:\\Users\\chomi\\AppData\\Roaming\\npm\\npx.cmd -y ccusage statusline",
-    "padding": 0
-  }
 }

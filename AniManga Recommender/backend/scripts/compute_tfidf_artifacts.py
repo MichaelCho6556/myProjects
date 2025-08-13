@@ -22,6 +22,7 @@ import hashlib
 from datetime import datetime
 import pandas as pd
 import numpy as np
+import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from dotenv import load_dotenv
 
@@ -71,8 +72,8 @@ class TFIDFArtifactGenerator:
         count_response = self.client.table('items').select('uid').limit(1000).execute()
         item_count = len(count_response.data) if count_response.data else 0
         
-        # Create hash
-        hash_input = f"v2:{latest_update}:{item_count}"
+        # Create hash - v6 to force regeneration with title features and new weights
+        hash_input = f"v6:{latest_update}:{item_count}"
         return hashlib.md5(hash_input.encode()).hexdigest()
     
     def check_if_update_needed(self) -> bool:
@@ -103,8 +104,9 @@ class TFIDFArtifactGenerator:
         """Load all items from database."""
         print(f"[{datetime.now()}] Loading data from Supabase...")
         
-        # Load all items with lazy loading - much faster!
-        self.df = self.client.items_to_dataframe(include_relations=True, lazy_load=True)
+        # Load all items with full relationship data (genres, themes, demographics)
+        # Note: lazy_load must be False to properly load relationship data
+        self.df = self.client.items_to_dataframe(include_relations=True, lazy_load=False)
         
         if self.df is None or len(self.df) == 0:
             print("ERROR: No data loaded from Supabase")
@@ -113,38 +115,160 @@ class TFIDFArtifactGenerator:
         print(f"Loaded {len(self.df)} items")
         return True
     
+    def normalize_title(self, title):
+        """Normalize title for franchise detection."""
+        if not title:
+            return ""
+        
+        # Convert to lowercase
+        title = title.lower()
+        
+        # Remove common suffixes and indicators
+        # Remove season indicators
+        title = re.sub(r'\s+(season|s)\s*\d+', '', title)
+        title = re.sub(r'\s+\d+(st|nd|rd|th)\s+season', '', title)
+        
+        # Remove episode/movie indicators
+        title = re.sub(r':\s*episode\s+of\s+\w+', '', title)
+        title = re.sub(r'\s*\(tv\)', '', title)
+        title = re.sub(r'\s*\(ova\)', '', title)
+        title = re.sub(r'\s*\(ona\)', '', title)
+        title = re.sub(r'\s*\(movie\)', '', title)
+        title = re.sub(r'\s+movie\s*\d*$', '', title)
+        title = re.sub(r'\s+film\s*\d*$', '', title)
+        
+        # Remove year indicators
+        title = re.sub(r'\s*\(\d{4}\)', '', title)
+        title = re.sub(r'\s+\d{4}$', '', title)
+        
+        # Remove special characters but keep spaces
+        title = re.sub(r'[^a-z0-9\s]', ' ', title)
+        
+        # Normalize whitespace
+        title = ' '.join(title.split())
+        
+        return title.strip()
+    
+    def extract_title_features(self, title):
+        """Extract features from title for similarity matching."""
+        features = []
+        
+        if not title:
+            return features
+        
+        # Normalize the title
+        normalized = self.normalize_title(title)
+        
+        if normalized:
+            # Add the full normalized title
+            features.append(f"title_{normalized.replace(' ', '_')}")
+            
+            # Add individual words from title (for partial matches)
+            words = normalized.split()
+            for word in words:
+                if len(word) > 2:  # Skip very short words
+                    features.append(f"titleword_{word}")
+            
+            # Add bigrams for better phrase matching
+            for i in range(len(words) - 1):
+                bigram = f"{words[i]}_{words[i+1]}"
+                features.append(f"titlebigram_{bigram}")
+            
+            # Special handling for franchise detection
+            # If title has a colon, the part before colon is likely the franchise
+            if ':' in title:
+                franchise_part = title.split(':')[0].strip()
+                franchise_normalized = self.normalize_title(franchise_part)
+                if franchise_normalized:
+                    features.append(f"franchise_{franchise_normalized.replace(' ', '_')}")
+            
+            # Also check for common patterns like "Title Film" or "Title Movie"
+            # to extract the base franchise name
+            title_lower = title.lower()
+            for pattern in ['film:', 'movie:', 'ova:', 'special:', 'season', 'arc']:
+                if pattern in title_lower:
+                    # Extract the part before these keywords as franchise
+                    parts = title_lower.split(pattern)
+                    if parts[0].strip():
+                        franchise_normalized = self.normalize_title(parts[0])
+                        if franchise_normalized:
+                            features.append(f"franchise_{franchise_normalized.replace(' ', '_')}")
+                    break
+        
+        return features
+    
     def prepare_features(self):
         """Prepare text features for TF-IDF."""
         print(f"[{datetime.now()}] Preparing features...")
+        
+        # Filter out items with very short or missing synopses
+        MIN_SYNOPSIS_LENGTH = 10  # Lowered to 10 chars to include more items
+        
+        print(f"Original dataset size: {len(self.df)} items")
+        
+        # Mark items with insufficient synopsis
+        valid_synopsis = []
+        for _, row in self.df.iterrows():
+            synopsis = row.get('synopsis')
+            if synopsis and pd.notna(synopsis) and len(str(synopsis).strip()) >= MIN_SYNOPSIS_LENGTH:
+                # Also filter out generic music video descriptions
+                synopsis_str = str(synopsis).lower()
+                if not synopsis_str.startswith(("music video for", "promotional video", "music clip")):
+                    valid_synopsis.append(True)
+                else:
+                    valid_synopsis.append(False)
+            else:
+                valid_synopsis.append(False)
+        
+        self.df['has_valid_synopsis'] = valid_synopsis
+        
+        # Count filtered items
+        filtered_count = sum(valid_synopsis)
+        print(f"Items with valid synopsis (>={MIN_SYNOPSIS_LENGTH} chars, non-generic): {filtered_count}")
+        print(f"Items filtered out: {len(self.df) - filtered_count}")
         
         text_features = []
         for _, row in self.df.iterrows():
             features = []
             
-            # Add synopsis
-            synopsis = row.get('synopsis')
-            if synopsis is not None and pd.notna(synopsis):
-                features.append(str(synopsis))
+            # Add title features (heavily weighted - 40% target)
+            title = row.get('title')
+            if title:
+                title_features = self.extract_title_features(title)
+                # Repeat 4 times for 40% weight
+                for _ in range(4):
+                    features.extend(title_features)
             
-            # Add genres
+            # Add synopsis (20% weight target)
+            if row.get('has_valid_synopsis'):
+                synopsis = row.get('synopsis')
+                if synopsis is not None and pd.notna(synopsis):
+                    # Repeat 2 times for 20% weight
+                    for _ in range(2):
+                        features.append(str(synopsis))
+            
+            # Add genres (20% weight target)
             genres = row.get('genres')
             if genres is not None:
                 if hasattr(genres, 'tolist'):
                     genres = genres.tolist()
                 if isinstance(genres, (list, np.ndarray)):
                     genres_list = [g for g in genres if g is not None and pd.notna(g)]
-                    features.extend([f"genre_{g}" for g in genres_list])
+                    # Repeat genres 2 times for 20% weight
+                    for _ in range(2):
+                        features.extend([f"genre_{g}" for g in genres_list])
             
-            # Add themes
+            # Add themes (10% weight target)
             themes = row.get('themes')
             if themes is not None:
                 if hasattr(themes, 'tolist'):
                     themes = themes.tolist()
                 if isinstance(themes, (list, np.ndarray)):
                     themes_list = [t for t in themes if t is not None and pd.notna(t)]
+                    # Only 1x for 10% weight
                     features.extend([f"theme_{t}" for t in themes_list])
             
-            # Add demographics
+            # Add demographics (5% weight)
             demographics = row.get('demographics')
             if demographics is not None:
                 if hasattr(demographics, 'tolist'):
@@ -153,10 +277,19 @@ class TFIDFArtifactGenerator:
                     demographics_list = [d for d in demographics if d is not None and pd.notna(d)]
                     features.extend([f"demographic_{d}" for d in demographics_list])
             
-            # Add media type
-            media_type = row.get('media_type')
-            if media_type is not None and pd.notna(media_type):
-                features.append(f"type_{media_type}")
+            # Note: Removed media type as a distinguishing feature to avoid penalizing
+            # anime/manga adaptations of the same work
+            
+            # Add popularity indicator (helps prefer popular items)
+            popularity = row.get('popularity', 0)
+            if popularity and popularity > 0:
+                # Lower popularity number = more popular
+                if popularity < 1000:
+                    features.append("popularity_very_high")
+                elif popularity < 5000:
+                    features.append("popularity_high")
+                elif popularity < 10000:
+                    features.append("popularity_medium")
             
             text_features.append(' '.join(features))
         
@@ -166,11 +299,11 @@ class TFIDFArtifactGenerator:
         """Compute TF-IDF matrix."""
         print(f"[{datetime.now()}] Computing TF-IDF matrix...")
         
-        # Use optimized parameters for memory efficiency
+        # Use optimized parameters for better discrimination while maintaining efficiency
         self.vectorizer = TfidfVectorizer(
             stop_words='english',
-            max_features=3000,  # Limit features for memory
-            min_df=2,           # Ignore very rare terms
+            max_features=5000,  # Increased for better feature discrimination
+            min_df=1,           # Allow rarer terms to capture unique content
             max_df=0.95         # Ignore very common terms
         )
         

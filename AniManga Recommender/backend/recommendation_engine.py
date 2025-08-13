@@ -17,12 +17,14 @@ import pickle
 import zlib
 import time
 from typing import Dict, List, Optional, Any, Tuple
+from functools import lru_cache
 import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from datetime import datetime
 import logging
+from hybrid_similarity import HybridSimilarityCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +48,26 @@ class OnDemandRecommendationEngine:
         self.tfidf_matrix = None
         self.vectorizer = None
         self.uid_to_idx = None
+        self.data_hash = None  # Hash of TF-IDF data for cache versioning
+        
+        # Hybrid similarity calculator
+        self.hybrid_calculator = None
+        
+        # Item metadata cache for hybrid similarity
+        self.items_df = None
         
         # Cache keys
         self.TFIDF_MATRIX_KEY = "tfidf:matrix:v2"
         self.TFIDF_VECTORIZER_KEY = "tfidf:vectorizer:v2"
         self.UID_MAPPING_KEY = "tfidf:uid_mapping:v2"
-        self.RECOMMENDATION_CACHE_PREFIX = "recs:"
+        self.RECOMMENDATION_CACHE_PREFIX = "recs:"  # Will be updated with version
+        self.ITEM_BUNDLE_CACHE_PREFIX = "item:bundle:"  # For caching item metadata + relations
         
         # Settings
         self.CACHE_TTL_HOURS = 24
         self.DEFAULT_NUM_RECOMMENDATIONS = 20
+        self.MIN_SIMILARITY_THRESHOLD = 0.10  # Lowered to 10% to ensure 10 recommendations
+        self.USE_HYBRID_SIMILARITY = True  # Flag to enable hybrid similarity
         
     def initialize(self) -> bool:
         """
@@ -89,6 +101,17 @@ class OnDemandRecommendationEngine:
         except Exception as e:
             logger.error(f"Failed to initialize recommendation engine: {e}")
             return False
+        finally:
+            # Initialize hybrid calculator if TF-IDF is loaded
+            if self.tfidf_matrix is not None and self.USE_HYBRID_SIMILARITY:
+                self.hybrid_calculator = HybridSimilarityCalculator(
+                    self.tfidf_matrix, 
+                    self.uid_to_idx
+                )
+                logger.info("Initialized hybrid similarity calculator")
+                
+                # Load item metadata for hybrid similarity
+                self._load_item_metadata()
     
     def _load_from_file(self) -> bool:
         """Load TF-IDF artifacts from local file."""
@@ -113,6 +136,12 @@ class OnDemandRecommendationEngine:
                     self.tfidf_matrix = data['tfidf_matrix']
                     self.vectorizer = data['vectorizer']
                     self.uid_to_idx = pd.Series(data['uid_mapping'])
+                    
+                    # Extract data hash for cache versioning
+                    self.data_hash = data.get('data_hash', 'default')
+                    # Update cache prefix with version
+                    self.RECOMMENDATION_CACHE_PREFIX = f"recs:v{self.data_hash[:8]}:"
+                    logger.info(f"Using cache prefix: {self.RECOMMENDATION_CACHE_PREFIX}")
                     
                     # TF-IDF artifacts loaded successfully
                     return True
@@ -152,6 +181,13 @@ class OnDemandRecommendationEngine:
             uid_mapping = json.loads(uid_mapping_data)
             self.uid_to_idx = pd.Series(uid_mapping)
             
+            # Try to get data hash for versioning
+            data_hash = redis.get("tfidf:data_hash:v2")
+            if data_hash:
+                self.data_hash = data_hash.decode('utf-8') if isinstance(data_hash, bytes) else data_hash
+                self.RECOMMENDATION_CACHE_PREFIX = f"recs:v{self.data_hash[:8]}:"
+                logger.info(f"Using cache prefix from Redis: {self.RECOMMENDATION_CACHE_PREFIX}")
+            
             # TF-IDF artifacts loaded successfully
             return True
             
@@ -190,12 +226,179 @@ class OnDemandRecommendationEngine:
             else:
                 return False
             
+            # Get data hash for versioning
+            if 'data_hash' in artifact and artifact['data_hash']:
+                self.data_hash = artifact['data_hash']
+                self.RECOMMENDATION_CACHE_PREFIX = f"recs:v{self.data_hash[:8]}:"
+                logger.info(f"Using cache prefix from database: {self.RECOMMENDATION_CACHE_PREFIX}")
+            
             # TF-IDF artifacts loaded successfully
             return True
             
         except Exception as e:
             logger.error(f"Failed to load from database: {e}")
             return False
+    
+    def _load_item_metadata(self):
+        """Load item metadata for hybrid similarity calculations."""
+        try:
+            logger.info("Item metadata loading configured for on-demand fetching")
+            # Pre-loading disabled for better memory usage and faster startup
+            # Relations will be fetched on-demand using Redis cache and LRU cache
+                
+        except Exception as e:
+            logger.error(f"Failed to configure item metadata loading: {e}")
+            self.items_df = None
+    
+
+    def _cache_item_bundle(self, item_uid: str, item_data: Dict):
+        """
+        Cache an item bundle (metadata + relations) in Redis.
+        
+        Args:
+            item_uid: UID of the item
+            item_data: Complete item data with relations
+        """
+        if not self.redis or not item_data:
+            return
+            
+        try:
+            cache_key = f"{self.ITEM_BUNDLE_CACHE_PREFIX}{item_uid}"
+            # Cache for 7 days (popular items stay cached longer)
+            self.redis.set(cache_key, item_data, ttl_hours=168)
+            logger.debug(f"Cached item bundle for {item_uid}")
+        except Exception as e:
+            logger.debug(f"Failed to cache item bundle for {item_uid}: {e}")
+
+    def _get_cached_item_bundles(self, item_uids: List[str]) -> Dict[str, Dict]:
+        """
+        Batch fetch item bundles from Redis cache.
+        
+        Args:
+            item_uids: List of item UIDs to fetch
+            
+        Returns:
+            Dictionary mapping UID to item data for cached items
+        """
+        if not self.redis or not item_uids:
+            return {}
+            
+        try:
+            # Create cache keys
+            cache_keys = [f"{self.ITEM_BUNDLE_CACHE_PREFIX}{uid}" for uid in item_uids]
+            
+            # Batch fetch from Redis
+            cached_data = self.redis.mget(cache_keys)
+            
+            # Map results back to UIDs
+            result = {}
+            for uid, key in zip(item_uids, cache_keys):
+                data = cached_data.get(key)
+                if data:
+                    result[uid] = data
+                    logger.debug(f"Cache hit for item bundle {uid}")
+                else:
+                    logger.debug(f"Cache miss for item bundle {uid}")
+            
+            logger.info(f"Redis cache: {len(result)}/{len(item_uids)} item bundles found")
+            return result
+            
+        except Exception as e:
+            logger.warning(f"Failed to fetch item bundles from Redis: {e}")
+            return {}
+
+    def _get_items_with_cache_optimization(self, item_uids: List[str]) -> List[Dict]:
+        """
+        Get items with Redis cache optimization.
+        
+        This method first checks Redis cache for item bundles, then fetches
+        missing items from database and caches them for future requests.
+        
+        Args:
+            item_uids: List of item UIDs to fetch
+            
+        Returns:
+            List of items with complete metadata and relations
+        """
+        if not item_uids:
+            return []
+            
+        # Step 1: Try to get cached items from Redis
+        cached_items = self._get_cached_item_bundles(item_uids)
+        
+        # Step 2: Identify items that need to be fetched from database
+        missing_uids = [uid for uid in item_uids if uid not in cached_items]
+        
+        # Step 3: Fetch missing items from database
+        fetched_items = []
+        if missing_uids:
+            logger.info(f"Fetching {len(missing_uids)} missing items from database")
+            fetched_items = self.client.get_items_with_relations_batch(missing_uids)
+            
+            # Cache newly fetched items
+            for item in fetched_items:
+                self._cache_item_bundle(item['uid'], item)
+        
+        # Step 4: Combine cached and fetched items
+        all_items = list(cached_items.values()) + fetched_items
+        
+        logger.info(f"Retrieved {len(all_items)} items ({len(cached_items)} from cache, {len(fetched_items)} from DB)")
+        return all_items
+    
+    @lru_cache(maxsize=1000)
+    def _get_item_relations_cached(self, item_id: int) -> tuple:
+        """
+        Fetch relations for an item with LRU caching.
+        Returns a tuple for hashability required by lru_cache.
+        
+        This method dramatically reduces API calls by caching relations
+        for recently accessed items. The cache holds up to 1000 items
+        (approximately 100KB of memory).
+        """
+        relations = self.client.get_item_relations(item_id)
+        # Convert to tuple of tuples for immutability/hashability
+        return (
+            tuple(relations.get('genres', [])),
+            tuple(relations.get('themes', [])),
+            tuple(relations.get('demographics', [])),
+            tuple(relations.get('studios', [])),
+            tuple(relations.get('authors', []))
+        )
+    
+    def _enrich_item_with_relations(self, item_dict: dict) -> dict:
+        """
+        Enrich an item dictionary with its relations fetched on-demand.
+        
+        This replaces the pre-loaded relations approach with on-demand
+        fetching, significantly reducing memory usage while maintaining
+        the same functionality.
+        """
+        # Get item ID for fetching relations
+        item_id = item_dict.get('id')
+        if not item_id:
+            return item_dict
+        
+        try:
+            # Fetch cached relations
+            genres, themes, demographics, studios, authors = self._get_item_relations_cached(item_id)
+            
+            # Add relations to item dict as lists (matching expected format)
+            item_dict['genres'] = list(genres)
+            item_dict['themes'] = list(themes)
+            item_dict['demographics'] = list(demographics)
+            item_dict['studios'] = list(studios)
+            item_dict['authors'] = list(authors)
+            
+        except Exception as e:
+            logger.debug(f"Could not fetch relations for item {item_id}: {e}")
+            # Add empty lists if fetching fails
+            item_dict['genres'] = []
+            item_dict['themes'] = []
+            item_dict['demographics'] = []
+            item_dict['studios'] = []
+            item_dict['authors'] = []
+        
+        return item_dict
     
     def get_recommendations(self, item_uid: str, num_recommendations: int = None) -> Optional[List[Dict]]:
         """
@@ -234,32 +437,110 @@ class OnDemandRecommendationEngine:
                 except Exception as e:
                     logger.error(f"Failed to parse cached recommendations: {e}")
         
-        # Compute recommendations on-demand
+        # Compute recommendations on-demand with timeout
         try:
             start_time = time.time()
+            MAX_COMPUTATION_TIME = 5.0  # 5 second timeout
             
             # Get item index
             item_idx = self.uid_to_idx[item_uid]
             
-            # Get item vector (1 x features)
-            item_vector = self.tfidf_matrix[item_idx:item_idx+1]
-            
-            # Compute similarities against all items (1 x N operation)
-            similarities = cosine_similarity(item_vector, self.tfidf_matrix).flatten()
+            # Choose similarity calculation method
+            if self.USE_HYBRID_SIMILARITY and self.hybrid_calculator:
+                # Use hybrid similarity
+                logger.info(f"Using hybrid similarity for {item_uid}")
+                
+                # Get source item metadata on-demand
+                source_item = self.client.get_item_by_uid(item_uid)
+                if source_item is None:
+                    logger.warning(f"Could not find metadata for {item_uid}, falling back to TF-IDF")
+                    # Fall back to TF-IDF only
+                    similarities = cosine_similarity(self.tfidf_matrix[item_idx:item_idx+1], self.tfidf_matrix).flatten()
+                else:
+                    # Enrich source item with relations (fetched on-demand with LRU cache)
+                    source_item = self._enrich_item_with_relations(source_item)
+                
+                if source_item:
+                    
+                    # Calculate hybrid similarities for all items
+                    similarities = np.zeros(len(self.uid_to_idx))
+                    
+                    # OPTIMIZATION: Two-stage filtering to reduce from 500 to 100 candidates
+                    tfidf_similarities = cosine_similarity(self.tfidf_matrix[item_idx:item_idx+1], self.tfidf_matrix).flatten()
+                    
+                    # Stage 1: Get top 50 candidates from TF-IDF (fixed bug - was getting 165+ items)
+                    # BUG FIX: Remove threshold_indices combination that was causing 165+ candidates
+                    candidate_indices = tfidf_similarities.argsort()[-50:][::-1]  # Take exactly top 50
+                    
+                    # Remove source item from candidates
+                    candidate_indices = candidate_indices[candidate_indices != item_idx]
+                    
+                    logger.info(f"Stage 1: Selected {len(candidate_indices)} candidates for hybrid similarity calculation")
+                    
+                    # Stage 2: Batch fetch all candidates with relations
+                    candidate_uids = []
+                    idx_to_uid_map = {}
+                    
+                    for idx in candidate_indices:
+                        candidate_uid = self.uid_to_idx[self.uid_to_idx == idx].index[0]
+                        candidate_uids.append(candidate_uid)
+                        idx_to_uid_map[idx] = candidate_uid
+                    
+                    # Check timeout before expensive operations
+                    if time.time() - start_time > MAX_COMPUTATION_TIME:
+                        logger.warning(f"Recommendation computation timeout for {item_uid}, using fallback")
+                        return None
+                    
+                    # Fetch candidate items with Redis cache optimization
+                    logger.info(f"Fetching {len(candidate_uids)} candidates with cache optimization...")
+                    candidate_items = self._get_items_with_cache_optimization(candidate_uids)
+                    
+                    # Create UID to item mapping for fast lookup
+                    items_by_uid = {item['uid']: item for item in candidate_items}
+                    
+                    # Check timeout before similarity calculations
+                    if time.time() - start_time > MAX_COMPUTATION_TIME:
+                        logger.warning(f"Recommendation computation timeout for {item_uid}, using TF-IDF fallback")
+                        similarities = cosine_similarity(self.tfidf_matrix[item_idx:item_idx+1], self.tfidf_matrix).flatten()
+                    else:
+                        # Calculate hybrid similarities for all batched items
+                        for idx in candidate_indices:
+                            candidate_uid = idx_to_uid_map[idx]
+                            candidate_item = items_by_uid.get(candidate_uid)
+                            
+                            if candidate_item:
+                                # Calculate hybrid similarity
+                                similarities[idx] = self.hybrid_calculator.calculate_hybrid_similarity(
+                                    source_item, candidate_item
+                                )
+                            else:
+                                logger.debug(f"Candidate item {candidate_uid} not found in batch fetch results")
+                    
+                    logger.info(f"Completed hybrid similarity calculation for {len(candidate_indices)} candidates")
+            else:
+                # Use standard TF-IDF cosine similarity
+                logger.info(f"Using TF-IDF similarity for {item_uid}")
+                similarities = cosine_similarity(self.tfidf_matrix[item_idx:item_idx+1], self.tfidf_matrix).flatten()
             
             # Get top N+1 indices (including the item itself)
-            top_indices = similarities.argsort()[-num_recommendations-1:][::-1]
+            top_indices = similarities.argsort()[-num_recommendations*2:][::-1]  # Get more candidates
             
-            # Collect UIDs of recommended items (excluding source item)
+            # Collect UIDs of recommended items (excluding source item and low similarity)
             recommended_uids = []
             for idx in top_indices:
                 # Skip the item itself
                 if idx == item_idx:
                     continue
                 
+                # Skip items below similarity threshold
+                similarity_score = float(similarities[idx])
+                if similarity_score < self.MIN_SIMILARITY_THRESHOLD:
+                    logger.debug(f"Skipping item with similarity {similarity_score:.3f} (below threshold {self.MIN_SIMILARITY_THRESHOLD})")
+                    continue
+                
                 # Get item UID from index
                 rec_uid = self.uid_to_idx[self.uid_to_idx == idx].index[0]
-                recommended_uids.append((rec_uid, float(similarities[idx])))
+                recommended_uids.append((rec_uid, similarity_score))
                 
                 if len(recommended_uids) >= num_recommendations:
                     break
