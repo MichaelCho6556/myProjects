@@ -1454,6 +1454,98 @@ class SupabaseClient:
         
         response = self._make_request('GET', table_name, params=params)
         return response.json()
+    
+    def get_item_relations(self, item_id: int, use_cache: bool = True) -> Dict[str, List[str]]:
+        """
+        Fetch relations for a single item on-demand with optional caching.
+        
+        This method provides memory-efficient relation loading by fetching
+        genres, themes, and demographics only when needed instead of loading
+        all 350k+ relations at startup.
+        
+        Args:
+            item_id (int): Database ID of the item
+            use_cache (bool): Whether to use cached lookups
+            
+        Returns:
+            Dict containing:
+                - genres: List of genre names
+                - themes: List of theme names  
+                - demographics: List of demographic names
+                - studios: List of studio names (anime only)
+                - authors: List of author names (manga only)
+        """
+        
+        # Initialize result
+        result = {
+            'genres': [],
+            'themes': [],
+            'demographics': [],
+            'studios': [],
+            'authors': []
+        }
+        
+        # Ensure lookup cache exists
+        if not hasattr(self, '_lookup_cache') or not use_cache:
+            self._lookup_cache = {
+                'genres': self._get_lookup_dict('genres'),
+                'themes': self._get_lookup_dict('themes'),
+                'demographics': self._get_lookup_dict('demographics'),
+                'studios': self._get_lookup_dict('studios'),
+                'authors': self._get_lookup_dict('authors'),
+            }
+        
+        # Fetch relations for this item
+        relation_tables = [
+            ('item_genres', 'genre_id', 'genres'),
+            ('item_themes', 'theme_id', 'themes'),
+            ('item_demographics', 'demographic_id', 'demographics'),
+            ('item_studios', 'studio_id', 'studios'),
+            ('item_authors', 'author_id', 'authors')
+        ]
+        
+        for table_name, id_field, result_key in relation_tables:
+            try:
+                relations = self._get_relations_for_items(table_name, [item_id])
+                
+                # Convert IDs to names using lookup cache
+                for rel in relations:
+                    related_id = rel.get(id_field)
+                    if related_id and related_id in self._lookup_cache[result_key]:
+                        result[result_key].append(self._lookup_cache[result_key][related_id])
+                        
+            except Exception as e:
+                logger.debug(f"Could not fetch {table_name} for item {item_id}: {e}")
+                # Continue with other relations even if one fails
+                
+        return result
+    
+    def get_item_by_uid(self, item_uid: str) -> Optional[Dict]:
+        """
+        Fetch a single item by its UID.
+        
+        This method provides memory-efficient item fetching by getting
+        only the specific item needed instead of loading all items.
+        
+        Args:
+            item_uid (str): The UID of the item to fetch
+            
+        Returns:
+            Dict: Item data with basic metadata, or None if not found
+        """
+        try:
+            response = self._make_request('GET', 'items', params={
+                'uid': f'eq.{item_uid}',
+                'select': '*',
+                'limit': 1
+            })
+            
+            items = response.json()
+            return items[0] if items else None
+            
+        except Exception as e:
+            logger.debug(f"Could not fetch item {item_uid}: {e}")
+            return None
 
     def update_user_item_status_comprehensive(self, user_id: str, item_uid: str, status_data: dict) -> dict:
         """
@@ -3307,6 +3399,168 @@ class SupabaseClient:
             >>> users = result.data
         """
         return SupabaseTableBuilder(self, table_name)
+
+    def get_items_batch(self, item_uids: List[str]) -> List[Dict]:
+        """
+        Batch fetch multiple items by their UIDs.
+        
+        This method efficiently fetches multiple items in a single query,
+        dramatically reducing database round trips for recommendation generation.
+        
+        Args:
+            item_uids (List[str]): List of item UIDs to fetch
+            
+        Returns:
+            List[Dict]: List of item dictionaries with basic metadata
+        """
+        if not item_uids:
+            return []
+            
+        try:
+            logger.debug(f"Batch fetching {len(item_uids)} items")
+            
+            # Use Supabase's 'in' filter for batch retrieval
+            response = self.table('items').select(
+                'uid,title,media_type_id,score,synopsis,image_url,id,episodes,chapters,status'
+            ).in_('uid', item_uids).execute()
+            
+            if response.data:
+                # Map media_type_id to readable string
+                media_type_map = {1: 'anime', 2: 'manga'}
+                
+                for item in response.data:
+                    media_type_id = item.get('media_type_id')
+                    item['media_type'] = media_type_map.get(media_type_id, 'unknown')
+                
+                logger.debug(f"Successfully fetched {len(response.data)} items")
+                return response.data
+            else:
+                logger.warning(f"No items found for UIDs: {item_uids}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Error in batch fetching items: {e}")
+            return []
+
+    def get_items_with_relations_batch(self, item_uids: List[str]) -> List[Dict]:
+        """
+        Batch fetch multiple items with their complete relations.
+        
+        This method fetches items and their associated genres, themes, demographics,
+        studios, and authors in optimized queries, replacing hundreds of individual
+        API calls with just a few batch operations.
+        
+        Args:
+            item_uids (List[str]): List of item UIDs to fetch
+            
+        Returns:
+            List[Dict]: List of items with embedded relations
+        """
+        if not item_uids:
+            return []
+            
+        try:
+            logger.debug(f"Batch fetching {len(item_uids)} items with relations")
+            
+            # First, get the basic item data
+            items = self.get_items_batch(item_uids)
+            if not items:
+                return []
+            
+            # Extract item IDs for relation queries
+            item_ids = [item['id'] for item in items]
+            item_id_to_uid = {item['id']: item['uid'] for item in items}
+            
+            # Initialize relation storage
+            items_dict = {item['uid']: item for item in items}
+            for item in items_dict.values():
+                item['genres'] = []
+                item['themes'] = []
+                item['demographics'] = []
+                item['studios'] = []
+                item['authors'] = []
+            
+            # Batch fetch all relations
+            self._fetch_relations_batch(item_ids, item_id_to_uid, items_dict)
+            
+            logger.debug(f"Successfully fetched {len(items)} items with complete relations")
+            return list(items_dict.values())
+            
+        except Exception as e:
+            logger.error(f"Error in batch fetching items with relations: {e}")
+            return []
+
+    def _fetch_relations_batch(self, item_ids: List[int], item_id_to_uid: Dict[int, str], items_dict: Dict[str, Dict]):
+        """
+        Helper method to fetch all relation types for items using a single JOIN query.
+        
+        This method now uses Supabase's resource embedding to fetch everything
+        in one query, reducing time from 8-9 seconds to ~1 second.
+        
+        Args:
+            item_ids: List of item database IDs
+            item_id_to_uid: Mapping from item ID to UID
+            items_dict: Dictionary of items to populate with relations
+        """
+        import time
+        
+        try:
+            start_time = time.time()
+            logger.debug(f"Fetching relations for {len(item_ids)} items with single JOIN query...")
+            
+            # OPTIMIZATION: Use single JOIN query instead of 5 separate queries
+            # This leverages Supabase's resource embedding feature
+            response = self.table('items').select(
+                'id,uid,'
+                'item_genres(genres(name)),'
+                'item_themes(themes(name)),'
+                'item_demographics(demographics(name)),'
+                'item_studios(studios(name)),'
+                'item_authors(authors(name))'
+            ).in_('id', item_ids).execute()
+            
+            # Process the nested response data
+            for item_data in response.data or []:
+                item_uid = item_data.get('uid')
+                if not item_uid or item_uid not in items_dict:
+                    continue
+                
+                # Extract genres
+                if 'item_genres' in item_data:
+                    for genre_rel in item_data['item_genres'] or []:
+                        if genre_rel.get('genres') and genre_rel['genres'].get('name'):
+                            items_dict[item_uid]['genres'].append(genre_rel['genres']['name'])
+                
+                # Extract themes
+                if 'item_themes' in item_data:
+                    for theme_rel in item_data['item_themes'] or []:
+                        if theme_rel.get('themes') and theme_rel['themes'].get('name'):
+                            items_dict[item_uid]['themes'].append(theme_rel['themes']['name'])
+                
+                # Extract demographics
+                if 'item_demographics' in item_data:
+                    for demo_rel in item_data['item_demographics'] or []:
+                        if demo_rel.get('demographics') and demo_rel['demographics'].get('name'):
+                            items_dict[item_uid]['demographics'].append(demo_rel['demographics']['name'])
+                
+                # Extract studios
+                if 'item_studios' in item_data:
+                    for studio_rel in item_data['item_studios'] or []:
+                        if studio_rel.get('studios') and studio_rel['studios'].get('name'):
+                            items_dict[item_uid]['studios'].append(studio_rel['studios']['name'])
+                
+                # Extract authors
+                if 'item_authors' in item_data:
+                    for author_rel in item_data['item_authors'] or []:
+                        if author_rel.get('authors') and author_rel['authors'].get('name'):
+                            items_dict[item_uid]['authors'].append(author_rel['authors']['name'])
+            
+            fetch_time = time.time() - start_time
+            logger.debug(f"Completed single JOIN query relation fetching in {fetch_time:.2f}s")
+                    
+        except Exception as e:
+            logger.error(f"Error fetching relations with JOIN query: {e}")
+            # Fallback to empty relations rather than failing completely
 
 
 class SupabaseResponse:

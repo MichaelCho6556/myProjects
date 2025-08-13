@@ -115,6 +115,9 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, className = "" }) => {
   }, [item]);
 
   const { title, mediaType, score, imageUrl, genresDisplay, themesDisplay } = computedData;
+  
+  // Format similarity as percentage if available
+  const similarityPercent = item.similarity ? `${Math.round(item.similarity * 100)}% Match` : null;
 
   // Handle null item after hooks are called
   if (!item) {
@@ -146,6 +149,11 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, className = "" }) => {
             <p>
               <strong>Score:</strong> {score}
             </p>
+            {similarityPercent && (
+              <p className="similarity-score">
+                <strong>Match:</strong> {similarityPercent}
+              </p>
+            )}
           </div>
           <div className="genres-themes-wrapper">
             {item.genres && (Array.isArray(item.genres) ? item.genres.length > 0 : true) && (
