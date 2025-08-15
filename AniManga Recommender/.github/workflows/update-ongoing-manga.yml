@@ -1,0 +1,204 @@
+name: Update Ongoing Manga Chapter Counts
+
+on:
+  # Run weekly on Sundays at 10:00 UTC (good time for manga updates)
+  schedule:
+    - cron: '0 10 * * 0'
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no actual updates)'
+        required: false
+        default: 'false'
+        type: boolean
+      manga_ids:
+        description: 'Specific manga IDs to update (comma-separated, e.g., "13,11061,85143")'
+        required: false
+        type: string
+
+jobs:
+  update-manga-chapters:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create environment file
+      run: |
+        cd backend
+        cat > .env << EOF
+        SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}
+        SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
+        MAL_CLIENT_ID=${{ secrets.MAL_CLIENT_ID }}
+        MAL_CLIENT_SECRET=${{ secrets.MAL_CLIENT_SECRET }}
+        LOCAL_DEVELOPMENT=False
+        USE_LOCAL_SUPABASE=False
+        EOF
+    
+    - name: Run ongoing manga update script
+      run: |
+        cd backend
+        python scripts/update_ongoing_manga.py \
+          ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }} \
+          ${{ github.event.inputs.manga_ids && format('--manga-ids {0}', github.event.inputs.manga_ids) || '' }}
+      env:
+        PYTHONPATH: ${{ github.workspace }}/backend
+    
+    - name: Upload logs as artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: manga-update-logs
+        path: |
+          backend/ongoing_manga_updates.log
+          backend/updated_overrides.sql
+        retention-days: 30
+    
+    - name: Commit updated override data (if any)
+      if: success() && github.event.inputs.dry_run != 'true'
+      run: |
+        cd backend
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        # Check if there are any changes to commit
+        if [ -f "updated_overrides.sql" ]; then
+          # Move the generated SQL to the proper location
+          mv updated_overrides.sql sql/updated_overrides_$(date +%Y%m%d).sql
+          
+          # Add and commit if there are changes
+          git add sql/updated_overrides_*.sql
+          
+          if ! git diff --staged --quiet; then
+            git commit -m "📈 Update manga chapter overrides - $(date +%Y-%m-%d)
+            
+            Automated update of ongoing manga chapter counts:
+            - One Piece and other popular ongoing series
+            - Updated via GitHub Actions workflow
+            - Data sourced from Jikan API and MAL API
+            
+            Co-authored-by: GitHub Actions <actions@github.com>"
+            
+            git push
+          else
+            echo "No changes to commit"
+          fi
+        else
+          echo "No override updates generated"
+        fi
+    
+    - name: Create issue on failure
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '🚨 Ongoing Manga Update Failed',
+            body: `The weekly ongoing manga chapter update workflow failed.
+            
+            **Workflow:** ${context.workflow}
+            **Run ID:** ${context.runId}
+            **Run URL:** ${context.payload.repository.html_url}/actions/runs/${context.runId}
+            
+            Please check the logs and investigate the issue.
+            
+            Common causes:
+            - API rate limiting
+            - Network connectivity issues
+            - Database connection problems
+            - Changes in external API structure
+            
+            /label bug automation`,
+            labels: ['bug', 'automation', 'high-priority']
+          })
+
+  # Additional job to verify the updates
+  verify-updates:
+    needs: update-manga-chapters
+    runs-on: ubuntu-latest
+    if: success() && github.event.inputs.dry_run != 'true'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create environment file
+      run: |
+        cd backend
+        cat > .env << EOF
+        SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}
+        SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}
+        MAL_CLIENT_ID=${{ secrets.MAL_CLIENT_ID }}
+        MAL_CLIENT_SECRET=${{ secrets.MAL_CLIENT_SECRET }}
+        LOCAL_DEVELOPMENT=False
+        USE_LOCAL_SUPABASE=False
+        EOF
+    
+    - name: Verify One Piece chapter count
+      run: |
+        cd backend
+        python -c "
+        from supabase_client import SupabaseClient
+        from utils.manga_chapter_overrides import get_chapter_count
+        
+        supabase = SupabaseClient()
+        
+        # Check One Piece specifically
+        one_piece = supabase.table('items').select('uid, title, chapters').eq('uid', 'mal_manga_13').execute()
+        if one_piece.data:
+            db_chapters = one_piece.data[0]['chapters']
+            override_chapters = get_chapter_count('mal_manga_13')
+            
+            print(f'✅ One Piece verification:')
+            print(f'   Database chapters: {db_chapters}')
+            print(f'   Override chapters: {override_chapters}')
+            
+            if db_chapters > 1000:
+                print('✅ SUCCESS: One Piece has realistic chapter count!')
+                exit(0)
+            else:
+                print('❌ FAILED: One Piece chapter count is too low!')
+                exit(1)
+        else:
+            print('❌ FAILED: One Piece not found!')
+            exit(1)
+        "
+      env:
+        PYTHONPATH: ${{ github.workspace }}/backend

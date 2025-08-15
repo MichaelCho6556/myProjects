@@ -42,10 +42,10 @@ from dotenv import load_dotenv
 # Load environment variables based on environment
 if os.getenv('LOCAL_DEVELOPMENT') == 'True':
     load_dotenv('.env.local')
-    print("🔧 Loading LOCAL development environment variables")
+    print("Loading LOCAL development environment variables")
 else:
     load_dotenv()
-    print("☁️ Loading PRODUCTION environment variables")
+    print("Loading PRODUCTION environment variables")
 
 # Supabase configuration
 SUPABASE_URL = os.getenv('SUPABASE_URL')

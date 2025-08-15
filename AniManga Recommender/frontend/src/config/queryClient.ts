@@ -35,7 +35,7 @@ export const CACHE_TIMES = {
   recommendations: 60 * 60 * 1000,   // 1 hour
   items: 24 * 60 * 60 * 1000,       // 24 hours
   statistics: 15 * 60 * 1000,       // 15 minutes
-  dashboard: 15 * 60 * 1000,        // 15 minutes
+  dashboard: 30 * 60 * 1000,        // 30 minutes
   userLists: 5 * 60 * 1000,         // 5 minutes
   activities: 5 * 60 * 1000,        // 5 minutes
   default: 5 * 60 * 1000,           // 5 minutes default
@@ -148,14 +148,14 @@ export const queryClient = new QueryClient({
         return Math.min(1000 * 2 ** attemptIndex, 30000);
       },
       
-      // Refetch on window focus for fresh data
-      refetchOnWindowFocus: true,
+      // Disable aggressive refetching to reduce API calls
+      refetchOnWindowFocus: false,
       
-      // Refetch on reconnect
+      // Only refetch on reconnect if data is stale
       refetchOnReconnect: true,
       
-      // Don't refetch on mount if data exists and is fresh
-      refetchOnMount: true,
+      // Don't refetch on mount if data exists
+      refetchOnMount: false,
       
       // Network mode - works even when offline with cached data
       networkMode: 'offlineFirst',

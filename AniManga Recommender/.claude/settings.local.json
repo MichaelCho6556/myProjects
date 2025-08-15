@@ -47,9 +47,16 @@
       "mcp__playwright__browser_wait_for",
       "mcp__playwright__browser_type",
       "mcp__playwright__browser_press_key",
-      "Bash(venv/Scripts/python.exe scripts/test_memory_optimization.py:*)"
+      "Bash(venv/Scripts/python.exe scripts/test_memory_optimization.py:*)",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_select_option",
+      "mcp__playwright__browser_console_messages",
+      "Bash(venv/Scripts/python.exe:*)",
+      "Bash(npm start)"
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "acceptEdits"
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
@@ -57,4 +64,5 @@
     "context7",
     "playwright"
   ],
+  "outputStyle": "Explanatory"
 }

@@ -4464,14 +4464,14 @@ class SupabaseAuthClient:
         Handles: status, progress, rating, notes, dates
         """
         try:
-            # First, check if record exists
+            # First, check if record exists and get old values
             existing = requests.get(
                 f"{self.base_url}/rest/v1/user_items",
                 headers=self.headers,
                 params={
                     'user_id': f'eq.{user_id}',
                     'item_uid': f'eq.{item_uid}',
-                    'select': 'id,status'
+                    'select': 'id,status,rating,progress'
                 }
             )
             
@@ -4503,7 +4503,18 @@ class SupabaseAuthClient:
                 if not existing.json():  # New record
                     data['start_date'] = 'now()'
             
-            if existing.json():
+            # Extract old values for activity logging
+            old_values = {}
+            existing_data = existing.json()
+            if existing_data:
+                old_item = existing_data[0]
+                old_values = {
+                    'old_status': old_item.get('status'),
+                    'old_rating': old_item.get('rating'),
+                    'old_progress': old_item.get('progress')
+                }
+            
+            if existing_data:
                 # Update existing record
                 response = requests.patch(
                     f"{self.base_url}/rest/v1/user_items",
@@ -4527,8 +4538,13 @@ class SupabaseAuthClient:
             if response.status_code in [200, 201, 204]:
                 # Handle 204 No Content response which has no body
                 if response.status_code == 204 or not response.content:
-                    return {'success': True, 'data': {}}
-                return {'success': True, 'data': response.json()}
+                    result = {'success': True, 'data': {}}
+                else:
+                    result = {'success': True, 'data': response.json()}
+                
+                # Include old values for activity logging
+                result['old_values'] = old_values
+                return result
             else:
                 print(f"Supabase error: {response.status_code} - {response.text}")
                 return None

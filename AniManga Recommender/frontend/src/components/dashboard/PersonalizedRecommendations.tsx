@@ -109,7 +109,7 @@ const PersonalizedRecommendations: React.FC<PersonalizedRecommendationsProps> = 
     if (user?.id) {
       fetchRecommendations();
     }
-  }, [user?.id, contentTypeFilter, fetchRecommendations]); // Refetch when content type filter changes
+  }, [user?.id, contentTypeFilter]); // Only refetch when user or filter changes
 
   // Load more items for a specific section
   const loadMoreItems = async (sectionType: string) => {

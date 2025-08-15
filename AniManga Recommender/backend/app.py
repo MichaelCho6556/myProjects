@@ -43,7 +43,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from supabase_client import SupabaseClient, SupabaseAuthClient, require_auth
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import html
 import time
@@ -678,6 +678,9 @@ supabase_client: Optional[SupabaseClient] = None
 auth_client: Optional[SupabaseAuthClient] = None
 recommendation_engine: Optional[OnDemandRecommendationEngine] = None
 
+# Global media type ID mappings
+MEDIA_TYPE_IDS: Dict[str, int] = {}
+
 # Initialize clients
 try:
     # Only initialize if not already set (for testing)
@@ -708,8 +711,168 @@ except Exception as e:
     auth_client = None
     recommendation_engine = None
 
+def initialize_media_type_ids():
+    """
+    Load actual media type IDs from database on startup.
+    
+    This function queries the media_types table to get the real IDs for 'anime' and 'manga'
+    instead of relying on hardcoded assumptions. It caches these values globally for
+    the application lifetime.
+    
+    Updates:
+        MEDIA_TYPE_IDS (dict): Global mapping of media type names to database IDs
+        
+    Example:
+        After initialization: MEDIA_TYPE_IDS = {'anime': 3, 'manga': 5}
+        (IDs depend on actual database content)
+    """
+    global MEDIA_TYPE_IDS, auth_client
+    
+    try:
+        logger.info("[STARTUP] Loading media type IDs from database...")
+        
+        if auth_client is None:
+            logger.error("[STARTUP] No auth client available for media type lookup")
+            # Fallback to defaults if database unavailable
+            MEDIA_TYPE_IDS = {'anime': 1, 'manga': 2}
+            logger.info(f"[STARTUP] Using fallback MEDIA_TYPE_IDS: {MEDIA_TYPE_IDS}")
+            return
+        
+        # Query media_types table for actual IDs
+        response = requests.get(
+            f"{auth_client.base_url}/rest/v1/media_types",
+            headers=auth_client.headers,
+            params={'select': 'id,name'}
+        )
+        
+        if response.status_code == 200:
+            media_types = response.json()
+            MEDIA_TYPE_IDS.clear()
+            
+            for mt in media_types:
+                name = mt['name'].lower().strip()
+                MEDIA_TYPE_IDS[name] = mt['id']
+            
+            logger.info(f"[STARTUP] Loaded media type IDs: {MEDIA_TYPE_IDS}")
+            
+            # Validate that we have the required types
+            if 'anime' not in MEDIA_TYPE_IDS or 'manga' not in MEDIA_TYPE_IDS:
+                logger.warning(f"[STARTUP] Missing required media types in database. Found: {list(MEDIA_TYPE_IDS.keys())}")
+                # Ensure required types exist
+                ensure_media_types_exist()
+        else:
+            logger.error(f"[STARTUP] Failed to load media types: HTTP {response.status_code}")
+            # Fallback to defaults
+            MEDIA_TYPE_IDS = {'anime': 1, 'manga': 2}
+            logger.info(f"[STARTUP] Using fallback MEDIA_TYPE_IDS: {MEDIA_TYPE_IDS}")
+            
+    except Exception as e:
+        logger.error(f"[STARTUP] Error loading media type IDs: {e}")
+        # Fallback to defaults if any error occurs
+        MEDIA_TYPE_IDS = {'anime': 1, 'manga': 2}
+        logger.info(f"[STARTUP] Using fallback MEDIA_TYPE_IDS: {MEDIA_TYPE_IDS}")
+
+def ensure_media_types_exist():
+    """
+    Ensure required media types exist in database.
+    
+    Creates 'anime' and 'manga' entries in media_types table if they don't exist.
+    Updates MEDIA_TYPE_IDS with the actual database IDs.
+    """
+    global MEDIA_TYPE_IDS, auth_client
+    
+    required_types = ['anime', 'manga']
+    
+    for media_type in required_types:
+        if media_type not in MEDIA_TYPE_IDS:
+            try:
+                logger.info(f"[STARTUP] Creating missing media type: {media_type}")
+                
+                # Insert missing media type
+                data = {'name': media_type}
+                response = requests.post(
+                    f"{auth_client.base_url}/rest/v1/media_types",
+                    headers=auth_client.headers,
+                    json=data
+                )
+                
+                if response.status_code in [200, 201]:
+                    result = response.json()
+                    # Handle both single object and array responses
+                    if isinstance(result, list):
+                        new_id = result[0]['id']
+                    else:
+                        new_id = result['id']
+                    
+                    MEDIA_TYPE_IDS[media_type] = new_id
+                    logger.info(f"[STARTUP] Created media type '{media_type}' with ID {new_id}")
+                else:
+                    logger.error(f"[STARTUP] Failed to create media type '{media_type}': HTTP {response.status_code}")
+                    
+            except Exception as e:
+                logger.error(f"[STARTUP] Error creating media type '{media_type}': {e}")
+
+# Initialize media type IDs if clients are available
+try:
+    if auth_client is not None:
+        initialize_media_type_ids()
+        
+        # Clear user statistics caches to force recalculation with correct media type IDs
+        try:
+            logger.info("[STARTUP] Clearing user statistics caches due to media type ID fix...")
+            
+            # Clear hybrid cache for user statistics using pattern matching
+            from utils.cache_helpers import get_cache
+            cache = get_cache()
+            
+            if cache and hasattr(cache, 'delete_pattern'):
+                # Use pattern matching to delete all user_stats keys
+                deleted_count = cache.delete_pattern("user_stats:*")
+                logger.info(f"[STARTUP] Cleared {deleted_count} user statistics cache entries")
+            else:
+                logger.info("[STARTUP] Cache pattern deletion not available - statistics will refresh naturally")
+                
+        except ImportError:
+            logger.warning("[STARTUP] Cache helpers not available - skipping cache clear")
+        except Exception as cache_error:
+            logger.error(f"[STARTUP] Error clearing user statistics caches: {cache_error}")
+    else:
+        logger.warning("[STARTUP] Skipping media type initialization - no auth client available")
+except Exception as e:
+    logger.error(f"[STARTUP] Failed to initialize media type IDs: {e}")
+
 # Simple in-memory cache for media types
 _media_type_cache: Dict[str, Any] = {}
+
+def clear_media_type_cache():
+    """Clear the entire media type cache to force fresh lookups."""
+    global _media_type_cache
+    cache_size = len(_media_type_cache)
+    _media_type_cache.clear()
+    logger.info(f"[CLEAR] Cleared media type cache ({cache_size} entries)")
+
+def get_media_type_cache_stats():
+    """Get statistics about the media type cache."""
+    global _media_type_cache
+    total_items = len(_media_type_cache)
+    anime_count = len([k for k, v in _media_type_cache.items() if v == 'anime'])
+    manga_count = len([k for k, v in _media_type_cache.items() if v == 'manga'])
+    unknown_count = len([k for k, v in _media_type_cache.items() if v == 'unknown'])
+    
+    return {
+        'total_cached': total_items,
+        'anime_cached': anime_count,
+        'manga_cached': manga_count,
+        'unknown_cached': unknown_count
+    }
+
+def remove_unknown_from_cache():
+    """Remove all 'unknown' entries from the cache to force re-lookup."""
+    global _media_type_cache
+    unknown_items = [k for k, v in _media_type_cache.items() if v == 'unknown']
+    for item_uid in unknown_items:
+        del _media_type_cache[item_uid]
+    logger.info(f"[CLEAR] Removed {len(unknown_items)} unknown entries from media type cache")
 
 # Constants for backwards compatibility with tests
 BASE_DATA_PATH = "data"
@@ -1254,6 +1417,53 @@ def debug_data() -> Union[Response, Tuple[Response, int]]:
             "memory_mode": "optimized - no data loaded in memory"
         })
 
+@app.route('/api/debug/media-types')
+def debug_media_types() -> Union[Response, Tuple[Response, int]]:
+    """Debug endpoint to check media type detection and MEDIA_TYPE_IDS"""
+    global MEDIA_TYPE_IDS
+    
+    try:
+        # Test a few sample items
+        sample_results = {}
+        test_items = []
+        
+        # Get some sample items from database
+        if auth_client:
+            response = requests.get(
+                f"{auth_client.base_url}/rest/v1/items",
+                headers=auth_client.headers,
+                params={
+                    'select': 'uid,media_type_id,episodes,chapters',
+                    'limit': '5'
+                }
+            )
+            if response.status_code == 200:
+                test_items = response.json()
+        
+        # Test media type detection for these items
+        for item in test_items:
+            item_uid = item['uid']
+            detected_type = get_item_media_type(item_uid)
+            sample_results[item_uid] = {
+                'detected_type': detected_type,
+                'media_type_id': item.get('media_type_id'),
+                'episodes': item.get('episodes'),
+                'chapters': item.get('chapters')
+            }
+        
+        return jsonify({
+            "MEDIA_TYPE_IDS": MEDIA_TYPE_IDS,
+            "cache_stats": get_media_type_cache_stats(),
+            "sample_detections": sample_results,
+            "cache_size": len(_media_type_cache)
+        })
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "MEDIA_TYPE_IDS": MEDIA_TYPE_IDS,
+            "cache_size": len(_media_type_cache) if '_media_type_cache' in globals() else 0
+        })
+
 @app.route('/api/items')
 def get_items() -> Union[Response, Tuple[Response, int]]:
     """
@@ -1392,7 +1602,14 @@ def get_items() -> Union[Response, Tuple[Response, int]]:
         
         # Apply media type filter
         if media_type_filter and media_type_filter.lower() != 'all':
-            query = query.eq('media_type', media_type_filter)
+            # Convert media type string to database ID
+            media_type_id = MEDIA_TYPE_IDS.get(media_type_filter.lower())
+            if media_type_id:
+                query = query.eq('media_type_id', media_type_id)
+            else:
+                logger.warning(f"Unknown media type filter: {media_type_filter}")
+                # Invalid media type, return empty result
+                query = query.eq('id', -1)  # Force empty result
         
         # Apply array filters (genres, themes, demographics, studios, authors)
         # For multi-value filters, we need ALL values to match (AND logic)
@@ -3237,14 +3454,61 @@ def update_user_item_status(item_uid: str) -> Union[Response, Tuple[Response, in
         # Auto-calculate progress for completed items
         if status == 'completed' and progress == 0:
             if item_details['media_type'] == 'anime':
-                max_progress = item_details.get('episodes', 1)
-            else:
-                max_progress = item_details.get('chapters', 1)
-            
-            if max_progress and max_progress > 0:
-                progress = max_progress
-            else:
-                progress = 1  # Fallback
+                max_progress = item_details.get('episodes', None)
+                if max_progress and max_progress > 0:
+                    progress = max_progress
+                else:
+                    progress = 1  # Fallback for anime when episodes data missing
+            else:  # manga
+                # PRODUCTION ENHANCED: Use advanced chapter resolution with API fallbacks
+                from utils.manga_chapter_overrides import get_chapter_count_enhanced_sync
+                
+                # Extract MAL ID from UID (format: mal_manga_13 -> 13)
+                mal_id = None
+                try:
+                    if item_uid.startswith('mal_manga_'):
+                        mal_id = int(item_uid.split('_')[-1])
+                except (ValueError, IndexError):
+                    logger.warning(f"Could not extract MAL ID from UID: {item_uid}")
+                
+                # Use enhanced chapter resolution with multi-source priority
+                title = item_details.get('title', 'Unknown')
+                
+                # Quick database fallback if no MAL ID available (performance optimization)
+                if not mal_id:
+                    enhanced_chapters = item_details.get('chapters', 0)
+                    source = 'database'
+                    logger.debug(f"Skipping enhanced resolution for {title} - no MAL ID")
+                else:
+                    resolution_result = get_chapter_count_enhanced_sync(item_uid, mal_id, title)
+                    
+                    enhanced_chapters = resolution_result.get('chapters', 0)
+                    source = resolution_result.get('source', 'unknown')
+                    confidence = resolution_result.get('confidence', 'none')
+                    success = resolution_result.get('success', False)
+                    
+                    # Fallback to database if enhanced resolution failed
+                    if not success or enhanced_chapters <= 0:
+                        enhanced_chapters = item_details.get('chapters', 0)
+                        source = 'database'
+                    confidence = 'low'
+                
+                max_progress = enhanced_chapters if enhanced_chapters and enhanced_chapters > 0 else None
+                
+                if max_progress and max_progress > 0:
+                    progress = max_progress
+                    logger.info(f"Auto-filled manga progress for {title}: {progress} chapters (source: {source}, confidence: {confidence})")
+                else:
+                    # For manga, don't auto-fill if chapter data is missing - require user input
+                    logger.warning(f"No reliable chapter data for {title} (UID: {item_uid}) - requiring manual input")
+                    return jsonify({
+                        'error': 'Chapter count data is missing for this manga. Please specify your progress manually.',
+                        'require_manual_progress': True,
+                        'media_type': 'manga',
+                        'item_title': title,
+                        'resolution_attempted': True,
+                        'source_tried': source
+                    }), 400
         
         # Create comprehensive status data
         status_data = {
@@ -3268,12 +3532,26 @@ def update_user_item_status(item_uid: str) -> Union[Response, Tuple[Response, in
             # [SUCCESS] INVALIDATE ALL CACHES so next dashboard load will be fresh
             invalidate_all_user_caches(user_id)
             
+            # Extract old values for activity logging
+            old_values = result.get('old_values', {})
+            old_status = old_values.get('old_status')
+            old_rating = old_values.get('old_rating')
+            old_progress = old_values.get('old_progress')
+            
             # Log multiple activity types based on what changed
             activity_data = {
                 'status': status,
                 'progress': progress,
                 'media_type': item_details.get('media_type', 'unknown')
             }
+            
+            # Include old values in activity data
+            if old_status:
+                activity_data['old_status'] = old_status
+            if old_rating is not None:
+                activity_data['old_rating'] = old_rating
+            if old_progress is not None:
+                activity_data['old_progress'] = old_progress
             
             # Include rating if provided
             if rating is not None and rating >= 0:
@@ -3283,7 +3561,7 @@ def update_user_item_status(item_uid: str) -> Union[Response, Tuple[Response, in
             # Note: We log multiple activities if multiple things changed
             
             # Log when item is newly added (plan_to_watch/plan_to_read is typically first status)
-            if status in ['plan_to_watch', 'plan_to_read']:
+            if status in ['plan_to_watch', 'plan_to_read'] and not old_status:
                 executor.submit(log_activity_with_error_handling, user_id, 'added', item_uid, activity_data)
             
             # Log when item is completed
@@ -3298,19 +3576,30 @@ def update_user_item_status(item_uid: str) -> Union[Response, Tuple[Response, in
             elif status == 'dropped':
                 executor.submit(log_activity_with_error_handling, user_id, 'dropped', item_uid, activity_data)
             
-            # Log rating changes
-            if rating is not None and rating > 0:
-                executor.submit(log_activity_with_error_handling, user_id, 'rated', item_uid, {'rating': rating})
+            # Log rating changes (only if rating actually changed)
+            if rating is not None and rating > 0 and rating != old_rating:
+                rating_activity_data = {
+                    'rating': rating,
+                    'media_type': item_details.get('media_type', 'unknown')
+                }
+                if old_rating is not None:
+                    rating_activity_data['old_rating'] = old_rating
+                executor.submit(log_activity_with_error_handling, user_id, 'rating_updated', item_uid, rating_activity_data)
             
             # Log progress updates (but not for completed items as that's redundant)
-            if progress > 0 and status != 'completed':
-                executor.submit(log_activity_with_error_handling, user_id, 'updated', item_uid, {
+            if progress > 0 and status != 'completed' and progress != old_progress:
+                progress_activity_data = {
                     'progress': progress,
-                    'status': status
-                })
+                    'status': status,
+                    'media_type': item_details.get('media_type', 'unknown')
+                }
+                if old_progress is not None:
+                    progress_activity_data['old_progress'] = old_progress
+                executor.submit(log_activity_with_error_handling, user_id, 'progress_updated', item_uid, progress_activity_data)
             
-            # Always log status changes for compatibility
-            executor.submit(log_activity_with_error_handling, user_id, 'status_changed', item_uid, activity_data)
+            # Always log status changes for compatibility (only if status actually changed)
+            if status != old_status:
+                executor.submit(log_activity_with_error_handling, user_id, 'status_changed', item_uid, activity_data)
             
             # Return the updated item data in the expected format
             response_data = {
@@ -3996,37 +4285,128 @@ def _get_user_statistics_data_impl(user_id: str) -> dict:
         Logs detailed cache status and fallback usage for debugging purposes.
     """
     try:
+        logger.info(f"[STATS_CACHE] Getting statistics for user {user_id}")
+        
         # Try hybrid cache first (memory -> database)
         cached_stats = get_user_stats_from_cache(user_id)
         if cached_stats:
-            return cached_stats
+            anime_count = cached_stats.get('total_anime_watched', 0)
+            manga_count = cached_stats.get('total_manga_read', 0)
+            logger.info(f"[STATS_CACHE] Hybrid cache hit - anime={anime_count}, manga={manga_count}")
+            
+            # Zero-value detection: Check if user actually has completed items
+            if anime_count == 0 and manga_count == 0:
+                logger.info(f"[ZERO_DETECT] Cached stats show zero counts, checking if user has completed items...")
+                
+                # Quick check to see if user has any completed items
+                try:
+                    response = requests.get(
+                        f"{auth_client.base_url}/rest/v1/user_items",
+                        headers=auth_client.headers,
+                        params={'user_id': f'eq.{user_id}', 'status': 'eq.completed', 'limit': '1'}
+                    )
+                    
+                    if response.status_code == 200:
+                        completed_items = response.json()
+                        if completed_items:
+                            logger.warning(f"[ZERO_DETECT] STALE CACHE DETECTED! User has {len(completed_items)} completed items but cache shows zero. Invalidating cache...")
+                            # Force cache miss to trigger fresh calculation
+                            cached_stats = None
+                        else:
+                            logger.info(f"[ZERO_DETECT] User genuinely has no completed items, cache is correct")
+                    else:
+                        logger.warning(f"[ZERO_DETECT] Failed to check completed items: {response.status_code}")
+                except Exception as e:
+                    logger.error(f"[ZERO_DETECT] Error checking completed items: {e}")
+            
+            if cached_stats:
+                return cached_stats
+        else:
+            logger.info(f"[STATS_CACHE] Hybrid cache miss")
         
         # Check if we have fresh data in database table
         db_stats = get_cached_user_statistics(user_id)
         
         if db_stats and is_cache_fresh(db_stats):
+            anime_count = db_stats.get('total_anime_watched', 0)
+            manga_count = db_stats.get('total_manga_read', 0)
+            logger.info(f"[STATS_CACHE] Database cache hit (fresh) - anime={anime_count}, manga={manga_count}")
             # Update cache for next time
             set_user_stats_in_cache(user_id, db_stats)
             return db_stats
+        elif db_stats:
+            anime_count = db_stats.get('total_anime_watched', 0)
+            manga_count = db_stats.get('total_manga_read', 0)
+            logger.info(f"[STATS_CACHE] Database cache hit (stale) - anime={anime_count}, manga={manga_count}")
+        else:
+            logger.info(f"[STATS_CACHE] Database cache miss")
         
         # Calculate fresh statistics
+        logger.info(f"[STATS_CACHE] Calculating fresh statistics...")
         fresh_stats = calculate_user_statistics_realtime(user_id)
         
         if fresh_stats:
-            # Update caches with fresh data
-            set_user_stats_in_cache(user_id, fresh_stats)  # Hybrid cache
-            update_user_statistics_cache(user_id, fresh_stats)  # Database table
+            anime_count = fresh_stats.get('total_anime_watched', 0)
+            manga_count = fresh_stats.get('total_manga_read', 0)
+            logger.info(f"[STATS_CACHE] Fresh calculation complete - anime={anime_count}, manga={manga_count}")
             
+            # Detect zero values and warn
+            if anime_count == 0 and manga_count == 0:
+                logger.warning(f"[STATS_CACHE] WARNING: Fresh calculation returned zero counts! This may indicate a data issue.")
+            
+            # Update hybrid cache with detailed logging
+            logger.info(f"[CACHE_SET] Attempting to set hybrid cache for user {user_id}")
+            cache_set_success = set_user_stats_in_cache(user_id, fresh_stats)
+            if cache_set_success:
+                logger.info(f"[CACHE_SET] Hybrid cache update SUCCESS")
+                
+                # Immediately verify cache was set correctly
+                logger.info(f"[CACHE_VERIFY] Verifying cache was set correctly...")
+                verification_stats = get_user_stats_from_cache(user_id)
+                if verification_stats:
+                    verify_anime = verification_stats.get('total_anime_watched', 0)
+                    verify_manga = verification_stats.get('total_manga_read', 0)
+                    logger.info(f"[CACHE_VERIFY] Cache verification SUCCESS - anime={verify_anime}, manga={verify_manga}")
+                    
+                    if verify_anime != anime_count or verify_manga != manga_count:
+                        logger.error(f"[CACHE_VERIFY] CACHE MISMATCH! Set: anime={anime_count}, manga={manga_count} | Got: anime={verify_anime}, manga={verify_manga}")
+                else:
+                    logger.error(f"[CACHE_VERIFY] Cache verification FAILED - could not retrieve just-set data")
+            else:
+                logger.error(f"[CACHE_SET] Hybrid cache update FAILED")
+            
+            # Update database cache with detailed logging
+            logger.info(f"[DB_CACHE] Updating database cache...")
+            try:
+                update_user_statistics_cache(user_id, fresh_stats)
+                logger.info(f"[DB_CACHE] Database cache update SUCCESS")
+            except Exception as db_cache_error:
+                logger.error(f"[DB_CACHE] Database cache update FAILED: {db_cache_error}")
+            
+            logger.info(f"[STATS_CACHE] Cache update complete")
             return fresh_stats
+        else:
+            logger.warning(f"[STATS_CACHE] Fresh calculation returned empty stats")
         
         # Fallback to cached data even if stale
         if cached_stats:
+            anime_count = cached_stats.get('total_anime_watched', 0)
+            manga_count = cached_stats.get('total_manga_read', 0)
+            logger.info(f"[STATS_CACHE] Fallback to stale hybrid cache - anime={anime_count}, manga={manga_count}")
             return cached_stats
         
+        if db_stats:
+            anime_count = db_stats.get('total_anime_watched', 0)
+            manga_count = db_stats.get('total_manga_read', 0)
+            logger.info(f"[STATS_CACHE] Fallback to stale database cache - anime={anime_count}, manga={manga_count}")
+            return db_stats
+        
         # Final fallback to defaults
+        logger.warning(f"[STATS_CACHE] Fallback to default statistics (all zeros)")
         return get_default_user_statistics()
         
     except Exception as e:
+        logger.error(f"[STATS_CACHE] Exception in statistics data retrieval: {e}")
         return get_default_user_statistics()
 
 def get_cached_user_statistics(user_id: str) -> Optional[dict]:
@@ -4174,6 +4554,10 @@ def update_user_statistics_cache(user_id: str, stats: dict):
             'updated_at': datetime.now().isoformat()
         }
         
+        anime_count = stats.get('total_anime_watched', 0)
+        manga_count = stats.get('total_manga_read', 0)
+        logger.info(f"[DB_CACHE] Updating database cache for user {user_id} - anime={anime_count}, manga={manga_count}")
+        
         # Use UPSERT to update existing or insert new
         response = requests.post(
             f"{auth_client.base_url}/rest/v1/user_statistics",
@@ -4185,11 +4569,15 @@ def update_user_statistics_cache(user_id: str, stats: dict):
         )
         
         if response.status_code in [200, 201]:
+            logger.info(f"[DB_CACHE] Database cache update successful (status: {response.status_code})")
             return True
         else:
+            logger.error(f"[DB_CACHE] Database cache update failed (status: {response.status_code})")
+            logger.error(f"[DB_CACHE] Response: {response.text}")
             return False
             
     except Exception as e:
+        logger.error(f"[DB_CACHE] Exception during database cache update: {e}")
         return False
 
 def invalidate_user_statistics_cache(user_id: str):
@@ -4463,18 +4851,35 @@ def calculate_user_statistics_realtime_impl(user_id: str) -> dict:
             # Debug: 📝 Found {len(user_items} total user items")
         
         completed_items = [item for item in user_items if item['status'] == 'completed']
-        # Debug: [SUCCESS] Found {len(completed_items} completed items")
+        logger.info(f"[STATS] STATISTICS CALCULATION START - Found {len(completed_items)} completed items for user {user_id}")
         
-        # Count anime vs manga in completed items
+        # Count anime vs manga in completed items with detailed logging
         anime_count = 0
         manga_count = 0
+        unknown_count = 0
         
-        for item in completed_items:
-            media_type = get_item_media_type(item['item_uid'])
+        logger.info(f"[CLASSIFY] Starting media type classification for {len(completed_items)} completed items...")
+        
+        for i, item in enumerate(completed_items, 1):
+            item_uid = item['item_uid']
+            media_type = get_item_media_type(item_uid)
+            
+            logger.info(f"[ITEM] [{i}/{len(completed_items)}] Item {item_uid}: status='{item.get('status')}', media_type='{media_type}'")
+            
             if media_type == 'anime':
                 anime_count += 1
+                logger.debug(f"[OK] Added to anime count: {anime_count}")
             elif media_type == 'manga':
                 manga_count += 1
+                logger.debug(f"[OK] Added to manga count: {manga_count}")
+            else:
+                unknown_count += 1
+                logger.warning(f"[UNKNOWN] Unknown media type for {item_uid}, not counted in statistics")
+        
+        logger.info(f"[FINAL] FINAL COMPLETED COUNTS: anime={anime_count}, manga={manga_count}, unknown={unknown_count}")
+        
+        if unknown_count > 0:
+            logger.warning(f"[WARNING] WARNING: {unknown_count} completed items could not be classified and will not appear in statistics!")
         
         # Count items by status
         status_counts = {
@@ -4514,7 +4919,18 @@ def calculate_user_statistics_realtime_impl(user_id: str) -> dict:
             elif status == 'dropped':
                 status_counts['dropped'] += 1
         
-        # Calculate enhanced statistics with proper type conversion
+        # OPTIMIZED: Batch fetch item details for all user items (not just completed)
+        logger.info(f"[BATCH_OPTIMIZE] Starting batch fetch for {len(user_items)} user items")
+        all_item_uids = [item['item_uid'] for item in user_items]
+        items_details_batch = get_items_details_batch(all_item_uids) if all_item_uids else {}
+        logger.info(f"[BATCH_OPTIMIZE] Fetched details for {len(items_details_batch)} items")
+        
+        # Calculate enhanced statistics with batch data using ALL user items
+        watch_time = calculate_watch_time_batch(user_items, items_details_batch)
+        chapters_read = calculate_chapters_read_batch(user_items, items_details_batch)
+        avg_score = calculate_average_user_score(user_items)
+        completion_rate = calculate_completion_rate(user_items)
+        
         stats = {
             'total_anime': int(total_anime),
             'total_manga': int(total_manga),
@@ -4526,14 +4942,23 @@ def calculate_user_statistics_realtime_impl(user_id: str) -> dict:
             'plan_to_read': int(status_counts['plan_to_read']),
             'total_anime_watched': int(anime_count),
             'total_manga_read': int(manga_count),
-            'total_hours_watched': float(calculate_watch_time(completed_items)),
-            'total_chapters_read': int(calculate_chapters_read(completed_items)),
-            'average_score': float(calculate_average_user_score(user_items)),
+            'total_hours_watched': float(watch_time),
+            'total_chapters_read': int(chapters_read),
+            'average_score': float(avg_score),
             'favorite_genres': list(get_user_favorite_genres(user_items)),
             'current_streak_days': int(calculate_current_streak(user_id)),
             'longest_streak_days': int(calculate_longest_streak(user_id)),
-            'completion_rate': float(calculate_completion_rate(user_items))
+            'completion_rate': float(completion_rate)
         }
+        
+        logger.info(f"[RESULT] FINAL STATISTICS CALCULATED:")
+        logger.info(f"   [ANIME] Total Anime Watched: {anime_count}")
+        logger.info(f"   [MANGA] Total Manga Read: {manga_count}")
+        logger.info(f"   [TIME] Total Hours Watched: {watch_time}")
+        logger.info(f"   [READ] Total Chapters Read: {chapters_read}")
+        logger.info(f"   [SCORE] Average Score: {avg_score}")
+        logger.info(f"   [RATE] Completion Rate: {completion_rate}%")
+        logger.info(f"   [WATCHING] Currently Watching: {status_counts['watching']}")
         
         return stats
     except Exception as e:
@@ -4934,6 +5359,98 @@ def calculate_chapters_read(completed_items: list) -> int:
     except Exception as e:
         return 0
 
+def calculate_watch_time_batch(user_items: list, items_details_batch: dict) -> float:
+    """
+    Calculate total estimated watch time using pre-fetched batch item details.
+    
+    This is the optimized version of calculate_watch_time that uses batch-fetched
+    item details to avoid N+1 database queries. Designed for production use.
+    
+    Args:
+        completed_items (list): List of user item dictionaries with 'completed' status
+        items_details_batch (dict): Pre-fetched item details mapping uid -> details
+        
+    Returns:
+        float: Total estimated watch time in hours (rounded to 1 decimal place)
+        
+    Performance Benefits:
+        - Eliminates N+1 queries by using batch data
+        - Memory efficient - only holds needed data
+        - Faster execution with pre-fetched details
+    """
+    total_minutes = 0.0
+    anime_processed = 0
+    
+    try:
+        logger.debug(f"[WATCH_TIME] Processing {len(user_items)} user items")
+        
+        for item in user_items:
+            item_uid = item['item_uid']
+            
+            # Only process anime items
+            if get_item_media_type(item_uid) == 'anime':
+                # Use user's actual progress, not total episodes
+                episodes_watched = item.get('episodes_watched', 0) or item.get('progress', 0) or 0
+                
+                # Get duration from batch details, default to 24 minutes
+                duration_per_episode = 24  # Default
+                if item_uid in items_details_batch:
+                    item_details = items_details_batch[item_uid]
+                    duration_per_episode = item_details.get('duration_minutes', 24) or 24
+                
+                minutes_for_item = episodes_watched * duration_per_episode
+                total_minutes += minutes_for_item
+                anime_processed += 1
+                
+                logger.debug(f"[WATCH_TIME] {item_uid}: {episodes_watched} episodes watched (status: {item.get('status')})")
+                    
+        total_hours = round(total_minutes / 60.0, 1)
+        logger.info(f"[WATCH_TIME] Processed {anime_processed} anime, total progress: {total_hours} hours ({total_minutes} minutes)")
+        return total_hours
+        
+    except Exception as e:
+        logger.error(f"[WATCH_TIME] Calculation error: {e}")
+        return 0.0
+
+def calculate_chapters_read_batch(user_items: list, items_details_batch: dict) -> int:
+    """
+    Calculate total chapters read using user progress data.
+    
+    This function uses the user's actual progress (chapters_read or progress field)
+    instead of manga metadata to provide accurate reading statistics.
+    
+    Args:
+        user_items (list): List of ALL user item dictionaries (any status)
+        items_details_batch (dict): Pre-fetched item details mapping uid -> details
+        
+    Returns:
+        int: Total chapters read across all manga based on user progress
+    """
+    total_chapters = 0
+    manga_processed = 0
+    
+    try:
+        logger.debug(f"[CHAPTERS] Processing {len(user_items)} user items")
+        
+        for item in user_items:
+            item_uid = item['item_uid']
+            
+            # Only process manga items
+            if get_item_media_type(item_uid) == 'manga':
+                # Use user's actual progress, not metadata chapters
+                chapters_read = item.get('chapters_read', 0) or item.get('progress', 0) or 0
+                total_chapters += chapters_read
+                manga_processed += 1
+                
+                logger.debug(f"[CHAPTERS] {item_uid}: {chapters_read} chapters read (status: {item.get('status')})")
+        
+        logger.info(f"[CHAPTERS] Processed {manga_processed} manga, total progress: {total_chapters} chapters")
+        return total_chapters
+        
+    except Exception as e:
+        logger.error(f"[CHAPTERS] Calculation error: {e}")
+        return 0
+
 def get_user_favorite_genres(user_items: list) -> list:
     """Get user's most common genres from their actual items"""
     genre_counts = {}
@@ -5058,9 +5575,121 @@ def calculate_longest_streak(user_id: str) -> int:
     except Exception as e:
         return 0
 
-def get_item_details_for_stats(item_uid: str) -> dict:
-    """Get item details for statistics calculations (JSON SAFE VERSION)"""
+def get_items_details_batch(item_uids: list) -> dict:
+    """
+    Fetch item details for multiple items with intelligent caching.
+    
+    This function optimizes statistics calculation by:
+    1. Checking cache first for all items
+    2. Querying database only for missing items  
+    3. Caching new results for future use
+    
+    Args:
+        item_uids (list): List of item UIDs to fetch details for
+        
+    Returns:
+        dict: Mapping of item_uid -> item details dict
+        
+    Memory Impact:
+        - Typical usage: 50 items × 100 bytes = 5KB
+        - Power user: 1000 items × 100 bytes = 100KB  
+        - No risk to 512MB memory limit
+        
+    Cache Strategy:
+        - 7-day TTL for item details (rarely change)
+        - Batch Redis operations for performance
+        - Graceful fallback if cache unavailable
+    """
+    if not item_uids:
+        return {}
+    
+    # Safety limit to prevent memory issues
+    if len(item_uids) > 1000:
+        logger.warning(f"[BATCH_QUERY] Limiting batch query from {len(item_uids)} to 1000 items for memory safety")
+        item_uids = item_uids[:1000]
+    
     try:
+        # Import cache helpers
+        from utils.cache_helpers import get_items_details_batch_from_cache, set_items_details_batch_in_cache
+        
+        logger.info(f"[BATCH_QUERY] Fetching details for {len(item_uids)} items (cache + database)")
+        
+        # Step 1: Check cache for all items
+        cached_items = get_items_details_batch_from_cache(item_uids)
+        
+        # Step 2: Identify items not in cache
+        missing_uids = [uid for uid in item_uids if uid not in cached_items]
+        logger.info(f"[BATCH_CACHE] Cache hit: {len(cached_items)}/{len(item_uids)} items, querying {len(missing_uids)} from database")
+        
+        # Step 3: Query database for missing items only
+        new_items = {}
+        if missing_uids:
+            # Check if we have a Supabase client available
+            if not supabase_client:
+                logger.error("[BATCH_QUERY] No Supabase client available")
+                return cached_items  # Return what we have from cache
+            
+            # Query database for missing items only
+            response = supabase_client.table('items')\
+                .select('uid,episodes,chapters,media_type_id,title,score')\
+                .in_('uid', missing_uids)\
+                .execute()
+            
+            if response.data:
+                # Convert database results to our format
+                for item in response.data:
+                    # Convert to safe types for JSON serialization
+                    new_items[item['uid']] = {
+                        'uid': str(item['uid']),
+                        'title': str(item.get('title', '')),
+                        'episodes': int(item.get('episodes', 0)) if item.get('episodes') else 0,
+                        'chapters': int(item.get('chapters', 0)) if item.get('chapters') else 0,
+                        'duration_minutes': 24,  # Default anime episode duration
+                        'media_type_id': int(item.get('media_type_id', 0)) if item.get('media_type_id') else 0,
+                        'score': float(item.get('score', 0)) if item.get('score') else 0.0
+                    }
+                
+                logger.info(f"[BATCH_QUERY] Fetched {len(new_items)} new items from database")
+                
+                # Step 4: Cache the new items for future use
+                if new_items:
+                    cache_success = set_items_details_batch_in_cache(new_items)
+                    logger.info(f"[BATCH_CACHE] Cached {len(new_items)} new items, success: {cache_success}")
+            else:
+                logger.warning(f"[BATCH_QUERY] No items found in database for {len(missing_uids)} missing UIDs")
+        
+        # Step 5: Combine cached and new items
+        final_items = {**cached_items, **new_items}
+        logger.info(f"[BATCH_FINAL] Returning {len(final_items)} total items ({len(cached_items)} cached + {len(new_items)} fresh)")
+        
+        return final_items
+            
+    except Exception as e:
+        logger.error(f"[BATCH_QUERY] Error in batch fetch: {e}")
+        # Fallback: try to return cached items if available
+        try:
+            from utils.cache_helpers import get_items_details_batch_from_cache
+            return get_items_details_batch_from_cache(item_uids)
+        except:
+            return {}
+
+def get_item_details_for_stats(item_uid: str) -> dict:
+    """
+    Get item details for statistics calculations with database fallback.
+    
+    This function provides item details using multiple strategies:
+    1. In-memory DataFrame (development environment)
+    2. Database query (production environment)
+    3. Empty dict fallback (error cases)
+    
+    Args:
+        item_uid (str): Unique identifier of the item
+        
+    Returns:
+        dict: Item details with episodes, chapters, duration, etc.
+    """
+    try:
+        # Strategy 1: Use in-memory DataFrame if available (development)
         if df_processed is not None and not df_processed.empty:
             item_row = df_processed[df_processed['uid'] == item_uid]
             if not item_row.empty:
@@ -5077,8 +5706,45 @@ def get_item_details_for_stats(item_uid: str) -> dict:
                     'genres': list(item.get('genres', [])) if isinstance(item.get('genres'), list) else [],
                     'score': float(item.get('score', 0)) if pd.notna(item.get('score')) else 0.0
                 }
-        return {}
+        
+        # Strategy 2: Query database (production environment)
+        logger.debug(f"[ITEM_DETAILS] DataFrame not available, querying database for {item_uid}")
+        
+        if not supabase_client:
+            logger.error("[ITEM_DETAILS] No Supabase client available")
+            return {}
+        
+        # Query database for this specific item
+        response = supabase_client.table('items')\
+            .select('uid,episodes,chapters,media_type_id,title,score')\
+            .eq('uid', item_uid)\
+            .limit(1)\
+            .execute()
+        
+        if response.data and len(response.data) > 0:
+            item = response.data[0]
+            logger.debug(f"[ITEM_DETAILS] Found item in database: {item.get('title', 'Unknown')}")
+            
+            # Convert to safe types and determine media type
+            media_type_id = int(item.get('media_type_id', 0)) if item.get('media_type_id') else 0
+            media_type = 'anime' if media_type_id == MEDIA_TYPE_IDS.get('anime') else 'manga' if media_type_id == MEDIA_TYPE_IDS.get('manga') else 'unknown'
+            
+            return {
+                'uid': str(item['uid']),
+                'title': str(item.get('title', '')),
+                'media_type': media_type,
+                'episodes': int(item.get('episodes', 0)) if item.get('episodes') else 0,
+                'chapters': int(item.get('chapters', 0)) if item.get('chapters') else 0,
+                'duration_minutes': 24,  # Default anime episode duration
+                'genres': [],  # Not needed for statistics
+                'score': float(item.get('score', 0)) if item.get('score') else 0.0
+            }
+        else:
+            logger.warning(f"[ITEM_DETAILS] Item {item_uid} not found in database")
+            return {}
+            
     except Exception as e:
+        logger.error(f"[ITEM_DETAILS] Error fetching details for {item_uid}: {e}")
         return {}
 
 def calculate_user_statistics(user_id: str) -> dict:
@@ -5137,30 +5803,172 @@ def calculate_completion_rate(user_items: list) -> float:
     total = len(user_items)
     return round((completed / total) * 100, 2) if total > 0 else 0.0
 
-# ENHANCE the get_item_media_type function:
+# ENHANCED get_item_media_type function with robust detection and logging:
 def get_item_media_type(item_uid: str) -> str:
-    """Get item media type (anime/manga) - WITH CACHING"""
+    """
+    Get item media type (anime/manga) with comprehensive detection logic and caching.
+    
+    This function determines the media type using multiple fallback strategies:
+    1. In-memory cache lookup for performance
+    2. DataFrame lookup (if data is loaded)
+    3. Database query with media_type_id lookup
+    4. Smart inference from item properties
+    5. UID pattern matching as final fallback
+    
+    Args:
+        item_uid (str): Unique identifier of the item
+        
+    Returns:
+        str: Media type ('anime', 'manga', or 'unknown')
+    """
+    global auth_client
+    
     try:
+        logger.debug(f"[SEARCH] Getting media type for item: {item_uid}")
+        
         # Check in-memory cache first
         if item_uid in _media_type_cache:
-            return _media_type_cache[item_uid]
+            cached_result = _media_type_cache[item_uid]
+            logger.debug(f"[CACHE] Cache hit for {item_uid}: {cached_result}")
+            return cached_result
         
+        # Try df_processed first (if available)
         if df_processed is not None and not df_processed.empty:
             item_row = df_processed[df_processed['uid'] == item_uid]
             if not item_row.empty:
                 media_type = item_row.iloc[0].get('media_type', 'unknown')
+                # Ensure lowercase for consistent comparison
+                if media_type and media_type != 'unknown':
+                    media_type = media_type.lower()
                 # Cache the result
                 _media_type_cache[item_uid] = media_type
-                # Item media type cached
+                logger.debug(f"[DATAFRAME] DataFrame lookup for {item_uid}: {media_type}")
                 return media_type
-            else:
-                pass  # No media type found
+        
+        # Fallback to database query using HTTP requests (production path)
+        if auth_client is not None:
+            try:
+                # First, get the item with media_type_id, episodes, and chapters
+                logger.debug(f"[DATABASE] Querying database for item: {item_uid}")
+                response = requests.get(
+                    f"{auth_client.base_url}/rest/v1/items",
+                    headers=auth_client.headers,
+                    params={
+                        'select': 'uid,episodes,chapters,media_type_id',
+                        'uid': f'eq.{item_uid}',
+                        'limit': '1'
+                    }
+                )
+                
+                if response.status_code == 200:
+                    items = response.json()
+                    if items and len(items) > 0:
+                        item = items[0]
+                        media_type_id = item.get('media_type_id')
+                        episodes = item.get('episodes')
+                        chapters = item.get('chapters')
+                        
+                        logger.debug(f"[DATA] Item data: media_type_id={media_type_id}, episodes={episodes}, chapters={chapters}")
+                        
+                        media_type = None
+                        
+                        # If we have a media_type_id, look up the name
+                        if media_type_id:
+                            try:
+                                logger.debug(f"[LOOKUP] Looking up media type ID: {media_type_id}")
+                                media_type_response = requests.get(
+                                    f"{auth_client.base_url}/rest/v1/media_types",
+                                    headers=auth_client.headers,
+                                    params={
+                                        'select': 'name',
+                                        'id': f'eq.{media_type_id}',
+                                        'limit': '1'
+                                    }
+                                )
+                                
+                                if media_type_response.status_code == 200:
+                                    media_types = media_type_response.json()
+                                    if media_types and len(media_types) > 0:
+                                        media_type = media_types[0].get('name')
+                                        logger.debug(f"[OK] Found media type from lookup: {item_uid} = {media_type}")
+                                else:
+                                    logger.warning(f"[WARNING] Media type lookup failed with status {media_type_response.status_code}")
+                            except Exception as lookup_error:
+                                logger.warning(f"[WARNING] Media type lookup failed for ID {media_type_id}: {lookup_error}")
+                        
+                        # If media type lookup didn't work, use smart inference
+                        if not media_type:
+                            logger.debug(f"[INFERENCE] No media type found, inferring from data...")
+                            
+                            # Direct mapping from media_type_id using dynamic IDs
+                            if media_type_id and MEDIA_TYPE_IDS:
+                                logger.debug(f"[CHECK] Checking media_type_id={media_type_id} against MEDIA_TYPE_IDS={MEDIA_TYPE_IDS}")
+                                if media_type_id == MEDIA_TYPE_IDS.get('anime'):
+                                    media_type = 'anime'
+                                    logger.debug(f"[MAPPING] Direct mapping: media_type_id={media_type_id} -> anime")
+                                elif media_type_id == MEDIA_TYPE_IDS.get('manga'):
+                                    media_type = 'manga'
+                                    logger.debug(f"[MAPPING] Direct mapping: media_type_id={media_type_id} -> manga")
+                            
+                            # IMPROVED: Prioritize episodes/chapters inference over pattern matching
+                            if not media_type:
+                                # Infer from episodes/chapters (strongest indicators)
+                                if episodes is not None and episodes > 0:
+                                    media_type = 'anime'
+                                    logger.info(f"[EPISODES] Inferred anime from episodes ({episodes}): {item_uid}")
+                                elif chapters is not None and chapters > 0:
+                                    media_type = 'manga'
+                                    logger.info(f"[CHAPTERS] Inferred manga from chapters ({chapters}): {item_uid}")
+                                # If episodes=0 or chapters=0, still check for null vs 0 distinction
+                                elif episodes is not None and chapters is None:
+                                    media_type = 'anime'
+                                    logger.info(f"[EPISODES_NULL] Inferred anime (has episodes field, no chapters): {item_uid}")
+                                elif chapters is not None and episodes is None:
+                                    media_type = 'manga'
+                                    logger.info(f"[CHAPTERS_NULL] Inferred manga (has chapters field, no episodes): {item_uid}")
+                                # Infer from UID patterns (weaker indicators)
+                                elif 'anime' in str(item_uid).lower():
+                                    media_type = 'anime'
+                                    logger.debug(f"[PATTERN] Inferred from UID pattern (anime): {item_uid}")
+                                elif 'manga' in str(item_uid).lower():
+                                    media_type = 'manga'
+                                    logger.debug(f"[PATTERN] Inferred from UID pattern (manga): {item_uid}")
+                                # Additional pattern matching
+                                elif item_uid.startswith('a') or item_uid.startswith('A'):
+                                    media_type = 'anime'
+                                    logger.debug(f"[PREFIX] Inferred from UID prefix 'a': {item_uid}")
+                                elif item_uid.startswith('m') or item_uid.startswith('M'):
+                                    media_type = 'manga'
+                                    logger.debug(f"[PREFIX] Inferred from UID prefix 'm': {item_uid}")
+                                else:
+                                    media_type = 'unknown'
+                                    logger.warning(f"[UNKNOWN] Could not determine media type for: {item_uid} (media_type_id={media_type_id}, episodes={episodes}, chapters={chapters})")
+                        
+                        # Ensure lowercase for consistent comparison
+                        if media_type and media_type != 'unknown':
+                            media_type = media_type.lower()
+                        
+                        # Cache the result
+                        _media_type_cache[item_uid] = media_type
+                        logger.debug(f"[CACHED] Cached media type: {item_uid} = {media_type}")
+                        return media_type
+                    else:
+                        logger.warning(f"[ERROR] Item not found in database: {item_uid}")
+                else:
+                    logger.error(f"[ERROR] Database query failed with status {response.status_code}: {item_uid}")
+            except Exception as db_error:
+                logger.error(f"[EXCEPTION] Database query exception for {item_uid}: {str(db_error)}")
         else:
-            pass  # Not in items table
-        # Cache unknown results too
+            logger.error(f"[ERROR] No auth_client available for database queries")
+        
+        # Cache unknown results too to prevent repeated failed lookups
         _media_type_cache[item_uid] = 'unknown'
+        logger.warning(f"[UNKNOWN] Cached as unknown: {item_uid}")
         return 'unknown'
     except Exception as e:
+        logger.error(f"[EXCEPTION] Error getting media type for {item_uid}: {e}")
+        # Still cache to prevent repeated errors
+        _media_type_cache[item_uid] = 'unknown'
         return 'unknown'
 
 # Add this to get item details for frontend calculations
@@ -5249,30 +6057,47 @@ def get_item_details_simple(item_uid: str) -> dict:
                 return {}
         
         try:
-            response = supabase_client.table('items').select('*').eq('uid', item_uid).execute()
+            # Get item with media_type_id
+            response = supabase_client.table('items').select('uid, title, episodes, chapters, score, image_url, media_type_id').eq('uid', item_uid).execute()
             if response.data and len(response.data) > 0:
                 item = response.data[0]
+                media_type_id = item.get('media_type_id')
                 
-                # Determine media type from UID prefix or presence of episodes/chapters
-                media_type = item.get('media_type')
-                if not media_type or media_type == 'cm':
+                media_type = None
+                
+                # If we have a media_type_id, look up the name
+                if media_type_id:
+                    try:
+                        media_type_response = supabase_client.table('media_types').select('name').eq('id', media_type_id).execute()
+                        if media_type_response.data and len(media_type_response.data) > 0:
+                            media_type = media_type_response.data[0].get('name')
+                    except Exception as lookup_error:
+                        logger.warning(f"Media type lookup failed for ID {media_type_id}: {lookup_error}")
+                
+                # If media type lookup didn't work, fall back to inference
+                if not media_type:
                     # Infer from UID prefix
                     if 'anime' in str(item.get('uid', '')).lower():
                         media_type = 'anime'
                     elif 'manga' in str(item.get('uid', '')).lower():
                         media_type = 'manga'
                     # Or infer from episodes/chapters
-                    elif item.get('episodes') is not None:
+                    elif item.get('episodes') is not None and item.get('episodes') > 0:
                         media_type = 'anime'
-                    elif item.get('chapters') is not None:
+                    elif item.get('chapters') is not None and item.get('chapters') > 0:
                         media_type = 'manga'
                     else:
-                        media_type = 'manga'  # Default to manga if unclear
+                        media_type = 'unknown'
+                
+                # Ensure lowercase for consistent comparison
+                if media_type and media_type != 'unknown':
+                    media_type = media_type.lower()
                 
                 return {
                     'uid': str(item.get('uid', '')),
                     'title': str(item.get('title', '')),
                     'media_type': media_type,
+                    'mediaType': media_type,  # Also provide camelCase for frontend compatibility
                     'episodes': item.get('episodes'),
                     'chapters': item.get('chapters'),
                     'score': float(item.get('score', 0)) if item.get('score') else 0.0,
@@ -8265,6 +9090,183 @@ def debug_test_lists() -> Union[Response, Tuple[Response, int]]:
     except Exception as e:
         logger.error(f"Test endpoint error: {str(e)}")
         return jsonify({'error': 'Test failed. Please check logs.', 'test_status': 'failed'}), 500
+
+@app.route('/api/debug/user-media-types', methods=['GET'])
+@require_auth
+def debug_user_media_types() -> Union[Response, Tuple[Response, int]]:
+    """
+    Debug endpoint to validate user's completed items classification.
+    
+    This endpoint helps diagnose why anime/manga statistics might not be showing
+    correctly by showing exactly how each completed item is being classified.
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found'}), 400
+        
+        logger.info(f"[DEBUG] DEBUG: Starting media type analysis for user {user_id}")
+        
+        # Get user items from auth client
+        user_items = auth_client.get_user_items(user_id)
+        completed_items = [item for item in user_items if item['status'] == 'completed']
+        
+        logger.info(f"[DEBUG] DEBUG: Found {len(user_items)} total items, {len(completed_items)} completed")
+        
+        # Analyze each completed item
+        classification_results = []
+        anime_count = 0
+        manga_count = 0
+        unknown_count = 0
+        
+        # Clear unknown entries from cache first to force fresh lookups
+        remove_unknown_from_cache()
+        
+        for i, item in enumerate(completed_items):
+            item_uid = item['item_uid']
+            
+            # Get fresh media type classification
+            media_type = get_item_media_type(item_uid)
+            
+            # Get additional item details for debugging
+            try:
+                response = requests.get(
+                    f"{auth_client.base_url}/rest/v1/items",
+                    headers=auth_client.headers,
+                    params={
+                        'select': 'uid,title,episodes,chapters,media_type_id',
+                        'uid': f'eq.{item_uid}',
+                        'limit': '1'
+                    }
+                )
+                
+                item_details = {}
+                if response.status_code == 200:
+                    items = response.json()
+                    if items:
+                        item_details = items[0]
+            except Exception as e:
+                item_details = {'error': str(e)}
+            
+            classification_result = {
+                'index': i + 1,
+                'item_uid': item_uid,
+                'status': item.get('status'),
+                'classified_as': media_type,
+                'item_details': item_details,
+                'rating': item.get('rating'),
+                'updated_at': item.get('updated_at')
+            }
+            
+            classification_results.append(classification_result)
+            
+            # Count classifications
+            if media_type == 'anime':
+                anime_count += 1
+            elif media_type == 'manga':
+                manga_count += 1
+            else:
+                unknown_count += 1
+        
+        # Get cache statistics
+        cache_stats = get_media_type_cache_stats()
+        
+        # Calculate what should be showing on dashboard
+        expected_dashboard_stats = {
+            'total_anime_watched': anime_count,
+            'total_manga_read': manga_count,
+            'completion_rate': round((len(completed_items) / len(user_items)) * 100, 2) if user_items else 0
+        }
+        
+        debug_summary = {
+            'user_id': user_id,
+            'total_user_items': len(user_items),
+            'total_completed_items': len(completed_items),
+            'classification_summary': {
+                'anime_classified': anime_count,
+                'manga_classified': manga_count,
+                'unknown_classified': unknown_count,
+                'classification_success_rate': round(((anime_count + manga_count) / len(completed_items)) * 100, 2) if completed_items else 0
+            },
+            'expected_dashboard_stats': expected_dashboard_stats,
+            'cache_stats': cache_stats,
+            'detailed_classifications': classification_results[:20],  # Limit to first 20 for readability
+            'total_classifications_shown': min(20, len(classification_results)),
+            'total_classifications_available': len(classification_results)
+        }
+        
+        logger.info(f"[OK] DEBUG: Analysis complete - {anime_count} anime, {manga_count} manga, {unknown_count} unknown")
+        
+        return jsonify(debug_summary), 200
+        
+    except Exception as e:
+        logger.error(f"[EXCEPTION] DEBUG endpoint error: {str(e)}")
+        return jsonify({
+            'error': 'Debug analysis failed',
+            'details': str(e),
+            'user_id': g.current_user.get('user_id') if hasattr(g, 'current_user') else None
+        }), 500
+
+@app.route('/api/debug/force-refresh-stats', methods=['POST'])
+@require_auth
+def debug_force_refresh_stats() -> Union[Response, Tuple[Response, int]]:
+    """
+    Debug endpoint to force refresh user statistics by clearing all caches.
+    
+    This endpoint clears the media type cache and forces fresh calculation
+    of user statistics, which should fix any caching issues causing incorrect
+    anime/manga counts on the dashboard.
+    """
+    try:
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found'}), 400
+        
+        logger.info(f"[REFRESH] DEBUG: Force refreshing statistics for user {user_id}")
+        
+        # Clear media type cache to force fresh lookups
+        clear_media_type_cache()
+        
+        # Remove any unknown entries from user statistics cache if it exists
+        try:
+            # Clear user statistics cache in database
+            delete_response = requests.delete(
+                f"{auth_client.base_url}/rest/v1/user_statistics",
+                headers=auth_client.headers,
+                params={'user_id': f'eq.{user_id}'}
+            )
+            logger.info(f"[CLEAR] Cleared database cache for user statistics (status: {delete_response.status_code})")
+        except Exception as cache_error:
+            logger.warning(f"[WARNING] Could not clear database cache: {cache_error}")
+        
+        # Force fresh calculation of statistics
+        logger.info("[CALC] Calculating fresh statistics...")
+        fresh_stats = calculate_user_statistics_realtime(user_id)
+        
+        # Get the refreshed dashboard data
+        logger.info("[DATA] Getting refreshed dashboard data...")
+        dashboard_data = _get_user_statistics_data(user_id)
+        
+        result = {
+            'user_id': user_id,
+            'action': 'force_refresh_completed',
+            'fresh_statistics': fresh_stats,
+            'dashboard_statistics': dashboard_data,
+            'cache_cleared': True,
+            'timestamp': time.time()
+        }
+        
+        logger.info(f"[OK] DEBUG: Force refresh complete - Anime: {fresh_stats.get('total_anime_watched', 0)}, Manga: {fresh_stats.get('total_manga_read', 0)}")
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"[EXCEPTION] DEBUG force refresh error: {str(e)}")
+        return jsonify({
+            'error': 'Force refresh failed',
+            'details': str(e),
+            'user_id': g.current_user.get('user_id') if hasattr(g, 'current_user') else None
+        }), 500
 
 # =============================================================================
 # PRIVACY TEST ENDPOINTS - For frontend integration testing
@@ -13918,7 +14920,7 @@ def not_found_error(error) -> Tuple[Response, int]:
         'error': 'Not Found',
         'message': 'The requested resource could not be found',
         'status': 404,
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.now(timezone.utc).isoformat()
     }), 404
 
 @app.errorhandler(500)

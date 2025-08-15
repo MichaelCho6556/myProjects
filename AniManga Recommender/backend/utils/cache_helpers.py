@@ -20,7 +20,7 @@ import os
 import json
 import logging
 from typing import Dict, List, Optional, Any, Union
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Configure logging early for fallback messages
 logger = logging.getLogger(__name__)
@@ -57,6 +57,7 @@ except ImportError:
         'content_moderation': 12,
         'custom_lists': 1,
         'list_details': 2,
+        'item_details': 168,  # 7 days - item details rarely change
     }
 
 # Import request cache for fallback strategies
@@ -126,10 +127,12 @@ def get_user_stats_from_cache(user_id: str) -> Optional[Dict[str, Any]]:
         data = cache.get(key)
     
     if data:
-        logger.debug(f"Cache hit for user stats: {user_id}")
+        anime_count = data.get('total_anime_watched', 0)
+        manga_count = data.get('total_manga_read', 0)
+        logger.info(f"[CACHE_HELPER_GET] Cache hit for key 'user_stats:{user_id}' - anime={anime_count}, manga={manga_count}")
         return data
     
-    logger.debug(f"Cache miss for user stats: {user_id}")
+    logger.info(f"[CACHE_HELPER_GET] Cache miss for key 'user_stats:{user_id}'")
     return None
 
 def set_user_stats_in_cache(user_id: str, stats: Dict[str, Any]) -> bool:
@@ -143,14 +146,197 @@ def set_user_stats_in_cache(user_id: str, stats: Dict[str, Any]) -> bool:
     Returns:
         True if successfully cached
     """
+    
     cache = get_cache()
     key = f"user_stats:{user_id}"
     
-    # Add timestamp
-    stats['cached_at'] = datetime.utcnow().isoformat()
-    stats['last_updated'] = datetime.utcnow().isoformat()
+    # Log what we're trying to cache
+    anime_count = stats.get('total_anime_watched', 0)
+    manga_count = stats.get('total_manga_read', 0)
+    logger.info(f"[CACHE_HELPER_SET] Setting cache key '{key}' with anime={anime_count}, manga={manga_count}")
     
-    return cache.set(key, stats, ttl_hours=CACHE_TTL_HOURS['user_stats'])
+    # Add timestamp
+    stats['cached_at'] = datetime.now(timezone.utc).isoformat()
+    stats['last_updated'] = datetime.now(timezone.utc).isoformat()
+    
+    try:
+        result = cache.set(key, stats, ttl_hours=CACHE_TTL_HOURS['user_stats'])
+        logger.info(f"[CACHE_HELPER_SET] Cache.set() returned: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"[CACHE_HELPER_SET] Cache.set() failed with exception: {e}")
+        return False
+
+def get_item_details_from_cache(item_uid: str) -> Optional[Dict[str, Any]]:
+    """
+    Get item details from cache with fallback chain:
+    Request cache → Hybrid cache → None
+    
+    Args:
+        item_uid: Item UID to fetch details for
+        
+    Returns:
+        Dict with item details or None if not cached
+    """
+    key = f"item_details:{item_uid}"
+    
+    # Use fallback chain if request cache is available
+    if REQUEST_CACHE_AVAILABLE:
+        def fetch_from_hybrid():
+            cache = get_cache()
+            return cache.get(key)
+        
+        data = get_or_compute(
+            cache_key=key,
+            compute_func=fetch_from_hybrid,
+            ttl_hours=CACHE_TTL_HOURS['item_details'],
+            use_request_cache=True,
+            cache_type='item_details'
+        )
+    else:
+        # Direct hybrid cache access
+        cache = get_cache()
+        data = cache.get(key)
+    
+    if data:
+        logger.debug(f"[CACHE_ITEM] Cache hit for item details: {item_uid}")
+        return data
+    
+    logger.debug(f"[CACHE_ITEM] Cache miss for item details: {item_uid}")
+    return None
+
+def set_item_details_in_cache(item_uid: str, details: Dict[str, Any]) -> bool:
+    """
+    Store item details in cache
+    
+    Args:
+        item_uid: Item UID
+        details: Item details dictionary
+        
+    Returns:
+        True if successfully cached
+    """
+    
+    cache = get_cache()
+    key = f"item_details:{item_uid}"
+    
+    logger.debug(f"[CACHE_ITEM] Setting cache for item: {item_uid}")
+    
+    # Add timestamp
+    details['cached_at'] = datetime.now(timezone.utc).isoformat()
+    
+    try:
+        result = cache.set(key, details, ttl_hours=CACHE_TTL_HOURS['item_details'])
+        logger.debug(f"[CACHE_ITEM] Cache set result: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"[CACHE_ITEM] Cache set failed: {e}")
+        return False
+
+def get_items_details_batch_from_cache(item_uids: List[str]) -> Dict[str, Dict[str, Any]]:
+    """
+    Get multiple item details from cache in batch
+    
+    Args:
+        item_uids: List of item UIDs to fetch
+        
+    Returns:
+        Dict mapping item_uid -> item details for cached items only
+    """
+    if not item_uids:
+        return {}
+    
+    cached_items = {}
+    cache = get_cache()
+    
+    try:
+        # Use Redis pipeline for batch operations if available
+        if hasattr(cache, 'pipeline'):
+            pipeline = cache.pipeline()
+            for item_uid in item_uids:
+                key = f"item_details:{item_uid}"
+                pipeline.get(key)
+            
+            results = pipeline.execute()
+            
+            for item_uid, result in zip(item_uids, results):
+                if result:
+                    try:
+                        # Deserialize JSON data from Redis
+                        if isinstance(result, bytes):
+                            result = result.decode('utf-8')
+                        if isinstance(result, str):
+                            cached_items[item_uid] = json.loads(result)
+                        else:
+                            cached_items[item_uid] = result
+                    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                                            logger.warning(f"[CACHE_BATCH] Failed to deserialize cached item {item_uid}: {e}")
+        else:
+            # Fallback to individual gets
+            for item_uid in item_uids:
+                details = get_item_details_from_cache(item_uid)
+                if details:
+                    cached_items[item_uid] = details
+                    
+    except Exception as e:
+        logger.error(f"[CACHE_BATCH] Batch cache fetch failed: {e}")
+    
+    logger.debug(f"[CACHE_BATCH] Retrieved {len(cached_items)}/{len(item_uids)} items from cache")
+    return cached_items
+
+def set_items_details_batch_in_cache(items_dict: Dict[str, Dict[str, Any]]) -> bool:
+    """
+    Store multiple item details in cache in batch
+    
+    Args:
+        items_dict: Dict mapping item_uid -> item details
+        
+    Returns:
+        True if successfully cached
+    """
+    if not items_dict:
+        return True
+    
+    cache = get_cache()
+    timestamp = datetime.now(timezone.utc).isoformat()
+    
+    try:
+        # Use Redis pipeline for batch operations if available
+        if hasattr(cache, 'pipeline'):
+            pipeline = cache.pipeline()
+            for item_uid, details in items_dict.items():
+                key = f"item_details:{item_uid}"
+                details['cached_at'] = timestamp
+                # JSON serialize the data for Redis storage
+                serialized_data = json.dumps(details, default=str, separators=(',', ':'))
+                pipeline.setex(key, int(CACHE_TTL_HOURS['item_details'] * 3600), serialized_data)
+            
+            pipeline.execute()
+        else:
+            # Fallback to individual sets
+            for item_uid, details in items_dict.items():
+                try:
+                    set_item_details_in_cache(item_uid, details.copy())
+                except Exception as individual_error:
+                                    logger.error(f"[CACHE_BATCH] Individual cache set failed for {item_uid}: {individual_error}")
+                
+        logger.debug(f"[CACHE_BATCH] Cached {len(items_dict)} item details")
+        return True
+        
+    except Exception as e:
+        logger.error(f"[CACHE_BATCH] Batch cache set failed: {e}")
+        # Try fallback to individual sets
+        try:
+            logger.info(f"[CACHE_BATCH] Attempting fallback to individual sets for {len(items_dict)} items")
+            for item_uid, details in items_dict.items():
+                try:
+                    set_item_details_in_cache(item_uid, details.copy())
+                except Exception as fallback_error:
+                    logger.error(f"[CACHE_BATCH] Fallback cache set failed for {item_uid}: {fallback_error}")
+            return True
+        except Exception as fallback_error:
+            logger.error(f"[CACHE_BATCH] All cache operations failed: {fallback_error}")
+            return False
 
 def get_recommendations_from_cache(item_uid: str, user_id: Optional[str] = None) -> Optional[List[Dict]]:
     """

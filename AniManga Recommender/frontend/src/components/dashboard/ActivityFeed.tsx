@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { UserActivity } from "../../types";
 import VirtualGrid from "../VirtualGrid";
+import "./ActivityFeed.css";
 
 interface ActivityFeedProps {
   activities?: UserActivity[];
@@ -24,16 +25,93 @@ interface GroupedActivity {
 }
 
 const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities = [] }) => {
+  const getMediaTypeIcon = (item: any): string => {
+    if (!item) return "📄";
+    const mediaType = item.mediaType || item.media_type || "";
+    return mediaType.toLowerCase() === "anime" ? "📺" : 
+           mediaType.toLowerCase() === "manga" ? "📚" : "📄";
+  };
+
+  const getMediaTypeName = (item: any): string => {
+    if (!item) return "";
+    const mediaType = item.mediaType || item.media_type || "";
+    return mediaType.toLowerCase() === "anime" ? "Anime" : 
+           mediaType.toLowerCase() === "manga" ? "Manga" : "";
+  };
+
   const getActivityText = (activity: UserActivity): string => {
+    const mediaIcon = getMediaTypeIcon(activity.item);
+    const mediaType = getMediaTypeName(activity.item);
+    
     switch (activity.activity_type) {
       case "status_changed":
-        return `Changed status to "${activity.activity_data.new_status}"`;
+        const oldStatus = activity.activity_data?.old_status;
+        const newStatus = activity.activity_data?.new_status || activity.activity_data?.status;
+        if (oldStatus && newStatus && oldStatus !== newStatus) {
+          return `${mediaIcon} ${mediaType}: ${oldStatus} → ${newStatus}`;
+        } else if (newStatus) {
+          return `${mediaIcon} ${mediaType}: Changed to ${newStatus}`;
+        }
+        return `${mediaIcon} ${mediaType}: Status changed`;
+      
       case "completed":
-        return "Completed";
+        const episodes = activity.item?.episodes;
+        const chapters = activity.item?.chapters;
+        if (episodes) {
+          return `${mediaIcon} ${mediaType}: Completed (${episodes} episodes)`;
+        } else if (chapters) {
+          return `${mediaIcon} ${mediaType}: Completed (${chapters} chapters)`;
+        }
+        return `${mediaIcon} ${mediaType}: Completed`;
+      
       case "added":
-        return "Added to list";
+        return `${mediaIcon} ${mediaType}: Added to list`;
+      
+      case "rating_updated":
+      case "rated": // backward compatibility
+        const rating = activity.activity_data?.rating;
+        const oldRating = activity.activity_data?.old_rating;
+        if (rating && oldRating && oldRating !== rating) {
+          return `${mediaIcon} ${mediaType}: Rated ${oldRating}/10 → ${rating}/10`;
+        } else if (rating) {
+          return `${mediaIcon} ${mediaType}: Rated ${rating}/10`;
+        }
+        return `${mediaIcon} ${mediaType}: Updated rating`;
+      
+      case "progress_updated":
+      case "updated": // backward compatibility
+        const progress = activity.activity_data?.progress;
+        const oldProgress = activity.activity_data?.old_progress;
+        const totalEpisodes = activity.item?.episodes;
+        const totalChapters = activity.item?.chapters;
+        if (progress) {
+          if (totalEpisodes) {
+            if (oldProgress && oldProgress !== progress) {
+              return `${mediaIcon} ${mediaType}: Watched episodes ${oldProgress} → ${progress}/${totalEpisodes}`;
+            } else {
+              return `${mediaIcon} ${mediaType}: Watched episode ${progress}/${totalEpisodes}`;
+            }
+          } else if (totalChapters) {
+            if (oldProgress && oldProgress !== progress) {
+              return `${mediaIcon} ${mediaType}: Read chapters ${oldProgress} → ${progress}/${totalChapters}`;
+            } else {
+              return `${mediaIcon} ${mediaType}: Read chapter ${progress}/${totalChapters}`;
+            }
+          } else {
+            if (oldProgress && oldProgress !== progress) {
+              return `${mediaIcon} ${mediaType}: Progress: ${oldProgress} → ${progress}`;
+            } else {
+              return `${mediaIcon} ${mediaType}: Progress: ${progress}`;
+            }
+          }
+        }
+        return `${mediaIcon} ${mediaType}: Updated progress`;
+      
+      case "removed":
+        return `${mediaIcon} ${mediaType}: Removed from list`;
+      
       default:
-        return activity.activity_type;
+        return `${mediaIcon} ${mediaType}: ${activity.activity_type.replace(/_/g, ' ')}`;
     }
   };
 
@@ -41,15 +119,18 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities = [] }) => {
     const date = new Date(dateString);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMinutes / 60);
     const diffDays = Math.floor(diffHours / 24);
 
     if (diffDays > 0) {
-      return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+      return `${diffDays}d ago`;
     } else if (diffHours > 0) {
-      return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+      return `${diffHours}h ago`;
+    } else if (diffMinutes > 0) {
+      return `${diffMinutes}m ago`;
     } else {
-      return "Just now";
+      return "now";
     }
   };
 
@@ -127,12 +208,31 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities = [] }) => {
     if ('isGrouped' in activity && activity.isGrouped) {
       // Render grouped activity
       const groupedActivity = activity as GroupedActivity;
+      
+      const getGroupedActivityText = (): string => {
+        const count = groupedActivity.items.length;
+        switch (groupedActivity.activity_type) {
+          case 'status_changed':
+            return `📋 ${count} items had status changes`;
+          case 'completed':
+            return `✅ Completed ${count} items`;
+          case 'added':
+            return `➕ Added ${count} items to list`;
+          case 'rating_updated':
+            return `⭐ Rated ${count} items`;
+          case 'progress_updated':
+            return `📈 Updated progress on ${count} items`;
+          default:
+            return `${count} items ${groupedActivity.activity_type.replace(/_/g, ' ')}`;
+        }
+      };
+      
       return (
         <div className="activity-item grouped">
           <div className="activity-content">
             <div className="activity-header">
               <span className="activity-group-title">
-                {groupedActivity.items.length} items {groupedActivity.activity_type === 'status_changed' ? 'status changed' : groupedActivity.activity_type}
+                {getGroupedActivityText()}
               </span>
               <span className="activity-time">{getTimeAgo(groupedActivity.created_at)}</span>
             </div>
@@ -142,6 +242,7 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities = [] }) => {
                   key={`${item.item_uid}-${index}`}
                   to={`/item/${item.item_uid}`}
                   className="grouped-item-link"
+                  title={item.title}
                 >
                   {item.title}
                 </Link>
@@ -168,7 +269,9 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities = [] }) => {
             </Link>
             <span className="activity-time">{getTimeAgo(singleActivity.created_at)}</span>
           </div>
-          <div className="activity-description">{getActivityText(singleActivity)}</div>
+          <div className="activity-description">
+            {getActivityText(singleActivity)}
+          </div>
         </div>
       </div>
     );

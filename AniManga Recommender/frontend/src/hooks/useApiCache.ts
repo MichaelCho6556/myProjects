@@ -61,12 +61,12 @@ export const useDashboardQuery = () => {
     networkMode: isOnline ? 'online' : 'offlineFirst',
     // Show stale data while offline
     placeholderData: (previousData) => previousData,
-    // Don't refetch on focus if data is fresh
-    refetchOnWindowFocus: false,
-    // Refetch when reconnecting to network
-    refetchOnReconnect: true,
-    // Only refetch on mount if data is stale
-    refetchOnMount: false,
+    // Allow refetching when user statistics might have changed
+    refetchOnWindowFocus: true, // Enable refetch on focus
+    refetchOnReconnect: true, // Enable refetch on reconnect  
+    refetchOnMount: true, // Enable refetch on mount to get fresh stats
+    // Reduce retry attempts for faster error handling
+    retry: 1,
     meta: {
       // Custom metadata for offline handling
       offlineFallback: true,
@@ -329,22 +329,22 @@ export const useUpdateUserItemMutation = () => {
         userItems: createQueryKey.userItems()
       });
       
-      // Force immediate refetch with 'all' instead of 'active'
+      // Force immediate refetch with 'all' to get updated statistics
       queryClient.invalidateQueries({ 
         queryKey: createQueryKey.dashboard(),
-        refetchType: 'all' // Changed from 'active' to force refetch
+        refetchType: 'all' // Force refetch to recalculate user stats
       });
       
       // Force refetch user items too
       queryClient.invalidateQueries({ 
         queryKey: createQueryKey.userItems(),
-        refetchType: 'all' // Changed from 'active' to force refetch
+        refetchType: 'all' // Force refetch user items
       });
       
-      // Don't block on stats update
+      // Force refresh user statistics to ensure counts are updated
       queryClient.invalidateQueries({ 
         queryKey: ['user', 'stats'],
-        refetchType: 'none' // Don't force refetch, just mark as stale
+        refetchType: 'all' // Force refetch stats to get fresh calculations
       });
     },
   });
@@ -427,19 +427,19 @@ export const useRemoveUserItemMutation = () => {
       console.log('[DEBUG] Remove mutation SUCCESS - Response:', data);
       console.log('[DEBUG] Invalidating queries after remove');
       
-      // Force immediate refetch with 'all' instead of 'active'
+      // Force immediate refetch with 'all' to get updated statistics
       queryClient.invalidateQueries({ 
         queryKey: ['user', 'items'],
-        refetchType: 'all' // Changed from 'active' to force refetch
+        refetchType: 'all' // Force refetch user items
       });
       queryClient.invalidateQueries({ 
         queryKey: ['dashboard'],
-        refetchType: 'all' // Changed from 'active' to force refetch
+        refetchType: 'all' // Force refetch to recalculate user stats
       });
-      // Don't force stats refetch
+      // Force refresh user statistics to ensure counts are updated
       queryClient.invalidateQueries({ 
         queryKey: ['user', 'stats'],
-        refetchType: 'none'
+        refetchType: 'all' // Force refetch stats to get fresh calculations
       });
     },
   });
