@@ -29,7 +29,7 @@ A comprehensive full-stack anime and manga recommendation platform with advanced
 
 ## 🚀 Live Demo
 
-🔗 **[Live Application](https://your-deployment-url.com)** *(Coming Soon)*
+🔗 **[Live Application](https://your-deployment-url.com)** *(Production Ready - Deploy to Vercel/Render/Upstash)*
 
 ## ✨ Complete Feature Overview
 
@@ -86,8 +86,9 @@ A comprehensive full-stack anime and manga recommendation platform with advanced
 - **Offline Support**: Basic functionality when network is unavailable
 - **Accessibility**: Full screen reader support and keyboard navigation
 
-### 🔄 Background Processing & Caching
-- **Hybrid Cache System**: Two-tier caching with in-memory LRU and database persistence
+### 🔄 Caching & Performance
+- **Hybrid Cache System**: Three-tier caching with Memory LRU, Upstash Redis, and database
+- **Distributed Caching**: Upstash Redis for high-performance global caching
 - **Compute Endpoints**: On-demand processing for recommendations and statistics
 - **Scheduled Tasks**: External cron-based maintenance and data synchronization
 - **Batch Operations**: Efficient processing of bulk actions
@@ -107,14 +108,16 @@ A comprehensive full-stack anime and manga recommendation platform with advanced
 - **Python 3.10+** - Modern Python with type hints
 - **Flask 3.1.1** - Lightweight web framework with blueprints
 - **Supabase** - PostgreSQL database with real-time capabilities
-- **Hybrid Cache** - Database-backed cache with in-memory LRU layer
+- **Upstash Redis** - Distributed Redis cache for high performance
+- **Hybrid Cache** - Three-tier caching (Memory + Redis + Database)
 - **Compute Endpoints** - Synchronous API endpoints for background tasks
 - **Scikit-learn 1.6.1** - Machine learning for recommendations
 - **PyJWT 2.10.1** - JSON Web Token handling
 
 ### Database & Infrastructure
 - **PostgreSQL** (via Supabase) - Relational database with advanced features
-- **Database Cache** - Built-in caching using PostgreSQL cache_store table
+- **Upstash Redis** - Distributed Redis cache with global edge network
+- **Hybrid Cache** - Three-tier caching for optimal performance
 - **Docker** - Containerization for development and deployment
 - **Nginx** - Reverse proxy and static file serving
 
@@ -159,8 +162,8 @@ pip install -r requirements.txt
 # Run the Flask server
 python app.py
 
-# The application now uses synchronous compute endpoints
-# No separate background services needed
+# Note: Configure REDIS_URL for Upstash Redis caching
+# Application falls back to memory + database cache if Redis unavailable
 ```
 
 Backend will be available at `http://localhost:5000`
@@ -190,7 +193,8 @@ docker-compose up --build
 # Access the application
 # Frontend: http://localhost:3000
 # Backend API: http://localhost:5000
-# Database Cache: Integrated with Supabase
+# Redis Cache: Configure REDIS_URL for Upstash Redis
+# Database: Supabase PostgreSQL
 ```
 
 ## 🔧 Environment Configuration
@@ -208,6 +212,9 @@ JWT_SECRET_KEY=your_super_secret_jwt_key_for_token_signing
 # Flask Configuration
 FLASK_ENV=development
 SECRET_KEY=your_flask_secret_key_for_sessions
+
+# Upstash Redis Configuration
+REDIS_URL=redis://default:your_upstash_token@host:port
 
 # Cache Configuration
 CACHE_MEMORY_SIZE=1000  # Max items in memory cache
@@ -418,7 +425,7 @@ docker-compose -f docker-compose.prod.yml up -d --scale backend=3
 FLASK_ENV=production
 SUPABASE_URL=https://your-prod-project.supabase.co
 JWT_SECRET_KEY=your_ultra_secure_production_key
-# No Redis needed - using database cache
+REDIS_URL=redis://default:your_upstash_production_token@host:port
 
 # Frontend Production
 REACT_APP_API_URL=https://api.your-domain.com
@@ -435,12 +442,19 @@ REACT_APP_SUPABASE_URL=https://your-project.supabase.co
 REACT_APP_SUPABASE_ANON_KEY=your_production_anon_key
 ```
 
-#### Railway/Heroku (Backend)
+#### Render (Backend)
 ```bash
-# Set configuration via CLI
-heroku config:set SUPABASE_URL=https://your-project.supabase.co
-heroku config:set JWT_SECRET_KEY=your_secure_key
-# No Redis addon needed
+# Set configuration via Render dashboard
+SUPABASE_URL=https://your-project.supabase.co
+JWT_SECRET_KEY=your_secure_key
+REDIS_URL=redis://default:your_upstash_token@host:port
+```
+
+#### Upstash (Redis Cache)
+```bash
+# Configure Upstash Redis for global caching
+# Get Redis URL from Upstash dashboard
+# Supports global edge locations for low latency
 ```
 
 ## 🔧 Troubleshooting
@@ -452,7 +466,7 @@ heroku config:set JWT_SECRET_KEY=your_secure_key
 # Database connection test
 python -c "from supabase_client import SupabaseClient; print('✅ Connected')"
 
-# Cache status check
+# Cache status check (Upstash Redis + Hybrid)
 curl http://localhost:5000/api/admin/cache/stats
 
 # Trigger cache cleanup

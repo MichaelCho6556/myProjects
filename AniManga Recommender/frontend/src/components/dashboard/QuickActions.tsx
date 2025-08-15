@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { logger } from "../../utils/logger";
+import { useForceRefreshStatsMutation } from "../../hooks/useApiCache";
 
 interface QuickActionsProps {
   onRefresh: () => void;
@@ -8,10 +9,14 @@ interface QuickActionsProps {
 
 const QuickActions: React.FC<QuickActionsProps> = ({ onRefresh }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const forceRefreshStatsMutation = useForceRefreshStatsMutation();
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
+      // First force refresh the backend cache to clear stale statistics
+      await forceRefreshStatsMutation.mutateAsync();
+      // Then refresh the frontend data
       await onRefresh();
     } catch (error: any) {
       // Handle errors gracefully - just log them but don't crash

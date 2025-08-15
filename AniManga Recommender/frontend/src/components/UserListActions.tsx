@@ -28,6 +28,9 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [showManualProgressModal, setShowManualProgressModal] = useState(false);
+  const [pendingCompletionData, setPendingCompletionData] = useState<any>(null);
+  const [manualProgress, setManualProgress] = useState<number>(0);
 
   // Form state
   const [selectedStatus, setSelectedStatus] = useState("plan_to_watch");
@@ -147,6 +150,20 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
         onStatusUpdate();
       }
     } catch (err: any) {
+      // Check if this is a manual progress required error for manga
+      if (err?.response?.data?.require_manual_progress && err?.response?.data?.media_type === 'manga') {
+        // Show manual progress modal instead of error
+        setPendingCompletionData({
+          status: selectedStatus,
+          rating: rating,
+          notes: notes.trim(),
+          completion_date: new Date().toISOString()
+        });
+        setManualProgress(progress || 1);
+        setShowManualProgressModal(true);
+        return;
+      }
+
       logger.error("Status update error", {
         error: err?.message || "Unknown error",
         context: "UserListActions",
@@ -244,6 +261,48 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
     }
   };
 
+  const handleManualProgressSubmit = async () => {
+    if (!user || !pendingCompletionData) return;
+
+    try {
+      setError(null);
+      
+      const updateData = {
+        ...pendingCompletionData,
+        progress: manualProgress
+      };
+
+      await updateUserItemMutation.mutateAsync({
+        itemUid: item.uid,
+        data: updateData
+      });
+
+      await loadUserItem();
+      setIsEditing(false);
+      setShowManualProgressModal(false);
+      setPendingCompletionData(null);
+
+      if (onStatusUpdate) {
+        onStatusUpdate();
+      }
+    } catch (err: any) {
+      logger.error("Manual progress update error", {
+        error: err?.message || "Unknown error",
+        context: "UserListActions",
+        operation: "manualProgressUpdate",
+        userId: user?.id,
+        itemUid: item.uid,
+        manualProgress: manualProgress
+      });
+      setError(err.message || "Failed to update progress");
+    }
+  };
+
+  const handleManualProgressCancel = () => {
+    setShowManualProgressModal(false);
+    setPendingCompletionData(null);
+    setSelectedStatus(userItem?.status || "plan_to_watch");
+  };
 
   if (!user) {
     return (
@@ -270,7 +329,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
   }
 
   return (
-    <div className="user-list-actions">
+    <div className="user-list-actions" data-testid="user-list-actions">
       <h3>Your List</h3>
 
       {error && (
@@ -319,12 +378,13 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
             <label htmlFor="status-select">Status:</label>
             <select
               id="status-select"
+              data-testid="status-select"
               value={selectedStatus}
               onChange={(e) => handleStatusChange(e.target.value)}
               disabled={loading || isMutating}
             >
               {statusOptions.map((option) => (
-                <option key={option.value} value={option.value}>
+                <option key={option.value} value={option.value} data-testid={`status-option-${option.value}`}>
                   {option.label}
                 </option>
               ))}
@@ -382,7 +442,7 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
           </div>
 
           <div className="form-actions">
-            <button onClick={handleStatusUpdate} className="btn-save" disabled={loading || isMutating}>
+            <button onClick={handleStatusUpdate} className="btn-save" data-testid="save-status-button" disabled={loading || isMutating}>
               {isMutating ? "Saving..." : userItem ? "Update" : "Add to List"}
             </button>
 
@@ -391,6 +451,51 @@ const UserListActions: React.FC<UserListActionsProps> = ({ item, onStatusUpdate 
                 Cancel
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Manual Progress Modal */}
+      {showManualProgressModal && (
+        <div className="modal-overlay" data-testid="manual-progress-modal">
+          <div className="modal-content">
+            <h3>Manual Progress Required</h3>
+            <p>
+              The chapter count for "{item.title}" is not available in our database. 
+              Please specify how many chapters you have read to mark it as completed.
+            </p>
+            
+            <div className="form-group">
+              <label htmlFor="manual-progress">Chapters Read:</label>
+              <input
+                id="manual-progress"
+                data-testid="manual-progress-input"
+                type="number"
+                min="1"
+                value={manualProgress}
+                onChange={(e) => setManualProgress(parseInt(e.target.value) || 1)}
+                className="form-input"
+                autoFocus
+              />
+            </div>
+            
+            <div className="modal-actions">
+              <button 
+                onClick={handleManualProgressSubmit}
+                className="btn btn-primary"
+                data-testid="modal-submit-button"
+                disabled={!manualProgress || manualProgress < 1}
+              >
+                Mark as Completed
+              </button>
+              <button 
+                onClick={handleManualProgressCancel}
+                className="btn btn-secondary"
+                data-testid="modal-cancel-button"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -71,6 +71,7 @@ backend/.data_cache
 DEPLOYMENT.md
 
 backend/docs/
+backend/*.log
 
 frontend/.env.production
 
