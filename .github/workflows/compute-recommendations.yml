@@ -124,13 +124,26 @@ jobs:
         try:
             client = SupabaseClient()
             
-            # Manual cleanup using DELETE query (since RPC not available)
+            # Manual cleanup using correct SupabaseTableBuilder syntax
             current_time = datetime.now().isoformat()
-            response = client.table('user_recommendation_cache')\
-                .delete()\
-                .lt('expires_at', current_time)\
+            
+            # First get expired entries using lte (less than or equal)
+            expired_entries = client.table('user_recommendation_cache')\
+                .select('id')\
+                .lte('expires_at', current_time)\
                 .execute()
             
+            if expired_entries.data:
+                # Delete expired entries one by one
+                for entry in expired_entries.data:
+                    client.table('user_recommendation_cache')\
+                        .delete()\
+                        .eq('id', entry['id'])\
+                        .execute()
+                logger.info(f'Cleaned up {len(expired_entries.data)} expired cache entries')
+            else:
+                logger.info('No expired cache entries found')
+                
             logger.info('Cache cleanup completed successfully')
                 
         except Exception as e:
