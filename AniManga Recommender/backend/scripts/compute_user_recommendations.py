@@ -71,7 +71,7 @@ class UserRecommendationProcessor:
             
             # Get active users from user_profiles table
             response = self.client.table('user_profiles')\
-                .select('user_id, username')\
+                .select('id, username')\
                 .gte('updated_at', cutoff_date)\
                 .execute()
             
@@ -231,7 +231,7 @@ class UserRecommendationProcessor:
             logger.info(f"Processing recommendations for {len(users)} users")
             
             for user in users:
-                user_id = user['user_id']
+                user_id = user['id']  # Changed from user_id to id to match database schema
                 username = user.get('username', 'unknown')
                 
                 try:
