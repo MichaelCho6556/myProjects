@@ -203,9 +203,16 @@ class UserRecommendationProcessor:
                 })
             }
             
-            # Upsert to cache table
+            # Check if dry run mode
+            dry_run = os.environ.get('DRY_RUN', 'false').lower() == 'true'
+            
+            if dry_run:
+                logger.info(f"DRY RUN: Would save recommendations for user {user_id}")
+                return True
+            
+            # Upsert to cache table (remove on_conflict parameter)
             response = self.client.table('user_recommendation_cache')\
-                .upsert(cache_data, on_conflict='user_id,cache_version')\
+                .upsert(cache_data)\
                 .execute()
             
             if response.data:
