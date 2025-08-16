@@ -31,23 +31,32 @@ jobs:
       with:
         python-version: '3.11'
         cache: 'pip'
-        cache-dependency-path: 'backend/requirements.txt'
+        cache-dependency-path: 'AniManga Recommender/backend/requirements.txt'
+        
+    - name: Debug repository structure
+      run: |
+        echo "=== Repository Structure ==="
+        ls -la
+        echo "=== AniManga Recommender Contents ==="
+        ls -la "AniManga Recommender/" || echo "AniManga Recommender directory not found"
+        echo "=== Backend Contents ==="
+        ls -la "AniManga Recommender/backend/" || echo "backend directory not found"
         
     - name: Install dependencies
       run: |
         pip install --upgrade pip
-        pip install -r backend/requirements.txt
+        pip install -r "AniManga Recommender/backend/requirements.txt"
         
     - name: Verify environment
       run: |
         python -c "import sys; print(f'Python version: {sys.version}')"
-        python -c "import sys; sys.path.insert(0, 'backend'); from supabase_client import SupabaseClient; print('Supabase client import successful')"
-        python -c "import sys; sys.path.insert(0, 'backend'); from recommendation_engine import OnDemandRecommendationEngine; print('Recommendation engine import successful')"
+        python -c "import sys; sys.path.insert(0, 'AniManga Recommender/backend'); from supabase_client import SupabaseClient; print('Supabase client import successful')"
+        python -c "import sys; sys.path.insert(0, 'AniManga Recommender/backend'); from recommendation_engine import OnDemandRecommendationEngine; print('Recommendation engine import successful')"
         
     - name: Check TF-IDF artifacts
       run: |
-        if [ -f "backend/tfidf_artifacts_backup.pkl" ]; then
-          echo "TF-IDF artifacts found ($(du -h backend/tfidf_artifacts_backup.pkl | cut -f1))"
+        if [ -f "AniManga Recommender/backend/tfidf_artifacts_backup.pkl" ]; then
+          echo "TF-IDF artifacts found ($(du -h "AniManga Recommender/backend/tfidf_artifacts_backup.pkl" | cut -f1))"
         else
           echo "WARNING: TF-IDF artifacts not found"
           exit 1
@@ -59,13 +68,13 @@ jobs:
         SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         DRY_RUN: ${{ github.event.inputs.dry_run }}
-        PYTHONPATH: backend
+        PYTHONPATH: "AniManga Recommender/backend"
       run: |
         echo "Starting recommendation computation..."
         echo "Dry run mode: ${DRY_RUN:-false}"
         
         # Run the computation script
-        python backend/scripts/compute_user_recommendations.py
+        python "AniManga Recommender/backend/scripts/compute_user_recommendations.py"
         
         # Check exit code
         if [ $? -eq 0 ]; then
@@ -79,11 +88,11 @@ jobs:
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        PYTHONPATH: backend
+        PYTHONPATH: "AniManga Recommender/backend"
       run: |
         python -c "
         import sys
-        sys.path.insert(0, 'backend')
+        sys.path.insert(0, 'AniManga Recommender/backend')
         from supabase_client import SupabaseClient
         import logging
         
@@ -112,11 +121,11 @@ jobs:
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        PYTHONPATH: backend
+        PYTHONPATH: "AniManga Recommender/backend"
       run: |
         python -c "
         import sys
-        sys.path.insert(0, 'backend')
+        sys.path.insert(0, 'AniManga Recommender/backend')
         from supabase_client import SupabaseClient
         from datetime import datetime, timedelta
         import logging
