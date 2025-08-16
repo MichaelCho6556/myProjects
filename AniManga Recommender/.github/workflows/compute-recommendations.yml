@@ -1,0 +1,197 @@
+name: Compute User Recommendations
+
+on:
+  schedule:
+    # Run daily at 3 AM UTC (optimal time for low traffic)
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Allow manual trigger for testing and debugging
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no database changes)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  compute-recommendations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30 # Prevent runaway processes
+    
+    environment: production # Use production environment for secrets
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        cache-dependency-path: 'AniManga Recommender/backend/requirements.txt'
+        
+    - name: Debug repository structure
+      run: |
+        echo "=== Repository Structure ==="
+        ls -la
+        echo "=== AniManga Recommender Contents ==="
+        ls -la "AniManga Recommender/" || echo "AniManga Recommender directory not found"
+        echo "=== Backend Contents ==="
+        ls -la "AniManga Recommender/backend/" || echo "backend directory not found"
+        echo "=== Scripts Directory Contents ==="
+        ls -la "AniManga Recommender/backend/scripts/" || echo "scripts directory not found"
+        echo "=== Checking for compute_user_recommendations.py ==="
+        if [ -f "AniManga Recommender/backend/scripts/compute_user_recommendations.py" ]; then
+          echo "✅ compute_user_recommendations.py found"
+          wc -l "AniManga Recommender/backend/scripts/compute_user_recommendations.py"
+        else
+          echo "❌ compute_user_recommendations.py NOT found"
+          echo "Available Python scripts:"
+          find "AniManga Recommender/backend/scripts/" -name "*.py" 2>/dev/null || echo "No Python scripts found"
+        fi
+        
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r "AniManga Recommender/backend/requirements.txt"
+        
+    - name: Verify environment
+      run: |
+        python -c "import sys; print(f'Python version: {sys.version}')"
+        python -c "import sys; sys.path.insert(0, 'AniManga Recommender/backend'); from supabase_client import SupabaseClient; print('Supabase client import successful')"
+        python -c "import sys; sys.path.insert(0, 'AniManga Recommender/backend'); from recommendation_engine import OnDemandRecommendationEngine; print('Recommendation engine import successful')"
+        
+    - name: Check TF-IDF artifacts
+      run: |
+        if [ -f "AniManga Recommender/backend/tfidf_artifacts_backup.pkl" ]; then
+          echo "TF-IDF artifacts found ($(du -h "AniManga Recommender/backend/tfidf_artifacts_backup.pkl" | cut -f1))"
+        else
+          echo "WARNING: TF-IDF artifacts not found"
+          exit 1
+        fi
+        
+    - name: Run recommendation computation
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        DRY_RUN: ${{ github.event.inputs.dry_run }}
+        PYTHONPATH: "AniManga Recommender/backend"
+      run: |
+        echo "Starting recommendation computation..."
+        echo "Dry run mode: ${DRY_RUN:-false}"
+        
+        # Check if script exists before running
+        SCRIPT_PATH="AniManga Recommender/backend/scripts/compute_user_recommendations.py"
+        if [ ! -f "$SCRIPT_PATH" ]; then
+          echo "❌ Script not found: $SCRIPT_PATH"
+          echo "Available scripts:"
+          ls -la "AniManga Recommender/backend/scripts/" || echo "Scripts directory not found"
+          echo "⚠️  The script file needs to be committed to the repository"
+          exit 1
+        fi
+        
+        # Run the computation script
+        python "$SCRIPT_PATH"
+        
+        # Check exit code
+        if [ $? -eq 0 ]; then
+          echo "✅ Recommendation computation completed successfully"
+        else
+          echo "❌ Recommendation computation failed"
+          exit 1
+        fi
+        
+    - name: Cleanup expired cache entries
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        PYTHONPATH: "AniManga Recommender/backend"
+      run: |
+        python -c "
+        import sys
+        sys.path.insert(0, 'AniManga Recommender/backend')
+        from supabase_client import SupabaseClient
+        import logging
+        
+        logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+        
+        try:
+            client = SupabaseClient()
+            
+            # Call the cleanup function
+            result = client.rpc('cleanup_expired_recommendation_cache').execute()
+            
+            if result.data is not None:
+                deleted_count = result.data
+                logger.info(f'Cleaned up {deleted_count} expired cache entries')
+            else:
+                logger.info('Cache cleanup completed')
+                
+        except Exception as e:
+            logger.error(f'Error during cache cleanup: {e}')
+            # Don't fail the job for cleanup errors
+        "
+        
+    - name: Report statistics
+      if: always() # Run even if previous steps failed
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        PYTHONPATH: "AniManga Recommender/backend"
+      run: |
+        python -c "
+        import sys
+        sys.path.insert(0, 'AniManga Recommender/backend')
+        from supabase_client import SupabaseClient
+        from datetime import datetime, timedelta
+        import logging
+        
+        logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+        
+        try:
+            client = SupabaseClient()
+            
+            # Get cache statistics
+            response = client.table('user_recommendation_cache')\
+                .select('user_id, computed_at, cache_version')\
+                .gte('computed_at', (datetime.now() - timedelta(hours=1)).isoformat())\
+                .execute()
+            
+            if response.data:
+                recent_count = len(response.data)
+                logger.info(f'Recent cache entries (last hour): {recent_count}')
+            
+            # Get total cache size
+            total_response = client.table('user_recommendation_cache')\
+                .select('*', count='exact')\
+                .execute()
+            
+            if hasattr(total_response, 'count') and total_response.count is not None:
+                logger.info(f'Total cached users: {total_response.count}')
+            else:
+                logger.info('Total cache count not available')
+            
+        except Exception as e:
+            logger.warning(f'Could not fetch statistics: {e}')
+        "
+
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "❌ Recommendation computation job failed"
+        echo "Check logs for details and consider manual intervention"
+        # Add notification logic here (Slack, email, etc.) if needed
+
+# Security and performance notes:
+# 1. Uses production environment for secure secret access
+# 2. Has timeout to prevent runaway processes
+# 3. Includes verification steps to catch issues early
+# 4. Cleans up expired entries to maintain performance
+# 5. Provides statistics for monitoring
+# 6. Fails gracefully with proper error reporting
