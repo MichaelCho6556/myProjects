@@ -448,6 +448,21 @@ except ImportError as e:
 # Initialize ThreadPoolExecutor for asynchronous activity logging
 executor = ThreadPoolExecutor(max_workers=2)
 
+# MEMORY FIX: Add cleanup handler for ThreadPoolExecutor
+import atexit
+
+def cleanup_thread_pool():
+    """Clean up ThreadPoolExecutor on application shutdown to prevent memory leaks."""
+    try:
+        logger.info("Shutting down ThreadPoolExecutor...")
+        executor.shutdown(wait=True, timeout=5.0)
+        logger.info("ThreadPoolExecutor shutdown complete")
+    except Exception as e:
+        logger.warning(f"Error during ThreadPoolExecutor shutdown: {e}")
+
+# Register cleanup function to run on exit
+atexit.register(cleanup_thread_pool)
+
 def create_app(config: Optional[Any] = None) -> Flask:
     """
     Create and configure Flask application instance for testing.
@@ -670,7 +685,8 @@ def get_auth_client():
         return None
 
 # Global variables for data and ML models
-df_processed: Optional[pd.DataFrame] = None
+# MEMORY FIX: df_processed removed to eliminate 88k+ item DataFrame from memory
+# df_processed: Optional[pd.DataFrame] = None  # Commented out to save RAM
 tfidf_vectorizer_global: Optional[TfidfVectorizer] = None
 tfidf_matrix_global: Optional[Any] = None
 uid_to_idx: Optional[pd.Series] = None
@@ -991,11 +1007,10 @@ def load_data_and_tfidf_from_supabase() -> None:
         it skips the loading process. TF-IDF matrix uses max_features=5000
         with English stop words filtering for optimal performance.
     """
-    global df_processed, tfidf_vectorizer_global, tfidf_matrix_global, uid_to_idx, supabase_client
+    global tfidf_vectorizer_global, tfidf_matrix_global, uid_to_idx, supabase_client
 
-    if df_processed is not None and tfidf_matrix_global is not None:
-        # Debug: [INFO] Data already loaded: {len(df_processed} items")
-        return
+    # MEMORY FIX: Skip check since df_processed is disabled
+    # Always proceed with minimal initialization for database-only mode
 
     # Import and use the data singleton for caching
     from data_singleton import get_data_singleton
@@ -1038,27 +1053,24 @@ def load_data_and_tfidf_from_supabase() -> None:
             return df, None, None, pd.Series(dtype='int64')
     
     try:
-        # Try to load from singleton cache first
-        cached_data = data_singleton.load_data(load_function=load_from_supabase)
+        # MEMORY FIX: Skip data loading to prevent 100% RAM usage
+        # Only load if specifically needed for recommendations (not for regular API operations)
+        logger.info("Skipping df_processed loading to conserve memory - using database queries instead")
         
-        if cached_data and len(cached_data) == 4:
-            df_processed, tfidf_vectorizer_global, tfidf_matrix_global, uid_to_idx = cached_data
-            # Set these as proper globals to ensure scope accessibility
-            globals()['df_processed'] = df_processed
-            globals()['tfidf_vectorizer_global'] = tfidf_vectorizer_global
-            globals()['tfidf_matrix_global'] = tfidf_matrix_global
-            globals()['uid_to_idx'] = uid_to_idx
-        else:
-            raise ValueError("Invalid cached data format")
+        # Initialize minimal globals to prevent errors
+        globals()['tfidf_vectorizer_global'] = None
+        globals()['tfidf_matrix_global'] = None
+        globals()['uid_to_idx'] = None
+        
+        logger.info("Data loading skipped successfully - using database-only mode")
         
     except Exception as e:
         # Initialize empty globals to prevent further errors
-        df_processed = pd.DataFrame()
-        tfidf_vectorizer_global = None
-        tfidf_matrix_global = None
-        uid_to_idx = pd.Series(dtype='int64')
+        globals()['tfidf_vectorizer_global'] = None
+        globals()['tfidf_matrix_global'] = None
+        globals()['uid_to_idx'] = None
         supabase_client = None
-        # Don't raise the exception - handle gracefully for tests
+        logger.warning(f"Data loading initialization failed: {e}")
         return
 
 # Alias for backwards compatibility with tests
@@ -3460,44 +3472,29 @@ def update_user_item_status(item_uid: str) -> Union[Response, Tuple[Response, in
                 else:
                     progress = 1  # Fallback for anime when episodes data missing
             else:  # manga
-                # PRODUCTION ENHANCED: Use advanced chapter resolution with API fallbacks
-                from utils.manga_chapter_overrides import get_chapter_count_enhanced_sync
+                # PERFORMANCE FIX: Use database-only chapter resolution (no external API calls)
+                from utils.manga_chapter_overrides import get_chapter_count
                 
-                # Extract MAL ID from UID (format: mal_manga_13 -> 13)
-                mal_id = None
-                try:
-                    if item_uid.startswith('mal_manga_'):
-                        mal_id = int(item_uid.split('_')[-1])
-                except (ValueError, IndexError):
-                    logger.warning(f"Could not extract MAL ID from UID: {item_uid}")
-                
-                # Use enhanced chapter resolution with multi-source priority
                 title = item_details.get('title', 'Unknown')
                 
-                # Quick database fallback if no MAL ID available (performance optimization)
-                if not mal_id:
-                    enhanced_chapters = item_details.get('chapters', 0)
-                    source = 'database'
-                    logger.debug(f"Skipping enhanced resolution for {title} - no MAL ID")
+                # Check for manual override first (fast local lookup)
+                override_chapters = get_chapter_count(item_uid)
+                if override_chapters:
+                    max_progress = override_chapters
+                    logger.info(f"Using override chapter count for {title}: {max_progress} chapters")
                 else:
-                    resolution_result = get_chapter_count_enhanced_sync(item_uid, mal_id, title)
+                    # Use database chapter count only (no external API calls)
+                    database_chapters = item_details.get('chapters', 0)
+                    max_progress = database_chapters if database_chapters and database_chapters > 0 else None
                     
-                    enhanced_chapters = resolution_result.get('chapters', 0)
-                    source = resolution_result.get('source', 'unknown')
-                    confidence = resolution_result.get('confidence', 'none')
-                    success = resolution_result.get('success', False)
-                    
-                    # Fallback to database if enhanced resolution failed
-                    if not success or enhanced_chapters <= 0:
-                        enhanced_chapters = item_details.get('chapters', 0)
-                        source = 'database'
-                    confidence = 'low'
-                
-                max_progress = enhanced_chapters if enhanced_chapters and enhanced_chapters > 0 else None
+                    if max_progress:
+                        logger.info(f"Using database chapter count for {title}: {max_progress} chapters")
+                    else:
+                        logger.info(f"No chapter data available for {title} - requiring manual input")
                 
                 if max_progress and max_progress > 0:
                     progress = max_progress
-                    logger.info(f"Auto-filled manga progress for {title}: {progress} chapters (source: {source}, confidence: {confidence})")
+                    logger.info(f"Auto-filled manga progress for {title}: {progress} chapters")
                 else:
                     # For manga, don't auto-fill if chapter data is missing - require user input
                     logger.warning(f"No reliable chapter data for {title} (UID: {item_uid}) - requiring manual input")
@@ -3506,8 +3503,8 @@ def update_user_item_status(item_uid: str) -> Union[Response, Tuple[Response, in
                         'require_manual_progress': True,
                         'media_type': 'manga',
                         'item_title': title,
-                        'resolution_attempted': True,
-                        'source_tried': source
+                        'resolution_attempted': False,
+                        'source_tried': 'database_only'
                     }), 400
         
         # Create comprehensive status data
@@ -3781,6 +3778,93 @@ def get_user_items_by_status_route(status: str) -> Union[Response, Tuple[Respons
         return jsonify({'items': items, 'count': len(items)})
     except Exception as e:
         return jsonify({'error': 'Failed to get items'}), 500
+
+@app.route('/api/auth/user-items/status/<item_uid>', methods=['GET'])
+@require_auth
+def get_single_user_item_status(item_uid: str) -> Union[Response, Tuple[Response, int]]:
+    """
+    PERFORMANCE OPTIMIZED: Get status for a single user item without loading entire list.
+    
+    This endpoint provides a lightweight way to check if a specific item is in the user's
+    list and what status it has. Reduces payload from ~100KB (all items) to ~500 bytes.
+    
+    Authentication:
+        Required: Bearer JWT token with valid user_id claim
+        
+    Path Parameters:
+        item_uid (str): Unique identifier of the item to check
+        
+    Returns:
+        JSON Response containing:
+            - found (bool): Whether item is in user's list
+            - status (str|null): Current status if found ('watching', 'completed', etc.)
+            - progress (int|null): Current progress if found
+            - rating (float|null): Current rating if found
+            - updated_at (str|null): Last update timestamp if found
+            
+    HTTP Status Codes:
+        200: Success - Item status retrieved (found=true/false)
+        400: Bad Request - Invalid token or missing user ID
+        401: Unauthorized - Invalid or missing authentication token
+        500: Server Error - Database query failed
+        
+    Example Request:
+        GET /api/auth/user-items/status/anime_123
+        Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        
+    Example Response (found):
+        {
+            "found": true,
+            "status": "watching",
+            "progress": 12,
+            "rating": null,
+            "updated_at": "2024-01-15T14:30:00Z"
+        }
+        
+    Example Response (not found):
+        {
+            "found": false,
+            "status": null,
+            "progress": null,
+            "rating": null,
+            "updated_at": null
+        }
+    """
+    try:
+        # Get user ID from token
+        if not isinstance(g.current_user, dict):
+            return jsonify({'error': 'Authentication data corrupted'}), 500
+            
+        user_id = g.current_user.get('user_id') or g.current_user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found in token'}), 400
+        
+        # PERFORMANCE: Single database query instead of loading all items
+        response = supabase_client.table('user_items').select(
+            'status, progress, rating, updated_at'
+        ).eq('user_id', user_id).eq('item_uid', item_uid).execute()
+        
+        if response.data and len(response.data) > 0:
+            item = response.data[0]
+            return jsonify({
+                'found': True,
+                'status': item.get('status'),
+                'progress': item.get('progress'),
+                'rating': item.get('rating'),
+                'updated_at': item.get('updated_at')
+            })
+        else:
+            return jsonify({
+                'found': False,
+                'status': None,
+                'progress': None,
+                'rating': None,
+                'updated_at': None
+            })
+            
+    except Exception as e:
+        logger.error(f"Error checking item status for {item_uid}: {e}")
+        return jsonify({'error': 'Failed to check item status'}), 500
 
 @app.route('/api/auth/verify-token', methods=['GET'])
 @require_auth
@@ -5689,25 +5773,8 @@ def get_item_details_for_stats(item_uid: str) -> dict:
         dict: Item details with episodes, chapters, duration, etc.
     """
     try:
-        # Strategy 1: Use in-memory DataFrame if available (development)
-        if df_processed is not None and not df_processed.empty:
-            item_row = df_processed[df_processed['uid'] == item_uid]
-            if not item_row.empty:
-                item = item_row.iloc[0]
-                
-                # Convert numpy types to native Python types
-                return {
-                    'uid': str(item['uid']),
-                    'title': str(item['title']),
-                    'media_type': str(item['media_type']),
-                    'episodes': int(item.get('episodes', 0)) if pd.notna(item.get('episodes')) else 0,
-                    'chapters': int(item.get('chapters', 0)) if pd.notna(item.get('chapters')) else 0,
-                    'duration_minutes': int(item.get('duration_minutes', 24)) if pd.notna(item.get('duration_minutes')) else 24,
-                    'genres': list(item.get('genres', [])) if isinstance(item.get('genres'), list) else [],
-                    'score': float(item.get('score', 0)) if pd.notna(item.get('score')) else 0.0
-                }
-        
-        # Strategy 2: Query database (production environment)
+        # MEMORY FIX: Always use database query (df_processed disabled for memory conservation)
+        # Direct database query for production performance
         logger.debug(f"[ITEM_DETAILS] DataFrame not available, querying database for {item_uid}")
         
         if not supabase_client:
@@ -6031,24 +6098,7 @@ def get_item_details_simple(item_uid: str) -> dict:
     global supabase_client
     
     try:
-        # First try df_processed if available (will be None in production due to memory limits)
-        if df_processed is not None and not df_processed.empty:
-            item_row = df_processed[df_processed['uid'] == item_uid]
-            if not item_row.empty:
-                item = item_row.iloc[0]
-                
-                # Convert numpy types to native Python types for JSON serialization
-                return {
-                    'uid': str(item['uid']),
-                    'title': str(item['title']),
-                    'media_type': str(item['media_type']),
-                    'episodes': int(item.get('episodes', 0)) if pd.notna(item.get('episodes')) else None,
-                    'chapters': int(item.get('chapters', 0)) if pd.notna(item.get('chapters')) else None,
-                    'score': float(item.get('score', 0)) if pd.notna(item.get('score')) else 0.0,
-                    'image_url': str(item.get('image_url', '')) if pd.notna(item.get('image_url')) else None
-                }
-        
-        # Production path: Query directly from database
+        # MEMORY FIX: Query database directly, no df_processed (eliminates 88k+ item DataFrame)
         # Ensure Supabase client is initialized
         if supabase_client is None:
             supabase_client = get_supabase_client()
@@ -6057,41 +6107,32 @@ def get_item_details_simple(item_uid: str) -> dict:
                 return {}
         
         try:
-            # Get item with media_type_id
-            response = supabase_client.table('items').select('uid, title, episodes, chapters, score, image_url, media_type_id').eq('uid', item_uid).execute()
+            # PERFORMANCE OPTIMIZED: Single JOIN query instead of 2 separate queries
+            response = supabase_client.table('items').select(
+                'uid, title, episodes, chapters, score, image_url, media_types(name)'
+            ).eq('uid', item_uid).execute()
+            
             if response.data and len(response.data) > 0:
                 item = response.data[0]
-                media_type_id = item.get('media_type_id')
                 
+                # Extract media type from join
                 media_type = None
+                if item.get('media_types') and item['media_types'].get('name'):
+                    media_type = item['media_types']['name'].lower()
                 
-                # If we have a media_type_id, look up the name
-                if media_type_id:
-                    try:
-                        media_type_response = supabase_client.table('media_types').select('name').eq('id', media_type_id).execute()
-                        if media_type_response.data and len(media_type_response.data) > 0:
-                            media_type = media_type_response.data[0].get('name')
-                    except Exception as lookup_error:
-                        logger.warning(f"Media type lookup failed for ID {media_type_id}: {lookup_error}")
-                
-                # If media type lookup didn't work, fall back to inference
+                # Fallback to inference if JOIN didn't work
                 if not media_type:
-                    # Infer from UID prefix
-                    if 'anime' in str(item.get('uid', '')).lower():
+                    uid_str = str(item.get('uid', '')).lower()
+                    if 'anime' in uid_str:
                         media_type = 'anime'
-                    elif 'manga' in str(item.get('uid', '')).lower():
+                    elif 'manga' in uid_str:
                         media_type = 'manga'
-                    # Or infer from episodes/chapters
                     elif item.get('episodes') is not None and item.get('episodes') > 0:
                         media_type = 'anime'
                     elif item.get('chapters') is not None and item.get('chapters') > 0:
                         media_type = 'manga'
                     else:
                         media_type = 'unknown'
-                
-                # Ensure lowercase for consistent comparison
-                if media_type and media_type != 'unknown':
-                    media_type = media_type.lower()
                 
                 return {
                     'uid': str(item.get('uid', '')),
@@ -6756,52 +6797,94 @@ def generate_personalized_recommendations(user_id: str, user_preferences: Dict[s
         - Diversity bonus for recommendation variety
     """
     try:
-        # Ensure data is loaded
-        ensure_data_loaded()
+        # PHASE 2: Check cache first, fallback to real-time computation
+        cache_result = supabase_client.table('user_recommendation_cache')\
+            .select('recommendations, computed_at')\
+            .eq('user_id', user_id)\
+            .gte('expires_at', datetime.now().isoformat())\
+            .execute()
         
-        if df_processed is None or tfidf_matrix_global is None:
+        if cache_result.data:
+            logger.info(f"Serving cached recommendations for user {user_id}")
+            cached_data = cache_result.data[0]
+            recommendations = json.loads(cached_data['recommendations'])
+            
+            # Add cache metadata for debugging
+            recommendations['_cache_info'] = {
+                'cached': True,
+                'computed_at': cached_data['computed_at'],
+                'source': 'background_processing'
+            }
+            
+            return recommendations
+        
+        # FALLBACK: Real-time computation using lightweight recommendation engine (26MB)
+        logger.info(f"Computing real-time recommendations for user {user_id}")
+        global recommendation_engine
+        
+        if not recommendation_engine or recommendation_engine.tfidf_matrix is None:
+            logger.warning(f"Recommendation engine not available for user {user_id}")
             return {'completed_based': [], 'trending_genres': [], 'hidden_gems': []}
         
-        # Get user's completed items for content-based recommendations
-        user_items = _get_user_items_for_recommendations(user_id)
-        completed_items = [item for item in user_items if item['status'] == 'completed']
+        # Get user's completed items from database (not memory)
+        completed_items = supabase_client.table('user_items')\
+            .select('item_uid, rating')\
+            .eq('user_id', user_id)\
+            .eq('status', 'completed')\
+            .order('rating', ascending=False)\
+            .limit(10)\
+            .execute()
         
-        # Get items user already has (to exclude from recommendations)
-        user_item_uids = set(item['item_uid'] for item in user_items)
+        if not completed_items.data:
+            logger.info(f"No completed items found for user {user_id}")
+            return {'completed_based': [], 'trending_genres': [], 'hidden_gems': []}
         
-        # Also exclude dismissed items
-        if dismissed_items:
-            user_item_uids.update(dismissed_items)
-            # Debug: 🚫 Excluding {len(dismissed_items} dismissed items from recommendations")
+        # Generate recommendations based on top-rated completed items
+        all_recommendations = []
+        seen_uids = set(dismissed_items) if dismissed_items else set()
         
-        recommendations = {
-            'completed_based': [],
-            'trending_genres': [],
-            'hidden_gems': []
+        # Get user's existing items to exclude
+        user_items = supabase_client.table('user_items')\
+            .select('item_uid')\
+            .eq('user_id', user_id)\
+            .execute()
+        
+        if user_items.data:
+            seen_uids.update(item['item_uid'] for item in user_items.data)
+        
+        # For each completed item, get recommendations using the engine
+        for item in completed_items.data[:5]:  # Top 5 completed items
+            item_uid = item['item_uid']
+            item_rating = item.get('rating', 7.0)
+            
+            # Get recommendations using existing engine
+            recs = recommendation_engine.get_recommendations(item_uid, 20)
+            
+            # Weight by user's rating of source item
+            weight = (item_rating / 10.0) if item_rating else 0.7
+            
+            for rec in recs:
+                if rec['uid'] not in seen_uids:
+                    rec['weighted_score'] = rec.get('similarity', 0) * weight
+                    all_recommendations.append(rec)
+                    seen_uids.add(rec['uid'])
+        
+        # Sort by weighted score and take top N
+        all_recommendations.sort(key=lambda x: x.get('weighted_score', 0), reverse=True)
+        
+        # Split into categories (simplified for Phase 1)
+        completed_based = all_recommendations[:limit//2]
+        trending_genres = []  # Will be populated in Phase 2
+        hidden_gems = all_recommendations[limit//2:limit]
+        
+        return {
+            'completed_based': completed_based,
+            'trending_genres': trending_genres,
+            'hidden_gems': hidden_gems
         }
         
-        # 1. Content-based recommendations from cached recommendations
-        if completed_items:
-            content_recs = _generate_cached_content_recommendations(
-                completed_items, user_preferences, user_item_uids, limit//3, content_type
-            )
-            recommendations['completed_based'] = content_recs
-        
-        # 2. Genre-based trending recommendations using database queries
-        trending_recs = _generate_database_trending_recommendations(
-            user_preferences, user_item_uids, limit//3, content_type
-        )
-        recommendations['trending_genres'] = trending_recs
-        
-        # 3. Hidden gem recommendations using database queries
-        hidden_gems = _generate_database_hidden_gems(
-            user_preferences, user_item_uids, limit//3, content_type
-        )
-        recommendations['hidden_gems'] = hidden_gems
-        
-        return recommendations
-        
     except Exception as e:
+        logger.error(f"Error generating personalized recommendations for user {user_id}: {e}")
         return {'completed_based': [], 'trending_genres': [], 'hidden_gems': []}
 
 def _get_user_items_for_recommendations(user_id: str) -> List[Dict[str, Any]]:
@@ -7051,7 +7134,8 @@ def _generate_trending_genre_recommendations(user_preferences: Dict[str, Any],
                                            exclude_uids: set, limit: int, content_type: str = 'all') -> List[Dict[str, Any]]:
     """Generate recommendations for trending items in user's favorite genres"""
     try:
-        if df_processed is None or not user_preferences.get('genre_preferences'):
+        # MEMORY FIX: df_processed disabled, skip genre-based recommendations  
+        if not user_preferences.get('genre_preferences'):
             return []
         
         # Get user's top genres
@@ -7128,8 +7212,8 @@ def _generate_hidden_gem_recommendations(user_preferences: Dict[str, Any],
                                        exclude_uids: set, limit: int, content_type: str = 'all') -> List[Dict[str, Any]]:
     """Generate hidden gem recommendations - high quality but lesser known items"""
     try:
-        if df_processed is None:
-            return []
+        # MEMORY FIX: df_processed disabled, return empty hidden gems
+        return []
         
         # Define hidden gems as high-rated items with fewer interactions
         # (This is a simplified version - in production you'd track popularity metrics)
@@ -7714,7 +7798,8 @@ def admin_reload_data() -> Union[Response, Tuple[Response, int]]:
     try:
         load_data_and_tfidf_from_supabase()
         _data_loading_attempted = True  # avoids double-loading race conditions
-        total = 0 if df_processed is None else len(df_processed)
+        # MEMORY FIX: df_processed disabled, report 0 items to indicate database-only mode
+        total = 0
         return jsonify({"status": "success", "total_items": total}), 200
     except Exception as exc:
         logger.error(f"Failed to reload data: {exc}")
