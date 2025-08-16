@@ -115,6 +115,7 @@ jobs:
         import sys
         sys.path.insert(0, 'AniManga Recommender/backend')
         from supabase_client import SupabaseClient
+        from datetime import datetime
         import logging
         
         logging.basicConfig(level=logging.INFO)
@@ -123,17 +124,17 @@ jobs:
         try:
             client = SupabaseClient()
             
-            # Call the cleanup function
-            result = client.rpc('cleanup_expired_recommendation_cache').execute()
+            # Manual cleanup using DELETE query (since RPC not available)
+            current_time = datetime.now().isoformat()
+            response = client.table('user_recommendation_cache')\
+                .delete()\
+                .lt('expires_at', current_time)\
+                .execute()
             
-            if result.data is not None:
-                deleted_count = result.data
-                logger.info(f'Cleaned up {deleted_count} expired cache entries')
-            else:
-                logger.info('Cache cleanup completed')
+            logger.info('Cache cleanup completed successfully')
                 
         except Exception as e:
-            logger.error(f'Error during cache cleanup: {e}')
+            logger.warning(f'Could not cleanup cache: {e}')
             # Don't fail the job for cleanup errors
         "
         
@@ -167,15 +168,16 @@ jobs:
                 recent_count = len(response.data)
                 logger.info(f'Recent cache entries (last hour): {recent_count}')
             
-            # Get total cache size
+            # Get total cache size (simplified approach)
             total_response = client.table('user_recommendation_cache')\
-                .select('*', count='exact')\
+                .select('user_id')\
                 .execute()
             
-            if hasattr(total_response, 'count') and total_response.count is not None:
-                logger.info(f'Total cached users: {total_response.count}')
+            if total_response.data:
+                total_count = len(total_response.data)
+                logger.info(f'Total cached users: {total_count}')
             else:
-                logger.info('Total cache count not available')
+                logger.info('No cached users found')
             
         except Exception as e:
             logger.warning(f'Could not fetch statistics: {e}')
