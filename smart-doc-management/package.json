@@ -6,7 +6,7 @@
     "pdf-parse": "^1.1.1",
     "tesseract.js": "^4.1.1",
     "textract": "^2.5.0",
-    "uuid": "^11.0.5",
+    "uuid": "^11.1.0",
     "winston": "^3.17.0"
   },
   "devDependencies": {
